@@ -1,5 +1,7 @@
 # phosphor
 
+![bash and vim running inside phosphor, drawn back from its cells; the gutter lights up on the rows it reports changed](docs/demo.gif)
+
 A headless VT/xterm terminal emulator for Go. Write a program's output to
 it, read back what a terminal would show: text, colors, attributes,
 hyperlinks, cursor, modes, title and scrollback. It answers the queries
@@ -44,6 +46,16 @@ point, as in xterm), and damage is per row with no scroll hints. If you
 need a full terminal UI stack, `charmbracelet/x/vt` integrates with the
 Charm ecosystem and does more around rendering and input; phosphor is the
 screen model.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bench-dark.svg">
+  <img alt="Throughput on real program output and memory per idle terminal: phosphor vs charmbracelet/x/vt and hinshun/vt10x (numbers in the table under Performance)" src="docs/bench-light.svg">
+</picture>
+
+The demo above is [`examples/mirror`](examples/mirror/main.go), about 150
+lines: it runs a program in a PTY, writes its output to phosphor, and
+draws the screen back from `Terminal.Cell` alone, redrawing only the rows
+`RowDirty` reports. Try it with `cd examples && go run ./mirror vim`.
 
 ## Install
 
