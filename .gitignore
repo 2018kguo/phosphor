@@ -1,0 +1,5 @@
+*.test
+!testdata/conformance/libvterm/*.test
+*.prof
+*.out
+.DS_Store
