@@ -46,7 +46,7 @@ func (t *Terminal) csiQuery(c byte) bool {
 	case c == 'p' && t.inter == '$' && (t.marker == 0 || t.marker == '?'): // DECRQM
 		mode := 0
 		if t.nparams > 0 {
-			mode = t.params[0]
+			mode = int(t.params[0])
 		}
 		b = append(b, "\x1b["...)
 		var state int

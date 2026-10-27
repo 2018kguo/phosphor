@@ -124,17 +124,17 @@ type Terminal struct {
 	scratch          []byte
 
 	// parser
-	state    uint8
+	params   [maxParams]uint32 // saturated at 65536, including on 64-bit hosts
+	osc      []byte
+	sub      uint32 // bit i marks a ':' before params[i]
 	utf8buf  [utf8.UTFMax]byte
-	utf8n    int
-	params   [maxParams]int
-	sub      [maxParams]bool // params[i] followed a ':'
-	nparams  int
+	nparams  uint8 // at most maxParams; also the partial CSI's current slot
+	state    uint8
+	utf8n    uint8 // an unfinished UTF-8 scalar has at most four bytes
 	paramSet bool
 	marker   byte // private marker: ? > < =
 	inter    byte // last intermediate byte
 	oscBel   bool // the OSC string was ended by BEL (replies end the same way)
-	osc      []byte
 	oscOver  bool
 }
 
@@ -266,7 +266,7 @@ func (t *Terminal) Write(p []byte) (int, error) {
 			// Parameters are lexical digit runs. Accumulate each run once
 			// instead of dispatching every digit through the state machine.
 			j := i
-			v := 0
+			v := uint32(0)
 			if t.nparams < maxParams {
 				v = t.params[t.nparams]
 			}
@@ -417,7 +417,7 @@ func (t *Terminal) step(c byte) {
 		case c == 0x1b:
 		case c == '[':
 			t.nparams, t.paramSet, t.marker, t.inter = 0, false, 0, 0
-			t.params[0], t.sub[0] = 0, false
+			t.params[0], t.sub = 0, 0
 			t.state = stCSI
 		case c == ']':
 			t.osc, t.oscOver = t.osc[:0], false
@@ -459,7 +459,11 @@ func (t *Terminal) step(c byte) {
 			if t.nparams < maxParams-1 {
 				t.nparams++
 				t.params[t.nparams] = 0
-				t.sub[t.nparams] = c == ':'
+				if c == ':' {
+					t.sub |= 1 << uint(t.nparams)
+				} else {
+					t.sub &^= 1 << uint(t.nparams)
+				}
 			} else {
 				t.nparams = maxParams
 			}
@@ -547,7 +551,9 @@ func (t *Terminal) step(c byte) {
 	}
 }
 
-func csiDigit(value int, digit byte) int { return min(value*10+int(digit-'0'), 1<<16) }
+func csiDigit(value uint32, digit byte) uint32 {
+	return min(value*10+uint32(digit-'0'), 1<<16)
+}
 
 func (t *Terminal) execute(c byte) {
 	switch c {
@@ -709,11 +715,14 @@ func (t *Terminal) setCursor(c cursor) {
 // param returns parameter i (ignoring sub-parameters), or def if it is
 // absent or zero.
 func (t *Terminal) param(i, def int) int {
-	if i >= t.nparams || t.params[i] == 0 {
+	if i >= int(t.nparams) || t.params[i] == 0 {
 		return def
 	}
-	return t.params[i]
+	return int(t.params[i])
 }
+
+// subParam reports whether parameter i is a colon-separated sub-parameter.
+func (t *Terminal) subParam(i int) bool { return t.sub&(1<<uint(i)) != 0 }
 
 func (t *Terminal) csiDispatch(c byte) {
 	if t.cfg != nil && t.cfg.reply != nil && t.csiQuery(c) {
@@ -726,15 +735,15 @@ func (t *Terminal) csiDispatch(c byte) {
 		}
 		switch c {
 		case 'h', 'l':
-			for i := 0; i < t.nparams; i++ {
-				if !t.sub[i] {
-					t.decMode(t.params[i], c == 'h')
+			for i := 0; i < int(t.nparams); i++ {
+				if !t.subParam(i) {
+					t.decMode(int(t.params[i]), c == 'h')
 				}
 			}
 		case 's', 'r':
-			for i := 0; i < t.nparams; i++ {
-				if !t.sub[i] {
-					t.xtSaveMode(t.params[i], c == 's')
+			for i := 0; i < int(t.nparams); i++ {
+				if !t.subParam(i) {
+					t.xtSaveMode(int(t.params[i]), c == 's')
 				}
 			}
 		case 'J':
@@ -881,7 +890,7 @@ func (t *Terminal) csiDispatch(c byte) {
 	case 'm':
 		t.sgr()
 	case 'h', 'l':
-		for i := 0; i < t.nparams; i++ {
+		for i := 0; i < int(t.nparams); i++ {
 			switch t.params[i] {
 			case 4:
 				t.insert = c == 'h'
@@ -1880,11 +1889,12 @@ func (t *Terminal) sgr() {
 		return
 	}
 	p := &t.cur.pen
-	for i := 0; i < t.nparams; i++ {
+	nparams := int(t.nparams)
+	for i := 0; i < nparams; i++ {
 		v := t.params[i]
 		// Skip the sub-parameters of a parameter we do not interpret.
 		next := i + 1
-		for next < t.nparams && t.sub[next] {
+		for next < nparams && t.subParam(next) {
 			next++
 		}
 		switch {
@@ -1899,7 +1909,7 @@ func (t *Terminal) sgr() {
 		case v == 4:
 			style := 1
 			if next > i+1 {
-				style = t.params[i+1]
+				style = int(t.params[i+1])
 			}
 			p.A = p.A&^ulMask | Attr(min(style, 5))<<ulShift
 		case v == 5 || v == 6:
@@ -1961,32 +1971,33 @@ func (t *Terminal) sgr() {
 // semicolon form (38;5;n, 38;2;r;g;b). It returns the color and the index
 // of the next parameter to interpret.
 func (t *Terminal) extColor(i, next int) (Color, int) {
+	nparams := int(t.nparams)
 	if next > i+1 { // colon form: everything is in sub-parameters
 		args := t.params[i+1 : next]
 		switch {
 		case args[0] == 5 && len(args) >= 2:
 			return colorIndexed | Color(args[1]&0xff), next
 		case args[0] == 2 && len(args) >= 5:
-			return rgb(args[2], args[3], args[4]), next
+			return rgb(int(args[2]), int(args[3]), int(args[4])), next
 		case args[0] == 2 && len(args) == 4:
-			return rgb(args[1], args[2], args[3]), next
+			return rgb(int(args[1]), int(args[2]), int(args[3])), next
 		}
 		return 0, next
 	}
-	if i+1 >= t.nparams {
+	if i+1 >= nparams {
 		return 0, i + 1
 	}
 	switch t.params[i+1] {
 	case 5:
-		if i+2 < t.nparams {
+		if i+2 < nparams {
 			return colorIndexed | Color(t.params[i+2]&0xff), i + 3
 		}
 	case 2:
-		if i+4 < t.nparams {
-			return rgb(t.params[i+2], t.params[i+3], t.params[i+4]), i + 5
+		if i+4 < nparams {
+			return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), i + 5
 		}
 	}
-	return 0, t.nparams
+	return 0, nparams
 }
 
 func rgb(r, g, b int) Color {

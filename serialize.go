@@ -501,10 +501,10 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 			b = append(b, t.marker)
 		}
 		if t.paramSet {
-			for i := 0; i <= min(t.nparams, maxParams-1); i++ {
+			for i := 0; i <= min(int(t.nparams), maxParams-1); i++ {
 				if i > 0 {
 					separator := byte(';')
-					if t.sub[i] {
+					if t.subParam(i) {
 						separator = ':'
 					}
 					b = append(b, separator)

@@ -139,6 +139,9 @@ func TestContinuationBound(t *testing.T) {
 func FuzzRepaintContinuation(f *testing.F) {
 	for _, in := range []string{
 		"\x1b[38:2::1:2:3mX\x1b[?2004hY",
+		"\x1b[?" + strings.Repeat("999;", maxParams-2) + "999:25lX",
+		"\x1b[" + strings.Repeat("0;", maxParams-1) + "31;32mX",
+		"\x1b[38:2::65536:65535:999999999999999999999mX",
 		"\x1b]8;id=a;https://example.com\x1b\\X",
 		"\x1bP$qm\x1b\\X",
 		"\x1b_ignored\x1b\\X",
