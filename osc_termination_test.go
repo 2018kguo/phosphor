@@ -34,3 +34,23 @@ func TestOSCCancel(t *testing.T) {
 		}
 	}
 }
+
+func TestStringsEndBeforeNextByte(t *testing.T) {
+	for _, prefix := range []string{"\x1bXignored", "\x1b^ignored", "\x1b_ignored", "\x1bPqignored", "\x1bP$qm"} {
+		for _, end := range []byte{0x1b, 0x18, 0x1a} {
+			var replies bytes.Buffer
+			term := New(8, 3, WithReply(&replies))
+			term.Write(append([]byte(prefix), end))
+			if prefix == "\x1bP$qm" && replies.String() != "\x1bP1$r0m\x1b\\" {
+				t.Fatalf("DCS end %#x: replies %q", end, replies.String())
+			}
+			if end == 0x1b {
+				term.Write([]byte("[31m"))
+			}
+			term.Write([]byte("X"))
+			if term.Cell(0, 0).Rune != 'X' {
+				t.Fatalf("%q end %#x did not return to ground", prefix, end)
+			}
+		}
+	}
+}

@@ -167,9 +167,7 @@ const (
 	stCSIIgnore
 	stOSC
 	stStr // SOS, PM, APC, and DCS strings past their start: ignored until ST
-	stStrEsc
 	stDCS // DCS: collected (into osc) for the queries answered
-	stDCSEsc
 )
 
 // New returns a blank terminal of cols x rows (each at least 1),
@@ -393,6 +391,21 @@ func (t *Terminal) printRune(r rune) {
 
 // step runs one byte through the escape-sequence state machine.
 func (t *Terminal) step(c byte) {
+	if t.state >= stOSC && (c == 0x1b || c == 0x18 || c == 0x1a) {
+		state := t.state
+		t.state = stGround
+		if c == 0x1b {
+			t.state = stEsc
+		}
+		if state == stDCS {
+			// DCS handlers finish when unhooked, including cancellation.
+			t.dcsDispatch()
+		} else if state == stOSC && c == 0x1b {
+			t.oscBel = false
+			t.oscDispatch()
+		}
+		return
+	}
 	// C0 controls act in every state but strings; ESC, CAN and SUB abort.
 	if t.state < stOSC && c < 0x20 && c != 0x1b {
 		if c == 0x18 || c == 0x1a {
@@ -492,17 +505,9 @@ func (t *Terminal) step(c byte) {
 		}
 	case stOSC:
 		switch c {
-		case 0x18, 0x1a: // CAN and SUB cancel the string without dispatch.
-			t.state = stGround
 		case 0x07:
 			t.state = stGround
 			t.oscBel = true
-			t.oscDispatch()
-		case 0x1b:
-			// ESC ends OSC immediately, even if the next byte starts a
-			// different escape sequence instead of completing ST.
-			t.state = stEsc
-			t.oscBel = false
 			t.oscDispatch()
 		default:
 			if len(t.osc) < maxOSC {
@@ -512,35 +517,13 @@ func (t *Terminal) step(c byte) {
 			}
 		}
 	case stStr:
-		if c == 0x1b {
-			t.state = stStrEsc
-		}
-	case stStrEsc:
-		if c == '\\' {
-			t.state = stGround
-			return
-		}
-		t.state = stEsc
-		t.step(c)
 	case stDCS:
-		if c == 0x1b {
-			t.state = stDCSEsc
-			return
-		}
 		t.osc = append(t.osc, c)
 		// Only the queries answered are kept (DECRQSS, XTGETTCAP); the
 		// rest (sixel, tmux passthrough...) is skipped.
 		if len(t.osc) == 2 && !isDCSQuery(t.osc) || len(t.osc) > 256 {
 			t.state = stStr
 		}
-	case stDCSEsc:
-		if c == '\\' {
-			t.state = stGround
-			t.dcsDispatch()
-			return
-		}
-		t.state = stEsc
-		t.step(c)
 	}
 }
 

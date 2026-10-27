@@ -543,20 +543,14 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 			b = append(b, ' ')
 		}
 		return b
-	case stDCS, stDCSEsc:
+	case stDCS:
 		b = append(b, '\x1b', 'P')
 		b = append(b, t.osc...)
-		if t.state == stDCSEsc {
-			b = append(b, '\x1b')
-		}
 		return b
-	case stStr, stStrEsc:
+	case stStr:
 		// Ignored strings have no retained payload. SOS recreates the
 		// same wait for ST without enabling a graphics protocol.
 		b = append(b, '\x1b', 'X')
-		if t.state == stStrEsc {
-			b = append(b, '\x1b')
-		}
 		return b
 	default:
 		panic("invalid terminal parser state")
