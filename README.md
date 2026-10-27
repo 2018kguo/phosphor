@@ -135,6 +135,12 @@ it; compare `Cursor()` with what you drew. `Modes().SyncUpdate` is set
 while a program draws a frame it wants shown at once (mode 2026).
 `Palette().Resolve(color, background)` turns a cell color into RGB.
 
+Applications hosting many sessions can call `Compact()` after output
+settles. It frees completely zeroed rows and unused temporary buffers,
+without changing the screen, scrollback, input modes or unfinished parser
+state. Later output can allocate rows again. It is an explicit idle-time
+tradeoff; ordinary writes do not run it.
+
 ### Serialization
 
 `Repaint(withScrollback)` returns bytes that, written to a terminal of the
