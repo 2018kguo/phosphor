@@ -183,7 +183,7 @@ func (t *Terminal) ClearScrollback() {
 
 // Palette returns the colors in effect: the palette the terminal started
 // with (DefaultPalette, or WithPalette's), with the changes the program
-// made since (OSC 4, 10, 11 and 12).
+// made since (OSC 4, 10, 11, 12 and 21).
 func (t *Terminal) Palette() Palette {
 	p := defaultPalette
 	if t.cfg == nil {
@@ -196,6 +196,22 @@ func (t *Terminal) Palette() Palette {
 		*p.slot(s.i) = s.c
 	}
 	return p
+}
+
+// paletteColor reads one slot without copying the complete palette.
+func (t *Terminal) paletteColor(slot uint16) RGB {
+	p := &defaultPalette
+	if t.cfg != nil {
+		for _, s := range t.cfg.colors {
+			if s.i == slot {
+				return s.c
+			}
+		}
+		if t.cfg.palette != nil {
+			p = t.cfg.palette
+		}
+	}
+	return *p.slot(slot)
 }
 
 // slot returns the palette entry for a colorSet index.

@@ -121,9 +121,9 @@ DSR 5 and 6 (CPR), DECXCPR, DSR ?15, ?26 and ?996 (dark or light, from the
 background), DECRQM for ANSI and DEC modes, DECRQSS (SGR, DECSTBM,
 DECSLRM, DECSCUSR, DECSCA, DECSCL), XTVERSION (`phosphor`), XTGETTCAP
 (`Co`, `colors`), the kitty keyboard flags (`CSI ? u`), XTWINOPS 18 (text
-area size), and OSC 4, 10, 11 and 12 color queries from the palette
+area size), and OSC 4, 10, 11, 12 and 21 color queries from the palette
 (`WithPalette`, `Palette`). Programs can also set and reset those colors
-(OSC 4, 10, 11, 12, 104, 110-112).
+(OSC 4, 10, 11, 12, 21, 104, 110-112).
 
 ### Rendering
 
@@ -236,7 +236,11 @@ the `Terminal`.
 - SGR: bold, faint, italic, underline styles (single, double, curly,
   dotted, dashed), blink, inverse, hidden, strikethrough, overline,
   16/256/RGB colors in the `;` and `:` forms, underline color (58/59).
-- OSC: title (0, 2), hyperlinks (8), colors (4, 10, 11, 12, 104, 110-112).
+- OSC: title (0, 2), hyperlinks (8), colors (4, 10, 11, 12, 21, 104, 110-112).
+  X11 color names, `rgb:`, `rgbi:` and hex specifications share one parser.
+  OSC 21 covers indexed, foreground, background and cursor colors; empty
+  values reset them to the host palette. The host always has concrete
+  default colors; renderer-only colors such as selections are ignored.
 - Resize: the main screen reflows (narrowing and widening back is exact)
   and lines come back from the scrollback when it grows.
 - RIS, DECSTR.
@@ -255,6 +259,10 @@ the `Terminal`.
   (full-screen programs redraw on SIGWINCH).
 
 ## Conformance
+
+X11 color names are generated from the checksum-pinned source by
+`go run ./internal/colorgen`; `-source /path/to/rgb.txt` works offline.
+The data's license is in [licenses/X11.txt](licenses/X11.txt).
 
 Five external suites run as ordinary Go tests (`VT_CONF_REPORT=1 go test
 -run 'Conformance|Libvterm|Alacritty' -v` prints the table).
@@ -372,4 +380,5 @@ licenses; `testdata/conformance/NOTICE.md` has the sources and revisions:
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). X11 color names retain the notices in
+[licenses/X11.txt](licenses/X11.txt).

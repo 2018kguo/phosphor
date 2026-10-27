@@ -191,7 +191,7 @@ func (c Cell) AppendText(b []byte) []byte {
 }
 
 // Palette is the set of colors a terminal reports to programs that ask
-// (OSC 4, 10, 11 and 12), and that a renderer uses to draw indexed and
+// (OSC 4, 10, 11, 12 and 21), and that a renderer uses to draw indexed and
 // default colors.
 type Palette struct {
 	Foreground RGB // the default foreground (OSC 10)

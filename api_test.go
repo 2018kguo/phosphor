@@ -240,7 +240,8 @@ func TestPalette(t *testing.T) {
 	}{
 		{"rgb:ff/00/80", RGB{255, 0, 128}, true}, {"rgb:f/0/8", RGB{255, 0, 136}, true}, {"rgb:ffff/0000/8000", RGB{255, 0, 128}, true},
 		{"#f08", RGB{0xf0, 0, 0x80}, true}, {"#ff0080", RGB{255, 0, 128}, true}, {"#fff000888", RGB{255, 0, 0x88}, true},
-		{"rgb:1/2", RGB{}, false}, {"rgb:12345/0/0", RGB{}, false}, {"#12", RGB{}, false}, {"red", RGB{}, false}, {"#ggg", RGB{}, false},
+		{"red", RGB{255, 0, 0}, true},
+		{"rgb:1/2", RGB{}, false}, {"rgb:12345/0/0", RGB{}, false}, {"#12", RGB{}, false}, {"#ggg", RGB{}, false},
 	} {
 		if got, ok := parseColor(c.in); got != c.want || ok != c.ok {
 			t.Errorf("parseColor(%q) = %v, %v", c.in, got, ok)
