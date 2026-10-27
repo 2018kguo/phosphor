@@ -73,6 +73,12 @@ func TestGraphemeWideningKeepsNativePens(t *testing.T) {
 				}
 			}
 			assertPens(term.Cell(0, y), term.Cell(1, y))
+			if wrap {
+				spacer := term.Cell(2, 0)
+				if spacer.Rune != 0 || spacer.Style.Fg != idx(2) || spacer.Link.URI != "https://selector" {
+					t.Fatalf("wrapped spacer lost the current pen:%+v", spacer)
+				}
+			}
 			replay := New(3, 3)
 			replay.Write(term.Repaint(false))
 			assertPens(replay.Cell(0, y), replay.Cell(1, y))
@@ -160,9 +166,14 @@ func TestPendingWrapIsIndependentOfDECAWM(t *testing.T) {
 			t.Fatalf("%q cursor%+v autowrap%v", input, term.cur, term.autowrap)
 		}
 		assertGraphemeInvariants(t, term)
+		replay := New(3, 3)
+		replay.Write(term.Repaint(false))
+		if !replay.cur.wrapPending || replay.autowrap {
+			t.Fatalf("portable replay lost nonwrapping pending state:%+v", replay.cur)
+		}
 		term.Write([]byte("X"))
-		if term.cur.wrapPending || term.cur.y != 0 || term.Cell(2, 0).Rune != 'X' {
-			t.Fatalf("pending wrap did not consume without wrapping: cursor%+v screen%q", term.cur, term.Lines())
+		if !term.cur.wrapPending || term.cur.y != 0 || term.Cell(2, 0).Rune != 'X' {
+			t.Fatalf("edge print did not renew pending wrap without wrapping: cursor%+v screen%q", term.cur, term.Lines())
 		}
 		assertGraphemeInvariants(t, term)
 	}

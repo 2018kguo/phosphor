@@ -1225,8 +1225,13 @@ func (t *Terminal) print(r rune, w int) {
 			t.cur.x = max(edge+1-w, 0)
 		} else {
 			t.fillCells(t.cur.y, t.cur.x, edge+1)
-			if w == 2 && t.fullWidth() {
-				t.row(t.cur.y)[t.cur.x] = cell{R: spacerHead, Bg: t.cur.pen.Bg}
+			if w == 2 {
+				spacer := t.cur.pen
+				spacer.R = 0
+				if t.fullWidth() {
+					spacer.R = spacerHead
+				}
+				t.row(t.cur.y)[t.cur.x] = spacer
 			}
 			t.wrapLine()
 			t.cur.x = t.left
@@ -1260,7 +1265,7 @@ func (t *Terminal) print(r rune, w int) {
 	}
 	if x+w > edge {
 		t.cur.x = edge
-		t.cur.wrapPending = t.autowrap
+		t.cur.wrapPending = true
 	} else {
 		t.cur.x = x + w
 	}
@@ -2315,8 +2320,8 @@ func rowAt(scr [][]cell, i int) []cell {
 // character starting next did not fit there.
 func (t *Terminal) wrapEnd(row, next []cell) int {
 	// Replayed, the wide character wraps and leaves a spacer head in its
-	// own background, so leave it out only if that recreates it.
-	if row != nil && row[t.cols-1].R == spacerHead && startsWide(next) && row[t.cols-1].Bg == next[0].Bg {
+	// own pen, so leave it out only if that recreates the original style.
+	if row != nil && row[t.cols-1].R == spacerHead && startsWide(next) && styleOf(row[t.cols-1]) == styleOf(next[0]) {
 		return t.cols - 1
 	}
 	return t.cols

@@ -387,6 +387,11 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		// absolute.
 		b = append(b, "\x1b[?6l"...)
 	}
+	if !t.autowrap && t.cur.wrapPending {
+		// Disable wrapping before the final edge print: it sets pending
+		// wrap even with DECAWM off, while disabling it afterwards clears it.
+		b = appendMode(b, 7, false)
+	}
 	if t.cur.wrapPending {
 		// Reprint the last cell to recreate the pending wrap.
 		row := t.screen()[y]
@@ -429,7 +434,7 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.ss != 0 {
 		b = append(b, 0x1b, 'L'+t.ss) // SS2 is ESC N, SS3 ESC O
 	}
-	if !t.autowrap {
+	if !t.autowrap && !t.cur.wrapPending {
 		b = appendMode(b, 7, false)
 	}
 	if t.reverseVideo {
