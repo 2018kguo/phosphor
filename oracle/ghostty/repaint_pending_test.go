@@ -10,6 +10,8 @@ func TestNativePhosphorRepaintSavedPendingWrap(t *testing.T) {
 		cols  int
 	}{
 		{"abcd\x1b7\rX", 4},
+		{"abcd\x1b[?47h\x1b7X", 4},
+		{"abcd\x1b[41m\x1b[?47h\x1b7X", 4},
 		{"abcd\x1b7\x1b[2J", 4},
 		{"ab漢\x1b7\rX", 4},
 		{"abcd\x1b[31m\x1b]8;;https://saved\x1b\\\x1b7\x1b[0m\x1b]8;;\x1b\\\rX", 4},
