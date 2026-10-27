@@ -100,8 +100,8 @@ type Terminal struct {
 	bracketed    bool
 	focus        bool
 	sync         bool   // 2026: synchronized update in progress
-	mouse        uint16 // 0, 9, 1000, 1002 or 1003
-	mouseEnc     uint16 // 0, 1005, 1006 or 1015
+	mouse        uint16 // independent tracking bits and effective selection; see mouse_modes.go
+	mouseEnc     uint16 // independent encoding bits and effective selection
 	cursorStyle  cursorAppearance
 	kitty        []uint16
 	title        string
@@ -936,9 +936,9 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 	case 25:
 		return !t.cursorHidden, true
 	case 9, 1000, 1002, 1003:
-		return int(t.mouse) == mode, true
-	case 1005, 1006, 1015:
-		return int(t.mouseEnc) == mode, true
+		return t.mouse&mouseModeBit(mode, mouseTrackingNumbers) != 0, true
+	case 1005, 1006, 1015, 1016:
+		return t.mouseEnc&mouseModeBit(mode, mouseEncodingNumbers) != 0, true
 	case 1004:
 		return t.focus, true
 	case 2004:
@@ -1008,17 +1008,9 @@ func (t *Terminal) decMode(mode int, on bool) {
 	case 25:
 		t.cursorHidden = !on
 	case 9, 1000, 1002, 1003:
-		if on {
-			t.mouse = uint16(mode)
-		} else if int(t.mouse) == mode {
-			t.mouse = 0
-		}
-	case 1005, 1006, 1015:
-		if on {
-			t.mouseEnc = uint16(mode)
-		} else if int(t.mouseEnc) == mode {
-			t.mouseEnc = 0
-		}
+		t.mouse = setMouseMode(t.mouse, mode, on, mouseTrackingNumbers)
+	case 1005, 1006, 1015, 1016:
+		t.mouseEnc = setMouseMode(t.mouseEnc, mode, on, mouseEncodingNumbers)
 	case 1004:
 		t.focus = on
 	case 2004:
@@ -1911,18 +1903,12 @@ func (t *Terminal) prevTab(x int) int {
 	return 0
 }
 
-// resizeTabs keeps custom tab stops across a width change; new columns
-// get the default stops.
+// Column changes restore the default tab stops, as libghostty does.
+// Height-only resizes leave the current tab table alone.
 func (t *Terminal) resizeTabs(oldCols int) {
-	old := t.tabs()
-	if old == nil {
-		return
+	if oldCols != t.cols && t.x != nil {
+		t.x.tabs = nil
 	}
-	tabs := defaultTabs(t.cols)
-	for x := 0; x < min(oldCols, t.cols); x++ {
-		tabs[x/64] = tabs[x/64]&^(1<<(x%64)) | old[x/64]&(1<<(x%64))
-	}
-	t.x.tabs = tabs
 }
 
 func (t *Terminal) sgr() {

@@ -65,6 +65,11 @@ var knownFailures = map[string]string{
 	"wezterm/scroll_up_within_left_and_right_margins":   "divergent: wezterm scrolls one column past the right margin; xterm (and esctest's DECSLRM cases) stop at it",
 	"wezterm/scroll_down_within_left_and_right_margins": "divergent: as above",
 	"wezterm/test_resize_2162":                          "divergent: as above (this emulator keeps the cursor on the last column with a pending wrap)",
+	"wezterm/test_hts#4":                                "divergent: width changes reset tabs to defaults, as ghostty does; wezterm preserves custom stops",
+	"wezterm/test_hts#5":                                "divergent: as above",
+	"wezterm/test_hts#6":                                "divergent: as above",
+	"wezterm/test_hts#7":                                "divergent: as above",
+	"wezterm/test_hts#8":                                "divergent: as above",
 
 	"alacritty/decaln_reset":      "divergent: alacritty's DECALN leaves the cursor where it was; xterm homes it",
 	"alacritty/deccolm_reset":     "gap: DECCOLM (132-column mode) is not modeled",

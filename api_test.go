@@ -133,7 +133,7 @@ func TestCursorAndModes(t *testing.T) {
 	}
 	term.Write([]byte("\x1b[?1049h\x1b[?1h\x1b=\x1b[?2004h\x1b[?1004h\x1b[?1002h\x1b[?1006h\x1b[>5u\x1b[?7l\x1b[4h\x1b[20h\x1b[?6h\x1b[?5h\x1b[?2026h"))
 	want := Modes{AltScreen: true, ApplicationCursorKeys: true, ApplicationKeypad: true, BracketedPaste: true, FocusEvents: true,
-		Mouse: MouseButtonEvent, MouseEncoding: MouseEncodingSGR, KittyKeyboard: 5, Insert: true, Newline: true, Origin: true,
+		Mouse: MouseButtonEvent, MouseEncoding: MouseEncodingSGR, MouseTrackingModes: MouseTrackingButtonEvent, MouseEncodingModes: MouseEncodingModeSGR, KittyKeyboard: 5, Insert: true, Newline: true, Origin: true,
 		ReverseVideo: true, SyncUpdate: true}
 	if got := term.Modes(); got != want {
 		t.Fatalf("modes\n got %+v\nwant %+v", got, want)

@@ -461,12 +461,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.appKeypad {
 		b = append(b, "\x1b="...)
 	}
-	if t.mouse != 0 {
-		b = appendMode(b, int(t.mouse), true)
-	}
-	if t.mouseEnc != 0 {
-		b = appendMode(b, int(t.mouseEnc), true)
-	}
+	b = appendMouseModes(b, t.mouse, mouseTrackingNumbers)
+	b = appendMouseModes(b, t.mouseEnc, mouseEncodingNumbers)
 	if t.focus {
 		b = appendMode(b, 1004, true)
 	}
