@@ -23,19 +23,12 @@ type cluster struct {
 // Invalid scalars have width one. A complete grapheme can have a different
 // width under mode 2027, so summing scalar widths measures mode-off layout.
 func CodepointWidth(r rune) int {
-	lo, hi := 0, len(scalarWidthRanges)
-	for lo < hi {
-		mid := int(uint(lo+hi) >> 1)
-		v := scalarWidthRanges[mid]
-		if r < v.first {
-			hi = mid
-		} else if r > v.last {
-			lo = mid + 1
-		} else {
-			return int(v.width)
-		}
+	u := uint32(r)
+	if u > utf8.MaxRune {
+		return 1
 	}
-	return 1
+	word := scalarWidthPages[scalarWidthPageIDs[u>>8]][u>>5&7]
+	return int(word >> ((u & 31) * 2) & 3)
 }
 
 func firstRune(s string) rune {
