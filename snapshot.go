@@ -101,6 +101,7 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 			flags |= 1 << uint(i)
 		}
 	}
+	flags |= uint64(t.privateModes()) << 18
 	e.u(flags)
 	for _, n := range []int{t.top, t.bot, t.left, t.right, t.sbMaxLines, t.sbMaxBytes} {
 		e.u(uint64(n))
@@ -308,7 +309,11 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	} else if next.rows > limits.MaxCells/next.cols {
 		d.fail(ErrSnapshotLimit, "screen cells")
 	}
-	flags := d.number((1 << 18) - 1)
+	flagMask := uint64((1 << 21) - 1)
+	if version == 1 {
+		flagMask = (1 << 18) - 1
+	}
+	flags := d.number(flagMask)
 	for i, p := range []*bool{&next.altActive, &next.lrmm, &next.protISO, &next.autowrap, &next.revWrap,
 		&next.revWrapExt, &next.insert, &next.newline, &next.cursorHidden, &next.reverseVideo, &next.appCursor,
 		&next.appKeypad, &next.bracketed, &next.focus, &next.sync, &next.grapheme, &next.sbOpen, &next.sbSpacer} {
@@ -357,7 +362,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 	}
 	d.section = "lookup tables"
-	var x extra
+	x := extra{privateModes: uint8(flags >> 18)}
 	n = d.count(int(^uint32(0)>>1)-int(clusterBase)+1, int(unsafe.Sizeof(cluster{})))
 	if n > 0 {
 		x.clusters = make([]cluster, n)
@@ -435,7 +440,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 			x.savedModes[i] = s
 		}
 	}
-	if x.clusters != nil || x.rare != nil || x.tabs != nil || x.savedModes != nil {
+	if x.clusters != nil || x.rare != nil || x.tabs != nil || x.savedModes != nil || x.privateModes != 0 {
 		if d.charge(1, int(unsafe.Sizeof(extra{}))) {
 			next.x = new(extra)
 			*next.x = x

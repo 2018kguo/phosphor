@@ -125,6 +125,9 @@ func (t *Terminal) appendDSR(b []byte) []byte {
 // decModeState returns the DECRQM state of DEC private mode mode: 1 set,
 // 2 reset, 0 not recognized.
 func (t *Terminal) decModeState(mode int) int {
+	if mode == 117 {
+		return 4
+	} // BCE always uses the active background.
 	on, ok := t.modeValue(mode)
 	if !ok {
 		switch mode {
@@ -148,6 +151,8 @@ func (t *Terminal) decModeState(mode int) int {
 func (t *Terminal) ansiModeState(mode int) int {
 	var on bool
 	switch mode {
+	case 1, 5, 7, 10, 11, 13, 14, 15, 16, 17, 18, 19:
+		return 4 // Recognized ANSI modes with fixed reset behavior.
 	case 4:
 		on = t.insert
 	case 20:
@@ -230,6 +235,8 @@ func (t *Terminal) appendXTGETTCAP(b []byte, q string) []byte {
 		switch string(raw) {
 		case "Co", "colors":
 			val = "256"
+		case "Smulx":
+			val = "\\E[4:%p1%dm"
 		}
 		if err != nil || val == "" {
 			b = append(b, "\x1bP0+r"...)
@@ -238,7 +245,10 @@ func (t *Terminal) appendXTGETTCAP(b []byte, q string) []byte {
 			b = append(b, "\x1bP1+r"...)
 			b = append(b, name...)
 			b = append(b, '=')
-			b = hex.AppendEncode(b, []byte(val))
+			const digits = "0123456789ABCDEF"
+			for i := range len(val) {
+				b = append(b, digits[val[i]>>4], digits[val[i]&15])
+			}
 		}
 		b = append(b, "\x1b\\"...)
 	}

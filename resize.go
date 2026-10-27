@@ -24,6 +24,7 @@ type point struct {
 // Resize does not tell the program: the caller resizes the pseudo-terminal
 // too (which sends it SIGWINCH).
 func (t *Terminal) Resize(cols, rows int) {
+	t.sync = false
 	cols, rows = max(cols, 1), max(rows, 1)
 	if cols == t.cols && rows == t.rows {
 		return
