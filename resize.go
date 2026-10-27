@@ -451,15 +451,25 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 // replayLine first decodes clustered history away from a physical edge.
 // Otherwise an emoji base can wrap before its VS15 narrows it, even though
 // the completed cell fits. Reflow then uses the stored cell widths. Ordinary
-// history keeps its original small, destination-width allocation path.
+// history keeps its destination-width path. Text sizing shares the history
+// lexer and excludes CSI/OSC payloads: a large URL cannot allocate a wide row.
 func replayLine(line []byte, cols int) *Terminal {
-	n := utf8.RuneCount(line)
+	cells := 0
+	walkHistoryText(line, func(text []byte) {
+		for len(text) > 0 {
+			r, n := utf8.DecodeRune(text)
+			text = text[n:]
+			// A zero-width selector may widen the preceding cell by one;
+			// counting one for each mark is a safe bound for mixed modes.
+			cells += max(1, CodepointWidth(r))
+		}
+	})
 	if !bytes.Contains(line, []byte("\x1b[?2027h")) {
-		tmp := newTerminal(cols, 2*n/cols+2, 0, 0)
+		tmp := newTerminal(cols, cells/cols+2, 0, 0)
 		tmp.Write(line)
 		return tmp
 	}
-	wide := 2*n + 1 // each scalar contributes at most two cells
+	wide := cells + 1
 	tmp := newTerminal(wide, 1, 0, 0)
 	tmp.Write(line)
 	tmp.main, tmp.mainWrap = tmp.rewrap(tmp.main, nil, wide, cols, nil)

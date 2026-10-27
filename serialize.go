@@ -639,24 +639,38 @@ func (t *Terminal) rowText(row []cell) string {
 // scrollback line holds.
 func stripSGR(line []byte) string {
 	var sb strings.Builder
-	sb.Grow(len(line))
+	walkHistoryText(line, func(text []byte) { sb.Write(text) })
+	return sb.String()
+}
+
+// walkHistoryText scans the bounded grammar produced by appendRow: text,
+// CSI styles/modes/EL and OSC 8 links terminated by ST. Sharing this lexer
+// keeps text extraction and history allocation sizing independent of URLs.
+func walkHistoryText(line []byte, text func([]byte)) {
+	start := 0
 	for i := 0; i < len(line); i++ {
 		c := line[i]
 		if c != 0x1b {
-			sb.WriteByte(c)
 			continue
+		}
+		if start < i {
+			text(line[start:i])
 		}
 		if i+1 < len(line) && line[i+1] == ']' { // OSC 8, ended by ST
 			end := bytes.Index(line[i:], []byte("\x1b\\"))
 			if end < 0 {
-				break
+				return
 			}
 			i += end + 1
+			start = i + 1
 			continue
 		}
 		// CSI: skip to the final byte.
 		for i += 2; i < len(line) && (line[i] < 0x40 || line[i] > 0x7e); i++ {
 		}
+		start = min(i+1, len(line))
 	}
-	return sb.String()
+	if start < len(line) {
+		text(line[start:])
+	}
 }
