@@ -39,6 +39,21 @@ func g1Cells(t *Terminal, want ...[3]int) string {
 	return ""
 }
 
+func g1Hyperlinks(want ...string) func(*Terminal) string {
+	return func(t *Terminal) string {
+		for x := 0; x <= len(want); x++ {
+			uri := ""
+			if x < len(want) {
+				uri = want[x]
+			}
+			if got := t.Cell(x, 0).Link.URI; got != uri {
+				return fmt.Sprintf("cell %d,0 URI got %q want %q", x, got, uri)
+			}
+		}
+		return ""
+	}
+}
+
 const g1Tail = int(wideTail)
 
 // g1DenseLinks prints A..J on the current row, each with its own OSC 8 URI.
@@ -289,13 +304,17 @@ var ghostty1Cases = []confCase{
 		in: "\x1b[?69h\x1b[3;5s\x1b[1;5H\U0001F600", cur: at(4, 1), gap: gLRM},
 
 	// hyperlinks
-	{name: "print with hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456", gap: gOSC},
-	{name: "print over cell with same hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456\x1b[1;1H123456", gap: gOSC},
-	{name: "print and end hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123" + g1Osc8e + "456", gap: gOSC},
+	{name: "print with hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456", screen: scr("123456"),
+		check: g1Hyperlinks("http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com")},
+	{name: "print over cell with same hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456\x1b[1;1H123456", screen: scr("123456"),
+		check: g1Hyperlinks("http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com")},
+	{name: "print and end hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123" + g1Osc8e + "456", screen: scr("123456"),
+		check: g1Hyperlinks("http://example.com", "http://example.com", "http://example.com", "", "", "")},
 	{name: "print and change hyperlink", cols: 80, rows: 80,
-		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b]8;;http://two.example.com\x1b\\456", gap: gOSC},
+		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b]8;;http://two.example.com\x1b\\456", screen: scr("123456"),
+		check: g1Hyperlinks("http://one.example.com", "http://one.example.com", "http://one.example.com", "http://two.example.com", "http://two.example.com", "http://two.example.com")},
 	{name: "overwrite hyperlink", cols: 80, rows: 80,
-		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b[1;1H" + g1Osc8e + "456", gap: gOSC},
+		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b[1;1H" + g1Osc8e + "456", screen: scr("456"), check: g1Hyperlinks("", "", "")},
 	{name: "print wide char at right edge with hyperlink", cols: 10, rows: 5,
 		in: g1Osc8 + "\x1b[1;10H中", cur: at(2, 1),
 		check: func(t *Terminal) string {

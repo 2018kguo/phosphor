@@ -27,7 +27,10 @@ typedef struct {
   size_t history_rows, total_rows;
   bool modes[18], cursor_blink;
   uint8_t cursor_shape, kitty;
+  uint16_t mouse, mouse_encoding;
   GhosttyString title;
 } ExpState;
 int exp_capture(GhosttyTerminal t, ExpState *out);
 void exp_capture_free(ExpState *out);
+int exp_mouse_report(GhosttyTerminal t, int action, bool pressed, int tracking, int format,
+                     uint8_t *out, size_t capacity, size_t *len);
