@@ -292,6 +292,7 @@ func TestReplies(t *testing.T) {
 		{"\x1b[?69h\x1b[2;8s\x1bP$qs\x1b\\", "\x1bP1$r2;8s\x1b\\"},
 		{"\x1b[5 q\x1bP$q q\x1b\\", "\x1bP1$r5 q\x1b\\"},
 		{"\x1bP$q q\x1b\\", "\x1bP1$r2 q\x1b\\"},
+		{"A\x1b[2;3r\x1b[?69h\x1b[3;6s\x1b[?6hB\x1b[22JX\x1b[6n\x1b[?6n", "\x1b[1;1R\x1b[?1;1R"},
 		{"\x1b[1\"q\x1bP$q\"q\x1b\\", "\x1bP1$r1\"q\x1b\\"},
 		{"\x1bP$q\"p\x1b\\", "\x1bP1$r62;1\"p\x1b\\"},
 		{"\x1bP$qx\x1b\\", "\x1bP0$r\x1b\\"},

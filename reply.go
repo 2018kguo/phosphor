@@ -91,9 +91,9 @@ func (t *Terminal) csiQuery(c byte) bool {
 func (t *Terminal) appendDSR(b []byte) []byte {
 	appendPos := func(b []byte) []byte {
 		x, y := t.relPos()
-		b = strconv.AppendInt(b, int64(y+1), 10)
+		b = strconv.AppendInt(b, int64(max(y+1, 1)), 10)
 		b = append(b, ';')
-		b = strconv.AppendInt(b, int64(x+1), 10)
+		b = strconv.AppendInt(b, int64(max(x+1, 1)), 10)
 		return append(b, 'R')
 	}
 	if t.marker == 0 {

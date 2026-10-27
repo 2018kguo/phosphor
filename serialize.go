@@ -534,16 +534,13 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 	case stCSIIgnore:
 		// A second private marker enters the ignore state without effects.
 		return append(b, "\x1b[??"...)
-	case stOSC, stOSCEsc:
+	case stOSC:
 		b = append(b, '\x1b', ']')
 		b = append(b, t.osc...)
 		if t.oscOver {
 			// The retained payload is capped; one more byte restores the
 			// overflow flag, so its eventual terminator cannot dispatch it.
 			b = append(b, ' ')
-		}
-		if t.state == stOSCEsc {
-			b = append(b, '\x1b')
 		}
 		return b
 	case stDCS, stDCSEsc:

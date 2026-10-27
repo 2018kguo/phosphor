@@ -166,7 +166,6 @@ const (
 	stCSI
 	stCSIIgnore
 	stOSC
-	stOSCEsc
 	stStr // SOS, PM, APC, and DCS strings past their start: ignored until ST
 	stStrEsc
 	stDCS // DCS: collected (into osc) for the queries answered
@@ -493,12 +492,18 @@ func (t *Terminal) step(c byte) {
 		}
 	case stOSC:
 		switch c {
+		case 0x18, 0x1a: // CAN and SUB cancel the string without dispatch.
+			t.state = stGround
 		case 0x07:
 			t.state = stGround
 			t.oscBel = true
 			t.oscDispatch()
 		case 0x1b:
-			t.state = stOSCEsc
+			// ESC ends OSC immediately, even if the next byte starts a
+			// different escape sequence instead of completing ST.
+			t.state = stEsc
+			t.oscBel = false
+			t.oscDispatch()
 		default:
 			if len(t.osc) < maxOSC {
 				t.osc = append(t.osc, c)
@@ -506,16 +511,6 @@ func (t *Terminal) step(c byte) {
 				t.oscOver = true
 			}
 		}
-	case stOSCEsc:
-		if c == '\\' {
-			t.state = stGround
-			t.oscBel = false
-			t.oscDispatch()
-			return
-		}
-		// ESC that is not ST ends the string and starts a new sequence.
-		t.state = stEsc
-		t.step(c)
 	case stStr:
 		if c == 0x1b {
 			t.state = stStrEsc
