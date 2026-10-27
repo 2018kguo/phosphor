@@ -20,7 +20,7 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 	if ac != bc || ar != br || a.Title() != b.Title() || a.Cursor() != b.Cursor() || a.Modes() != b.Modes() || a.Palette() != b.Palette() {
 		t.Fatalf("terminal observations changed: size %dx%d/%dx%d cursor %+v/%+v modes %+v/%+v", ac, ar, bc, br, a.Cursor(), b.Cursor(), a.Modes(), b.Modes())
 	}
-	if a.cur != b.cur || a.lastChar != b.lastChar || a.top != b.top || a.bot != b.bot || a.left != b.left || a.right != b.right ||
+	if !snapshotCursorsEqual(a, b, a.cur, b.cur) || a.lastChar != b.lastChar || a.top != b.top || a.bot != b.bot || a.left != b.left || a.right != b.right ||
 		a.lrmm != b.lrmm || a.protISO != b.protISO || a.ss != b.ss || a.revWrap != b.revWrap || a.revWrapExt != b.revWrapExt ||
 		a.grapheme != b.grapheme || a.sbOpen != b.sbOpen || a.sbSpacer != b.sbSpacer || a.sbMaxLines != b.sbMaxLines || a.sbMaxBytes != b.sbMaxBytes ||
 		!slices.Equal(a.kitty, b.kitty) || !bytes.Equal(a.appendContinuation(nil), b.appendContinuation(nil)) {
@@ -34,7 +34,7 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 		if b.saved != nil {
 			right = [3]savedCursor{b.saved.screen[0], b.saved.screen[1], b.saved.alternate}[i]
 		}
-		if left.valid != right.valid || left.valid && left.cursor != right.cursor {
+		if left.valid != right.valid || left.valid && !snapshotCursorsEqual(a, b, left.cursor, right.cursor) {
 			t.Fatalf("saved cursor %d changed", i)
 		}
 	}
@@ -77,6 +77,14 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 			t.Fatalf("row %d damage changed", y)
 		}
 	}
+}
+
+func snapshotCursorsEqual(a, b *Terminal, left, right cursor) bool {
+	// Pool collection can renumber IDs at different times after restore.
+	// Compare the referenced targets while keeping every cursor flag exact.
+	leftLink, rightLink := a.link(left.pen.L), b.link(right.pen.L)
+	left.pen.L, right.pen.L = 0, 0
+	return left == right && leftLink == rightLink
 }
 
 func snapshotScene() string {
@@ -129,6 +137,25 @@ func TestSnapshotFutureState(t *testing.T) {
 		a.Write([]byte("\x1b[2b\r\n"))
 		b.Write([]byte("\x1b[2b\r\n"))
 		assertSnapshotState(t, a, b)
+	}
+}
+
+func TestSnapshotContinuesAcrossPoolCollection(t *testing.T) {
+	a := New(4, 2)
+	writeLink := func(term *Terminal, i int) {
+		term.Write(fmt.Appendf(nil, "\x1b[H\x1b]8;id=%d;https://example.com/%d\x1b\\X", i, i))
+	}
+	for i := range 30 {
+		writeLink(a, i)
+	}
+	var b Terminal
+	if err := b.RestoreSnapshot(a.Snapshot(), SnapshotLimits{}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 30; i < 80; i++ {
+		writeLink(a, i)
+		writeLink(&b, i)
+		assertSnapshotState(t, a, &b)
 	}
 }
 
