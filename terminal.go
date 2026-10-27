@@ -1303,11 +1303,11 @@ func (t *Terminal) printASCII(p []byte) {
 			p = p[1:]
 			continue
 		}
-		pen := t.cur.pen
+		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.L
 		row = row[x : x+n]
 		for i, b := range p[:n] {
-			pen.R = rune(b)
-			row[i] = pen
+			c := &row[i]
+			c.R, c.Fg, c.Bg, c.A, c.L = rune(b), fg, bg, attrs, link
 		}
 		t.lastChar = rune(p[n-1])
 		if x+n > edge {
