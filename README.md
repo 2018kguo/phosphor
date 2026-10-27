@@ -281,7 +281,10 @@ Besides the suites:
   `FuzzStream` (raw bytes and resizes), `FuzzChunking` (how output
   is split into writes does not matter), `FuzzWrite`, `FuzzDamage` (every
   row whose cells changed is dirty), `FuzzReplies` (answering queries
-  never changes the state), and, in the `oracle` module, `FuzzOracle`, a
+  never changes the state), `FuzzGraphemeTransitions` (clustering, mode
+  changes and reflow), `FuzzRestoreSnapshot` (malformed binary data and
+  atomic failure), `FuzzSnapshotContinuation` (exact restore followed by
+  continued output), and, in the `oracle` module, `FuzzOracle`, a
   differential fuzzer against `charmbracelet/x/vt` on the subset where it
   agrees with xterm. CI runs each for 30 seconds. Before
   the extraction the targets had about 2.3 hours of fuzzing; since, each

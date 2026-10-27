@@ -251,7 +251,7 @@ func TestGraphemePortableRepaintEdgeLimit(t *testing.T) {
 }
 
 func TestGraphemeDirtyBoundAndIdle(t *testing.T) {
-	if unsafe.Sizeof(Terminal{}) != 560 || unsafe.Sizeof(cell{}) != 16 {
+	if unsafe.Sizeof(Terminal{}) > 560 || unsafe.Sizeof(cell{}) != 16 {
 		t.Fatalf("fixed state grew:%d cell%d", unsafe.Sizeof(Terminal{}), unsafe.Sizeof(cell{}))
 	}
 	for _, mode := range []string{"", "\x1b[?2027h"} {
