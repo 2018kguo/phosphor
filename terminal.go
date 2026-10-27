@@ -60,6 +60,14 @@ type savedCursor struct {
 	valid bool
 }
 
+// savedCursors is allocated on the first save and reused until a full
+// reset or Compact finds every slot invalid. A shell prompt pays for none
+// of the three slots; repeated active saves and screen switches reuse it.
+type savedCursors struct {
+	screen    [2]savedCursor // DECSC slots: main, alternate
+	alternate savedCursor    // cursor saved by ?1049h
+}
+
 // Terminal is a VT/xterm screen model: write a program's output to it and
 // read back what a terminal would show. Create one with New.
 //
@@ -75,16 +83,15 @@ type Terminal struct {
 	mainWrap, altWrap []bool
 	altActive         bool
 	cur               cursor
-	saved             [2]savedCursor // DECSC slots: main, alt
-	saved1049         savedCursor    // cursor saved by ?1049h
-	top, bot          int            // scroll region, inclusive
-	left, right       int            // left and right margins, inclusive
-	lrmm              bool           // DECLRMM: left and right margins enabled
-	protISO           bool           // protection was last set by SPA (ISO), not DECSCA
-	ss                uint8          // pending single shift (2 or 3)
-	x                 *extra         // state few programs use, nil until one does
-	cfg               *config        // options and palette changes, nil if none
-	dirty             *dirtySet      // damage, nil until ClearDirty is first called
+	saved             *savedCursors
+	top, bot          int       // scroll region, inclusive
+	left, right       int       // left and right margins, inclusive
+	lrmm              bool      // DECLRMM: left and right margins enabled
+	protISO           bool      // protection was last set by SPA (ISO), not DECSCA
+	ss                uint8     // pending single shift (2 or 3)
+	x                 *extra    // state few programs use, nil until one does
+	cfg               *config   // options and palette changes, nil if none
+	dirty             *dirtySet // damage, nil until ClearDirty is first called
 
 	// modes
 	autowrap     bool
@@ -117,17 +124,17 @@ type Terminal struct {
 	scratch          []byte
 
 	// parser
-	state    uint8
+	params   [maxParams]uint32 // saturated at 65536, including on 64-bit hosts
+	osc      []byte
+	sub      uint32 // bit i marks a ':' before params[i]
 	utf8buf  [utf8.UTFMax]byte
-	utf8n    int
-	params   [maxParams]int
-	sub      [maxParams]bool // params[i] followed a ':'
-	nparams  int
+	nparams  uint8 // at most maxParams; also the partial CSI's current slot
+	state    uint8
+	utf8n    uint8 // an unfinished UTF-8 scalar has at most four bytes
 	paramSet bool
 	marker   byte // private marker: ? > < =
 	inter    byte // last intermediate byte
 	oscBel   bool // the OSC string was ended by BEL (replies end the same way)
-	osc      []byte
 	oscOver  bool
 }
 
@@ -255,6 +262,25 @@ func (t *Terminal) wrapped(y int) bool {
 func (t *Terminal) Write(p []byte) (int, error) {
 	for i := 0; i < len(p); i++ {
 		c := p[i]
+		if t.state == stCSI && c >= '0' && c <= '9' {
+			// Parameters are lexical digit runs. Accumulate each run once
+			// instead of dispatching every digit through the state machine.
+			j := i
+			v := uint32(0)
+			if t.nparams < maxParams {
+				v = t.params[t.nparams]
+			}
+			for j < len(p) && p[j] >= '0' && p[j] <= '9' {
+				v = csiDigit(v, p[j])
+				j++
+			}
+			if t.nparams < maxParams {
+				t.params[t.nparams] = v
+			}
+			t.paramSet = true
+			i = j - 1
+			continue
+		}
 		if t.state == stGround {
 			if t.utf8n > 0 {
 				t.utf8Continue(c)
@@ -391,7 +417,7 @@ func (t *Terminal) step(c byte) {
 		case c == 0x1b:
 		case c == '[':
 			t.nparams, t.paramSet, t.marker, t.inter = 0, false, 0, 0
-			t.params[0], t.sub[0] = 0, false
+			t.params[0], t.sub = 0, 0
 			t.state = stCSI
 		case c == ']':
 			t.osc, t.oscOver = t.osc[:0], false
@@ -426,15 +452,18 @@ func (t *Terminal) step(c byte) {
 		switch {
 		case c >= '0' && c <= '9':
 			if t.nparams < maxParams {
-				v := t.params[t.nparams]*10 + int(c-'0')
-				t.params[t.nparams] = min(v, 1<<16)
+				t.params[t.nparams] = csiDigit(t.params[t.nparams], c)
 			}
 			t.paramSet = true
 		case c == ';' || c == ':':
 			if t.nparams < maxParams-1 {
 				t.nparams++
 				t.params[t.nparams] = 0
-				t.sub[t.nparams] = c == ':'
+				if c == ':' {
+					t.sub |= 1 << uint(t.nparams)
+				} else {
+					t.sub &^= 1 << uint(t.nparams)
+				}
 			} else {
 				t.nparams = maxParams
 			}
@@ -520,6 +549,10 @@ func (t *Terminal) step(c byte) {
 		t.state = stEsc
 		t.step(c)
 	}
+}
+
+func csiDigit(value uint32, digit byte) uint32 {
+	return min(value*10+uint32(digit-'0'), 1<<16)
 }
 
 func (t *Terminal) execute(c byte) {
@@ -648,7 +681,14 @@ func (t *Terminal) saveCursor() {
 	if t.altActive {
 		i = 1
 	}
-	t.saved[i] = savedCursor{cursor: t.cur, valid: true}
+	t.cursorSaves().screen[i] = savedCursor{cursor: t.cur, valid: true}
+}
+
+func (t *Terminal) cursorSaves() *savedCursors {
+	if t.saved == nil {
+		t.saved = &savedCursors{}
+	}
+	return t.saved
 }
 
 func (t *Terminal) restoreCursor() {
@@ -656,12 +696,11 @@ func (t *Terminal) restoreCursor() {
 	if t.altActive {
 		i = 1
 	}
-	s := t.saved[i]
-	if !s.valid {
+	if t.saved == nil || !t.saved.screen[i].valid {
 		t.cur = cursor{}
 		return
 	}
-	t.setCursor(s.cursor)
+	t.setCursor(t.saved.screen[i].cursor)
 }
 
 // setCursor installs a saved cursor, keeping it valid for the current
@@ -676,11 +715,14 @@ func (t *Terminal) setCursor(c cursor) {
 // param returns parameter i (ignoring sub-parameters), or def if it is
 // absent or zero.
 func (t *Terminal) param(i, def int) int {
-	if i >= t.nparams || t.params[i] == 0 {
+	if i >= int(t.nparams) || t.params[i] == 0 {
 		return def
 	}
-	return t.params[i]
+	return int(t.params[i])
 }
+
+// subParam reports whether parameter i is a colon-separated sub-parameter.
+func (t *Terminal) subParam(i int) bool { return t.sub&(1<<uint(i)) != 0 }
 
 func (t *Terminal) csiDispatch(c byte) {
 	if t.cfg != nil && t.cfg.reply != nil && t.csiQuery(c) {
@@ -693,15 +735,15 @@ func (t *Terminal) csiDispatch(c byte) {
 		}
 		switch c {
 		case 'h', 'l':
-			for i := 0; i < t.nparams; i++ {
-				if !t.sub[i] {
-					t.decMode(t.params[i], c == 'h')
+			for i := 0; i < int(t.nparams); i++ {
+				if !t.subParam(i) {
+					t.decMode(int(t.params[i]), c == 'h')
 				}
 			}
 		case 's', 'r':
-			for i := 0; i < t.nparams; i++ {
-				if !t.sub[i] {
-					t.xtSaveMode(t.params[i], c == 's')
+			for i := 0; i < int(t.nparams); i++ {
+				if !t.subParam(i) {
+					t.xtSaveMode(int(t.params[i]), c == 's')
 				}
 			}
 		case 'J':
@@ -848,7 +890,7 @@ func (t *Terminal) csiDispatch(c byte) {
 	case 'm':
 		t.sgr()
 	case 'h', 'l':
-		for i := 0; i < t.nparams; i++ {
+		for i := 0; i < int(t.nparams); i++ {
 			switch t.params[i] {
 			case 4:
 				t.insert = c == 'h'
@@ -892,7 +934,9 @@ func (t *Terminal) softReset() {
 	t.cur.pen = cell{}
 	t.cur.g, t.cur.gl, t.ss = [4]bool{}, 0, 0
 	t.cur.wrapPending = false
-	t.saved[0], t.saved[1] = savedCursor{}, savedCursor{}
+	if t.saved != nil {
+		t.saved.screen = [2]savedCursor{}
+	}
 }
 
 // modeValue reports the state of a DEC private mode XTSAVE can save, and
@@ -1012,12 +1056,15 @@ func (t *Terminal) decMode(mode int, on bool) {
 	case 1049:
 		if on {
 			if !t.altActive {
-				t.saved1049 = savedCursor{cursor: t.cur, valid: true}
+				t.cursorSaves().alternate = savedCursor{cursor: t.cur, valid: true}
 			}
 			t.setAlt(true, true)
 			t.clearScreen()
 		} else if t.altActive {
-			saved := t.saved1049
+			var saved savedCursor
+			if t.saved != nil {
+				saved = t.saved.alternate
+			}
 			t.setAlt(false, true)
 			if saved.valid {
 				t.setCursor(saved.cursor)
@@ -1040,7 +1087,9 @@ func (t *Terminal) setAlt(on, clearOnExit bool) {
 			t.alt = make([][]cell, t.rows)
 		}
 	} else {
-		t.saved1049.valid = false
+		if t.saved != nil {
+			t.saved.alternate.valid = false
+		}
 		if clearOnExit || t.altBlank() {
 			t.alt, t.altWrap = nil, nil
 		}
@@ -1303,10 +1352,11 @@ func (t *Terminal) printASCII(p []byte) {
 			p = p[1:]
 			continue
 		}
-		pen := t.cur.pen
+		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.L
+		row = row[x : x+n]
 		for i, b := range p[:n] {
-			pen.R = rune(b)
-			row[x+i] = pen
+			c := &row[i]
+			c.R, c.Fg, c.Bg, c.A, c.L = rune(b), fg, bg, attrs, link
 		}
 		t.lastChar = rune(p[n-1])
 		if x+n > edge {
@@ -1615,6 +1665,48 @@ func (t *Terminal) eraseDisplay(mode int, selective bool) {
 		if !selective {
 			t.ClearScrollback()
 		}
+	case 22:
+		t.scrollClear()
+	}
+}
+
+// scrollClear moves written rows into history, regardless of scrolling
+// margins or protection. Trailing empty rows stay on screen. New rows have
+// the default background; the cursor keeps its pen and input modes.
+func (t *Terminal) scrollClear() {
+	scr := t.screen()
+	n := t.rows
+	for n > 0 {
+		written := false
+		for _, c := range scr[n-1] {
+			if c.R != 0 || c.Bg != 0 {
+				written = true
+				break
+			}
+		}
+		if written {
+			break
+		}
+		n--
+	}
+	if n == 0 {
+		return
+	}
+	if !t.altActive {
+		for y, row := range scr[:n] {
+			t.pushScrollback(row, t.mainWrap != nil && t.mainWrap[y], rowAt(scr, y+1))
+		}
+	}
+	// rotate normally erases with the pen's background. Scroll-and-clear
+	// adds fresh rows instead, without changing subsequent printed colors.
+	bg := t.cur.pen.Bg
+	t.cur.pen.Bg = 0
+	t.rotate(0, t.rows-1, n)
+	t.cur.pen.Bg = bg
+	if t.cur.y < n {
+		t.cur.x, t.cur.y = 0, 0
+	} else {
+		t.cur.y -= n
 	}
 }
 
@@ -1839,11 +1931,12 @@ func (t *Terminal) sgr() {
 		return
 	}
 	p := &t.cur.pen
-	for i := 0; i < t.nparams; i++ {
+	nparams := int(t.nparams)
+	for i := 0; i < nparams; i++ {
 		v := t.params[i]
 		// Skip the sub-parameters of a parameter we do not interpret.
 		next := i + 1
-		for next < t.nparams && t.sub[next] {
+		for next < nparams && t.subParam(next) {
 			next++
 		}
 		switch {
@@ -1858,7 +1951,7 @@ func (t *Terminal) sgr() {
 		case v == 4:
 			style := 1
 			if next > i+1 {
-				style = t.params[i+1]
+				style = int(t.params[i+1])
 			}
 			p.A = p.A&^ulMask | Attr(min(style, 5))<<ulShift
 		case v == 5 || v == 6:
@@ -1920,32 +2013,33 @@ func (t *Terminal) sgr() {
 // semicolon form (38;5;n, 38;2;r;g;b). It returns the color and the index
 // of the next parameter to interpret.
 func (t *Terminal) extColor(i, next int) (Color, int) {
+	nparams := int(t.nparams)
 	if next > i+1 { // colon form: everything is in sub-parameters
 		args := t.params[i+1 : next]
 		switch {
 		case args[0] == 5 && len(args) >= 2:
 			return colorIndexed | Color(args[1]&0xff), next
 		case args[0] == 2 && len(args) >= 5:
-			return rgb(args[2], args[3], args[4]), next
+			return rgb(int(args[2]), int(args[3]), int(args[4])), next
 		case args[0] == 2 && len(args) == 4:
-			return rgb(args[1], args[2], args[3]), next
+			return rgb(int(args[1]), int(args[2]), int(args[3])), next
 		}
 		return 0, next
 	}
-	if i+1 >= t.nparams {
+	if i+1 >= nparams {
 		return 0, i + 1
 	}
 	switch t.params[i+1] {
 	case 5:
-		if i+2 < t.nparams {
+		if i+2 < nparams {
 			return colorIndexed | Color(t.params[i+2]&0xff), i + 3
 		}
 	case 2:
-		if i+4 < t.nparams {
-			return rgb(t.params[i+2], t.params[i+3], t.params[i+4]), i + 5
+		if i+4 < nparams {
+			return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), i + 5
 		}
 	}
-	return 0, t.nparams
+	return 0, nparams
 }
 
 func rgb(r, g, b int) Color {
@@ -2011,21 +2105,33 @@ func (t *Terminal) compactLinks() {
 			}
 			*l = remap[i]
 		}
-		for _, scr := range [][][]cell{t.main, t.alt} {
-			for _, row := range scr {
-				for i := range row {
-					ref(&row[i].L)
-				}
-			}
-		}
-		ref(&t.cur.pen.L)
-		for i := range t.saved {
-			ref(&t.saved[i].pen.L)
-		}
-		ref(&t.saved1049.pen.L)
+		t.visitLinkRefs(ref)
 		x.links = kept
 	}
 	x.linkCap = max(16, 2*len(x.links))
+}
+
+// visitLinkRefs covers the cells and pens which can still supply a link.
+// An invalid saved cursor cannot restore its pen; clear its old index so
+// that it cannot become a dangling reference after its table is collected.
+func (t *Terminal) visitLinkRefs(ref func(*uint16)) {
+	for _, scr := range [][][]cell{t.main, t.alt} {
+		for _, row := range scr {
+			for i := range row {
+				ref(&row[i].L)
+			}
+		}
+	}
+	ref(&t.cur.pen.L)
+	if t.saved != nil {
+		for _, saved := range [...]*savedCursor{&t.saved.screen[0], &t.saved.screen[1], &t.saved.alternate} {
+			if saved.valid {
+				ref(&saved.pen.L)
+			} else {
+				saved.pen.L = 0
+			}
+		}
+	}
 }
 
 // link returns a cell's hyperlink target ("params;uri"), or "".
@@ -2089,17 +2195,23 @@ func (t *Terminal) compactClusters() {
 			}
 			*r = remap[i]
 		}
-		for _, scr := range [][][]cell{t.main, t.alt} {
-			for _, row := range scr {
-				for i := range row {
-					ref(&row[i].R)
-				}
-			}
-		}
-		ref(&t.lastChar)
+		t.visitClusterRefs(ref)
 		x.clusters = kept
 	}
 	x.clusterCap = max(64, 2*len(x.clusters))
+}
+
+// The last printed cluster remains live after erase: REP can print it
+// again even when neither screen contains it.
+func (t *Terminal) visitClusterRefs(ref func(*rune)) {
+	for _, scr := range [][][]cell{t.main, t.alt} {
+		for _, row := range scr {
+			for i := range row {
+				ref(&row[i].R)
+			}
+		}
+	}
+	ref(&t.lastChar)
 }
 
 // --- scrollback ---
@@ -2153,7 +2265,19 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		t.sbBytes += len(line) - len(t.sb[n-1])
 		t.sb[n-1] = line
 	} else {
-		line := append([]byte(nil), t.scratch...)
+		var reusable []byte
+		if len(t.sb) > t.sbStart && (len(t.sb)-t.sbStart >= t.sbMaxLines || t.sbBytes+len(t.scratch)+24 > t.sbMaxBytes) {
+			// This line will evict the oldest one. Reuse its storage so
+			// steady scrolling does not allocate for every log line.
+			reusable = t.sb[t.sbStart]
+			t.sbBytes -= len(reusable) + 24
+			t.sb[t.sbStart] = nil
+			t.sbStart++
+			if cap(reusable) > 2*max(len(t.scratch), 64) {
+				reusable = nil // a short line must not pin an old long line
+			}
+		}
+		line := append(reusable[:0], t.scratch...)
 		t.sb = append(t.sb, line)
 		t.sbBytes += len(line) + 24
 	}

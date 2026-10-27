@@ -215,13 +215,13 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	if t.alt != nil {
 		dump("alt", t.alt, t.altWrap)
 	}
-	if t.altActive && t.saved1049.valid {
-		fmt.Fprintf(&b, "saved1049 %d,%d\n", t.saved1049.x, t.saved1049.y)
+	if t.altActive && t.saved != nil && t.saved.alternate.valid {
+		fmt.Fprintf(&b, "saved1049 %d,%d\n", t.saved.alternate.x, t.saved.alternate.y)
 	}
 	cur := t.cur
 	if cur.origin {
 		// Repaint positions the cursor with origin mode on, which cannot
-		// reach outside the region (only DECRC can leave it there).
+		// reach outside the region (DECRC and scroll-and-clear can).
 		cur.wrapPending = false
 		cur.x = min(max(cur.x, t.left), t.right)
 		cur.y = min(max(cur.y, t.top), t.bot)
@@ -233,7 +233,10 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	if t.altActive {
 		slot = 1
 	}
-	s := t.saved[slot]
+	var s savedCursor
+	if t.saved != nil {
+		s = t.saved.screen[slot]
+	}
 	if s.valid {
 		s.wrapPending = false
 	}

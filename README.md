@@ -21,7 +21,7 @@ and why its serialization is exact.
 
 ## Why
 
-- **Small.** About 3 KB for an idle 80x24 terminal at a shell prompt: a
+- **Small.** About 2.5 KB for an idle 80x24 terminal at a shell prompt: a
   cell is 16 bytes, rows are allocated once drawn on, the alternate
   screen only while shown, and scrollback is kept serialized under a
   byte budget (an 80x24 terminal with 2,000 lines of log scrollback holds
@@ -37,7 +37,7 @@ and why its serialization is exact.
 - **Round-trips.** `Repaint` output replayed on a fresh terminal gives
   the same screen, scrollback, cursor and modes, byte for byte under
   fuzzing, so a client can attach mid-session and a checkpoint can be
-  restored.
+  restored, subject to the limits under Serialization below.
 
 The honest caveats: it does not encode input (keys, mouse, paste are the
 caller's job; `Modes` says what the program asked for), it has no
@@ -135,6 +135,14 @@ it; compare `Cursor()` with what you drew. `Modes().SyncUpdate` is set
 while a program draws a frame it wants shown at once (mode 2026).
 `Palette().Resolve(color, background)` turns a cell color into RGB.
 
+Applications hosting many sessions can call `Compact()` after output
+settles. It frees completely zeroed rows, unused Unicode and hyperlink
+storage, and temporary buffers. Clusters needed by REP and links held by
+saved cursors remain live; unchanged live tables stay in place. It does so
+without changing the screen, scrollback, input modes or unfinished parser
+state. Later output can allocate rows again. It is an explicit idle-time
+tradeoff; ordinary writes do not run it.
+
 ### Serialization
 
 `Repaint(withScrollback)` returns bytes that, written to a terminal of the
@@ -143,9 +151,21 @@ one), reproduce this one: scrollback, both screens with their soft wraps,
 tab stops, saved cursors and modes, margins, the cursor with its pending
 wrap, pen, character sets and shape, input modes, and the title. It is
 wrapped in a synchronized update and hides the cursor while painting.
+An unfinished escape sequence or UTF-8 character is restored after the
+painting, so later output continues it correctly. Controls which already
+took effect inside a sequence are not repeated, and a synchronized update
+in progress stays in progress. The continuation is reconstructed from the
+parser's bounded state; normal output needs no additional tracking buffer.
 Colors the program set with OSC 4/10/11/12 are left out, since replaying
 them would change the receiving terminal's own colors.
 `AppendRepaint` reuses a buffer.
+
+The preceding character used by REP (`CSI b`) is not serialized. Resuming
+a pending REP after a repaint can therefore differ from uninterrupted
+output; preserving unfinished parser input does not remove that limit.
+With origin mode enabled, repaint clamps the live cursor to the scrolling
+region. A restored cursor or scroll-and-clear (`CSI 22 J`) can leave it
+outside that region, so the next printed character can move after repaint.
 
 `Restart()` is for running a new program in the same terminal: it resets
 everything as RIS does but keeps the scrollback and the old screen in
@@ -171,8 +191,8 @@ the `Terminal`.
   mode, DECSC/DECRC, SCOSC/SCORC, 1048, IND/RI/NEL, HT/CHT/CBT with
   HTS/TBC, DECSCUSR.
 - Editing: ICH/DCH/ECH, IL/DL, SU/SD, ED/EL with the current background
-  (BCE), ED 3, DECALN, character protection (DECSCA, SPA/EPA) with
-  DECSED/DECSEL.
+  (BCE), ED 3, scroll-and-clear (ED 22), DECALN, character protection
+  (DECSCA, SPA/EPA) with DECSED/DECSEL.
 - Regions: DECSTBM, and DECLRMM/DECSLRM left and right margins with every
   operation they constrain.
 - Screens: alternate screen modes 47, 1047, 1049; scrollback fed from the
@@ -213,7 +233,7 @@ Five external suites run as ordinary Go tests (`VT_CONF_REPORT=1 go test
 | Suite | How | Pass | Fail | Deliberate difference | Out of scope |
 |---|---|---|---|---|---|
 | libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 730 | 0 | 28 | 195 |
-| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 458 | 0 | 7 | 84 |
+| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 459 | 0 | 6 | 84 |
 | wezterm `term/src/test` | translated cases | 128 | 0 | 6 | 4 |
 | esctest2 (xterm) | independently written cases (the GPL source is not used) | 410 | 0 | 12 | 215 |
 | alacritty ref tests | recordings and reference grids, per line | 1507 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |
@@ -233,7 +253,8 @@ Besides the suites:
 
 - Fuzzers: `FuzzTokens` (an alphabet of the sequences programs use, plus
   resizes, with invariants after every step and an exact `Repaint` round
-  trip), `FuzzStream` (raw bytes and resizes), `FuzzChunking` (how output
+  trip), `FuzzRepaintContinuation` (prefix, repaint and continued output),
+  `FuzzStream` (raw bytes and resizes), `FuzzChunking` (how output
   is split into writes does not matter), `FuzzWrite`, `FuzzDamage` (every
   row whose cells changed is dirty), `FuzzReplies` (answering queries
   never changes the state), and, in the `oracle` module, `FuzzOracle`, a
@@ -244,11 +265,22 @@ Besides the suites:
   regression input).
 - Recordings of nvim, vim, less, nano and man, cut at 40 points: the
   invariants, the `Repaint` round trip and resizes at each.
+- Every byte boundary in those recordings: repaint and continue the next
+  32 bytes before a later redraw can hide parser corruption. Focused cases
+  also check styles, modes, replies, bells, oversized sequences and every
+  parser state.
 - `TestRedrawDoesNotAllocate` pins zero allocations per redraw frame,
   `TestDamageDoesNotAllocate` the same with damage tracking on, and
   `TestCellDoesNotAllocate` reading every cell.
 
 ## Performance
+
+The [October 2026 follow-up comparison](oracle/ghostty/results/2026-10-27-round2/README.md)
+measures idle metadata reclamation, parsing, replay and compatibility against
+libghostty-vt. The [first round](oracle/ghostty/results/2026-10-27/README.md)
+also compares with phosphor v0.1.0. Cross-engine memory figures include
+native RSS. The table below records the original v0.1.0 comparison with
+other Go emulators.
 
 Apple M5 Pro, Go 1.26, one core. `oracle/compare_test.go` feeds the same
 streams, in 8 KiB writes as a PTY reader would, to each library at

@@ -1,0 +1,4 @@
+compact=false history=1
+compact=false repaint=426 first={Rune:97 Combining:̀ Width:1 Style:{Fg:0 Bg:0 Attrs:0 Underline:0} Link:{ID: URI:}}
+compact=true history=1
+compact=true repaint=426 first={Rune:97 Combining:̀ Width:1 Style:{Fg:0 Bg:0 Attrs:0 Underline:0} Link:{ID: URI:}}

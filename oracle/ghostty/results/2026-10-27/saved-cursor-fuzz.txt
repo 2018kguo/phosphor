@@ -1,0 +1,15 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/9 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 9/9 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 23232 (7743/sec), new interesting: 210 (total: 219)
+fuzz: elapsed: 6s, execs: 44350 (7039/sec), new interesting: 327 (total: 336)
+fuzz: elapsed: 9s, execs: 73321 (9655/sec), new interesting: 387 (total: 396)
+fuzz: elapsed: 12s, execs: 92604 (6429/sec), new interesting: 403 (total: 412)
+fuzz: elapsed: 15s, execs: 104436 (3943/sec), new interesting: 433 (total: 442)
+fuzz: elapsed: 18s, execs: 108059 (1208/sec), new interesting: 443 (total: 452)
+fuzz: elapsed: 21s, execs: 108059 (0/sec), new interesting: 443 (total: 452)
+fuzz: elapsed: 24s, execs: 108059 (0/sec), new interesting: 443 (total: 452)
+fuzz: elapsed: 27s, execs: 108059 (0/sec), new interesting: 443 (total: 452)
+fuzz: elapsed: 30s, execs: 108059 (0/sec), new interesting: 443 (total: 452)
+fuzz: elapsed: 31s, execs: 108059 (0/sec), new interesting: 443 (total: 452)
+PASS
+ok  	github.com/2018kguo/phosphor	31.182s

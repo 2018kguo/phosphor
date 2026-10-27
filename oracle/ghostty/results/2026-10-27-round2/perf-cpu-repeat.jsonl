@@ -1,0 +1,8 @@
+{"kind": "repaint-history", "variant": "baseline", "round": 0, "iterations": 25000, "wall_ns_per_op": 16371, "process_cpu_seconds": 0.6673089999999999, "cpu_ns_per_op": 26692.359999999997}
+{"kind": "repaint-history", "variant": "sgr-table", "round": 0, "iterations": 25000, "wall_ns_per_op": 15401, "process_cpu_seconds": 0.636997, "cpu_ns_per_op": 25479.88}
+{"kind": "repaint-history", "variant": "sgr-table", "round": 1, "iterations": 25000, "wall_ns_per_op": 14933, "process_cpu_seconds": 0.6106149999999999, "cpu_ns_per_op": 24424.599999999995}
+{"kind": "repaint-history", "variant": "baseline", "round": 1, "iterations": 25000, "wall_ns_per_op": 15400, "process_cpu_seconds": 0.6256650000000004, "cpu_ns_per_op": 25026.600000000013}
+{"kind": "repaint-history", "variant": "baseline", "round": 2, "iterations": 25000, "wall_ns_per_op": 16219, "process_cpu_seconds": 0.6594669999999998, "cpu_ns_per_op": 26378.67999999999}
+{"kind": "repaint-history", "variant": "sgr-table", "round": 2, "iterations": 25000, "wall_ns_per_op": 15112, "process_cpu_seconds": 0.6583809999999999, "cpu_ns_per_op": 26335.239999999994}
+{"kind": "repaint-history", "variant": "sgr-table", "round": 3, "iterations": 25000, "wall_ns_per_op": 14687, "process_cpu_seconds": 0.5666850000000005, "cpu_ns_per_op": 22667.400000000023}
+{"kind": "repaint-history", "variant": "baseline", "round": 3, "iterations": 25000, "wall_ns_per_op": 15423, "process_cpu_seconds": 0.5955119999999994, "cpu_ns_per_op": 23820.479999999978}

@@ -2,23 +2,27 @@ package phosphor
 
 import (
 	"bytes"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 	"unsafe"
 )
 
+var sgrAttributeCodes = [...]struct {
+	bit  Attr
+	code string
+}{
+	{AttrBold, ";1"}, {AttrFaint, ";2"}, {AttrItalic, ";3"}, {AttrBlink, ";5"},
+	{AttrInverse, ";7"}, {AttrHidden, ";8"}, {AttrStrikethrough, ";9"}, {AttrOverline, ";53"},
+}
+
 // appendSGR appends the escape sequence that sets exactly c's style,
 // starting from a reset.
 func appendSGR(b []byte, c cell) []byte {
 	b = append(b, "\x1b[0"...)
-	for _, a := range [...]struct {
-		bit  Attr
-		code string
-	}{
-		{AttrBold, ";1"}, {AttrFaint, ";2"}, {AttrItalic, ";3"}, {AttrBlink, ";5"},
-		{AttrInverse, ";7"}, {AttrHidden, ";8"}, {AttrStrikethrough, ";9"}, {AttrOverline, ";53"},
-	} {
+	// Range by reference so each style does not copy the encoding table.
+	for _, a := range &sgrAttributeCodes {
 		if c.A&a.bit != 0 {
 			b = append(b, a.code...)
 		}
@@ -88,7 +92,7 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 	var fg Color
 	var rest uint64
 	cells := row[:end]
-	for i := range cells {
+	for i := 0; i < len(cells); {
 		c := &cells[i]
 		if c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
 			if c.L != style.L || (c.A^style.A)&AttrProtected != 0 {
@@ -99,11 +103,15 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 			style = styleOf(*c)
 			fg, rest = c.Fg, *(*uint64)(unsafe.Pointer(&c.Bg))
 		}
-		r := c.R
-		if uint32(r-1) < utf8.RuneSelf-1 { // printable ASCII and C0 (never stored)
-			b = append(b, byte(r))
+		if uint32(c.R-1) < utf8.RuneSelf-1 {
+			b = slices.Grow(b, len(cells)-i)
+			n := copyASCIICells(b[len(b):cap(b)], cells[i:])
+			b = b[:len(b)+n]
+			i += n
 			continue
 		}
+		i++
+		r := c.R
 		switch {
 		case r == wideTail: // printed with its left half (same style)
 		case r == 0, r == spacerHead:
@@ -124,6 +132,22 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 		b = append(b, "\x1b[0m"...)
 	}
 	return b
+}
+
+// copyASCIICells writes the initial ASCII run in one style. The destination
+// has room for every cell, so the copy loop needs no per-byte growth check.
+func copyASCIICells(dst []byte, src []cell) int {
+	dst = dst[:len(src)]
+	fg := src[0].Fg
+	rest := *(*uint64)(unsafe.Pointer(&src[0].Bg))
+	for i := range src {
+		c := &src[i]
+		if uint32(c.R-1) >= utf8.RuneSelf-1 || c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
+			return i
+		}
+		dst[i] = byte(c.R)
+	}
+	return len(src)
 }
 
 // appendStyle appends what changes the style from to that of c.
@@ -215,9 +239,11 @@ func appendCharsets(b []byte, c cursor) []byte {
 // also meant for real terminals, so a client can attach to a running
 // program, and a checkpoint can be restored by replaying it.
 //
-// Not included: colors set by the program (OSC 4, 10, 11, 12), which would
-// change the receiving terminal's own colors, and transient state (a
-// synchronized update in progress, a sequence cut in the middle).
+// Unfinished escape sequences and UTF-8 characters are restored after the
+// repaint, so the next output continues them instead of printing their
+// remaining bytes. A synchronized update in progress stays in progress.
+// Colors set by the program (OSC 4, 10, 11, 12) are not included, since
+// replaying those would change the receiving terminal's own colors.
 //
 // The output is wrapped in a synchronized update (mode 2026) and hides the
 // cursor while painting.
@@ -258,8 +284,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.altActive {
 		// Enter the alternate screen from the main screen's saved cursor so
 		// leaving it later restores the right position.
-		if t.saved1049.valid {
-			b = appendCUP(b, t.saved1049.y, t.saved1049.x)
+		if t.saved != nil && t.saved.alternate.valid {
+			b = appendCUP(b, t.saved.alternate.y, t.saved.alternate.x)
 			b = append(b, "\x1b[?1049h"...)
 		} else {
 			b = append(b, "\x1b[?1047h"...)
@@ -303,7 +329,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.altActive {
 		slot = 1
 	}
-	if s := t.saved[slot]; s.valid {
+	if t.saved != nil && t.saved.screen[slot].valid {
+		s := t.saved.screen[slot]
 		// Origin mode homes the cursor, so it goes first. The region and
 		// margins are not set yet, so the position is absolute even then
 		// (a saved cursor may lie outside the region set since).
@@ -452,7 +479,83 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if !t.cursorHidden {
 		b = append(b, "\x1b[?25h"...)
 	}
-	return append(b, "\x1b[?2026l"...)
+	b = append(b, "\x1b[?2026l"...)
+	if t.sync {
+		b = appendMode(b, 2026, true)
+	}
+	return t.appendContinuation(b)
+}
+
+// appendContinuation reconstructs the unfinished parser prefix from its
+// bounded state. Replaying the original input would repeat controls which
+// already moved the cursor or rang the bell. Keeping no separate raw log
+// also leaves Write's fast path and an idle terminal's size unchanged.
+func (t *Terminal) appendContinuation(b []byte) []byte {
+	switch t.state {
+	case stGround:
+		return append(b, t.utf8buf[:t.utf8n]...)
+	case stEsc:
+		return append(b, 0x1b)
+	case stEscInter:
+		return append(b, 0x1b, t.inter)
+	case stCSI:
+		b = append(b, '\x1b', '[')
+		if t.marker != 0 {
+			b = append(b, t.marker)
+		}
+		if t.paramSet {
+			for i := 0; i <= min(int(t.nparams), maxParams-1); i++ {
+				if i > 0 {
+					separator := byte(';')
+					if t.subParam(i) {
+						separator = ':'
+					}
+					b = append(b, separator)
+				}
+				b = strconv.AppendInt(b, int64(t.params[i]), 10)
+			}
+			if t.nparams == maxParams {
+				// Further parameter bytes are ignored once the array fills.
+				b = append(b, ';')
+			}
+		}
+		if t.inter != 0 {
+			b = append(b, t.inter)
+		}
+		return b
+	case stCSIIgnore:
+		// A second private marker enters the ignore state without effects.
+		return append(b, "\x1b[??"...)
+	case stOSC, stOSCEsc:
+		b = append(b, '\x1b', ']')
+		b = append(b, t.osc...)
+		if t.oscOver {
+			// The retained payload is capped; one more byte restores the
+			// overflow flag, so its eventual terminator cannot dispatch it.
+			b = append(b, ' ')
+		}
+		if t.state == stOSCEsc {
+			b = append(b, '\x1b')
+		}
+		return b
+	case stDCS, stDCSEsc:
+		b = append(b, '\x1b', 'P')
+		b = append(b, t.osc...)
+		if t.state == stDCSEsc {
+			b = append(b, '\x1b')
+		}
+		return b
+	case stStr, stStrEsc:
+		// Ignored strings have no retained payload. SOS recreates the
+		// same wait for ST without enabling a graphics protocol.
+		b = append(b, '\x1b', 'X')
+		if t.state == stStrEsc {
+			b = append(b, '\x1b')
+		}
+		return b
+	default:
+		panic("invalid terminal parser state")
+	}
 }
 
 // appendScreen paints rows from the top-left corner, recreating soft
@@ -500,7 +603,17 @@ func (t *Terminal) appendScreen(b []byte, scr [][]cell, wrap []bool, open, addre
 
 // rowText returns a row's characters with trailing blanks removed.
 func (t *Terminal) rowText(row []cell) string {
+	end := len(row)
+	for end > 0 {
+		r := row[end-1].R
+		if r != 0 && r != ' ' && r != spacerHead {
+			break
+		}
+		end--
+	}
+	row = row[:end]
 	var sb strings.Builder
+	sb.Grow(len(row))
 	for i := range row {
 		switch r := row[i].R; {
 		case uint32(r-1) < utf8.RuneSelf-1:

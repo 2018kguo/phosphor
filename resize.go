@@ -36,15 +36,17 @@ func (t *Terminal) Resize(cols, rows int) {
 
 	// The positions on each screen.
 	var mainPts, altPts []*cursor
-	if t.saved[0].valid {
-		mainPts = append(mainPts, &t.saved[0].cursor)
-	}
-	if t.saved[1].valid {
-		altPts = append(altPts, &t.saved[1].cursor)
+	if t.saved != nil {
+		if t.saved.screen[0].valid {
+			mainPts = append(mainPts, &t.saved.screen[0].cursor)
+		}
+		if t.saved.screen[1].valid {
+			altPts = append(altPts, &t.saved.screen[1].cursor)
+		}
 	}
 	if t.altActive {
-		if t.saved1049.valid {
-			mainPts = append(mainPts, &t.saved1049.cursor)
+		if t.saved != nil && t.saved.alternate.valid {
+			mainPts = append(mainPts, &t.saved.alternate.cursor)
 		}
 		altPts = append(altPts, &t.cur)
 	} else {
@@ -157,10 +159,16 @@ func (t *Terminal) Resize(cols, rows int) {
 	t.top, t.bot, t.left, t.right = 0, rows-1, 0, cols-1
 	// Saved cursors of a screen not in use (the alternate one's DECSC
 	// slot) are just kept in bounds.
-	for _, c := range []*cursor{&t.saved[0].cursor, &t.saved[1].cursor, &t.saved1049.cursor} {
-		t.place(c, point{c.x, c.y, c.wrapPending})
+	if t.saved != nil {
+		for _, c := range []*cursor{&t.saved.screen[0].cursor, &t.saved.screen[1].cursor, &t.saved.alternate.cursor} {
+			t.place(c, point{c.x, c.y, c.wrapPending})
+		}
 	}
 	t.resizeTabs(oldCols)
+	// Imported history and rewrapped rows are now visible to the pool
+	// collectors. Reclaim detached entries here too: a window can resize
+	// repeatedly while its program prints nothing.
+	t.compactPools()
 }
 
 func (t *Terminal) anyWrap(w []bool) bool {
@@ -391,6 +399,34 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 	tmp := newTerminal(t.cols, 2*n/t.cols+2, 0, 0)
 	tmp.Write(line)
 	k := tmp.cur.y + 1
+	if tmp.x != nil {
+		clusterRefs, linkRefs := 0, 0
+		for _, row := range tmp.main[:k] {
+			for _, c := range row {
+				if c.R >= clusterBase {
+					clusterRefs++
+				}
+				if c.L != 0 {
+					linkRefs++
+				}
+			}
+		}
+		if clusterRefs > 0 || linkRefs > 0 {
+			x := t.ext()
+			clusterCap, linkCap := x.clusterCap, x.linkCap
+			// Imported cells, earlier history batches and rewrapped rows
+			// are detached until Resize installs the finished screen. No
+			// receiver collection may run while any of them are detached.
+			// Bound by references, since recent-only interning may append
+			// a repeated entry more than once during this batch.
+			x.clusterCap = max(clusterCap, len(x.clusters)+clusterRefs)
+			x.linkCap = max(linkCap, len(x.links)+linkRefs)
+			defer func() {
+				// Resize collects only after all working rows are attached.
+				x.clusterCap, x.linkCap = clusterCap, linkCap
+			}()
+		}
+	}
 	rows := make([][]cell, k)
 	wraps := make([]bool, k)
 	for y := range k {
