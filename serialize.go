@@ -2,6 +2,7 @@ package phosphor
 
 import (
 	"bytes"
+	"encoding/binary"
 	"slices"
 	"strconv"
 	"strings"
@@ -117,7 +118,11 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 		case r == 0, r == spacerHead:
 			b = append(b, ' ')
 		case r >= clusterBase:
-			b = append(b, t.x.clusters[r-clusterBase]...)
+			var tail cell
+			if i < len(cells) && cells[i].R == wideTail {
+				tail = cells[i]
+			}
+			b = t.appendCluster(b, t.x.clusters[r-clusterBase], *c, tail)
 		default:
 			b = utf8.AppendRune(b, r)
 		}
@@ -260,7 +265,7 @@ func (t *Terminal) Repaint(withScrollback bool) []byte {
 func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	// Synchronized update, normalize the receiving terminal, hide the
 	// cursor while painting.
-	b = append(b, "\x1b[?2026h\x1b[?1049l\x1b[?5l\x1b[?69l\x1b[0\"q\x1b[0m\x1b[r\x1b[?6l\x1b[?7h\x1b[4l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[?25l\x1b[H\x1b[2J"...)
+	b = append(b, "\x1b[?2026h\x1b[?2027l\x1b[?1049l\x1b[?5l\x1b[?69l\x1b[0\"q\x1b[0m\x1b[r\x1b[?6l\x1b[?7h\x1b[4l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[?25l\x1b[H\x1b[2J"...)
 	sbOpen := false
 	if withScrollback {
 		lines := t.sb[t.sbStart:]
@@ -383,6 +388,11 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		// absolute.
 		b = append(b, "\x1b[?6l"...)
 	}
+	if !t.autowrap && t.cur.wrapPending {
+		// Disable wrapping before the final edge print: it sets pending
+		// wrap even with DECAWM off, while disabling it afterwards clears it.
+		b = appendMode(b, 7, false)
+	}
 	if t.cur.wrapPending {
 		// Reprint the last cell to recreate the pending wrap.
 		row := t.screen()[y]
@@ -425,7 +435,7 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.ss != 0 {
 		b = append(b, 0x1b, 'L'+t.ss) // SS2 is ESC N, SS3 ESC O
 	}
-	if !t.autowrap {
+	if !t.autowrap && !t.cur.wrapPending {
 		b = appendMode(b, 7, false)
 	}
 	if t.reverseVideo {
@@ -466,11 +476,12 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = strconv.AppendInt(b, int64(f), 10)
 		b = append(b, 'u')
 	}
-	if t.cursorStyle != 0 {
+	if t.cursorStyle.shape != CursorDefault {
 		b = append(b, "\x1b["...)
-		b = strconv.AppendInt(b, int64(t.cursorStyle), 10)
+		b = strconv.AppendInt(b, int64(t.cursorStyle.parameter()), 10)
 		b = append(b, " q"...)
 	}
+	b = appendMode(b, 12, t.cursorStyle.blink)
 	if t.title != "" {
 		b = append(b, "\x1b]2;"...)
 		b = append(b, t.title...)
@@ -482,6 +493,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	b = append(b, "\x1b[?2026l"...)
 	if t.sync {
 		b = appendMode(b, 2026, true)
+	}
+	if t.grapheme {
+		b = appendMode(b, 2027, true)
 	}
 	return t.appendContinuation(b)
 }
@@ -526,7 +540,7 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 	case stCSIIgnore:
 		// A second private marker enters the ignore state without effects.
 		return append(b, "\x1b[??"...)
-	case stOSC, stOSCEsc:
+	case stOSC:
 		b = append(b, '\x1b', ']')
 		b = append(b, t.osc...)
 		if t.oscOver {
@@ -534,24 +548,15 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 			// overflow flag, so its eventual terminator cannot dispatch it.
 			b = append(b, ' ')
 		}
-		if t.state == stOSCEsc {
-			b = append(b, '\x1b')
-		}
 		return b
-	case stDCS, stDCSEsc:
+	case stDCS:
 		b = append(b, '\x1b', 'P')
 		b = append(b, t.osc...)
-		if t.state == stDCSEsc {
-			b = append(b, '\x1b')
-		}
 		return b
-	case stStr, stStrEsc:
+	case stStr:
 		// Ignored strings have no retained payload. SOS recreates the
 		// same wait for ST without enabling a graphics protocol.
 		b = append(b, '\x1b', 'X')
-		if t.state == stStrEsc {
-			b = append(b, '\x1b')
-		}
 		return b
 	default:
 		panic("invalid terminal parser state")
@@ -622,7 +627,7 @@ func (t *Terminal) rowText(row []cell) string {
 		case r == 0, r == spacerHead:
 			sb.WriteByte(' ')
 		case r >= clusterBase:
-			sb.WriteString(t.x.clusters[r-clusterBase])
+			sb.WriteString(t.x.clusters[r-clusterBase].text)
 		default:
 			sb.WriteRune(r)
 		}
@@ -634,24 +639,78 @@ func (t *Terminal) rowText(row []cell) string {
 // scrollback line holds.
 func stripSGR(line []byte) string {
 	var sb strings.Builder
-	sb.Grow(len(line))
-	for i := 0; i < len(line); i++ {
-		c := line[i]
-		if c != 0x1b {
-			sb.WriteByte(c)
-			continue
-		}
-		if i+1 < len(line) && line[i+1] == ']' { // OSC 8, ended by ST
-			end := bytes.Index(line[i:], []byte("\x1b\\"))
-			if end < 0 {
-				break
+	walkHistoryText(line, func(text []byte) { sb.Write(text) })
+	return sb.String()
+}
+
+// walkHistoryText scans the bounded grammar produced by appendRow: text,
+// CSI styles/modes/EL and OSC 8 links terminated by ST. Sharing this lexer
+// keeps text extraction and history allocation sizing independent of URLs.
+func walkHistoryText(line []byte, text func([]byte)) bool {
+	for i := 0; i < len(line); {
+		start := i
+		for i < len(line) && line[i] != 0x1b {
+			if i+8 <= len(line) && printable8(binary.LittleEndian.Uint64(line[i:])) {
+				i += 8
+				continue
 			}
-			i += end + 1
-			continue
+			if c := line[i]; c >= 0x20 && c < 0x7f {
+				i++
+				continue
+			}
+			r, n := utf8.DecodeRune(line[i:])
+			if n == 1 || r < 0xa0 {
+				return false
+			}
+			i += n
 		}
-		// CSI: skip to the final byte.
-		for i += 2; i < len(line) && (line[i] < 0x40 || line[i] > 0x7e); i++ {
+		if text != nil && start < i {
+			text(line[start:i])
+		}
+		if i == len(line) {
+			return true
+		}
+		if i+2 > len(line) {
+			return false
+		}
+		switch line[i+1] {
+		case '[':
+			body := line[i+2:]
+			switch {
+			case len(body) >= 6 && bytes.Equal(body[:5], []byte("?2027")) && (body[5] == 'h' || body[5] == 'l'):
+				i += 8
+			case len(body) >= 1 && body[0] == 'K':
+				i += 3
+			case len(body) >= 3 && (body[0] == '0' || body[0] == '1') && body[1] == '"' && body[2] == 'q':
+				i += 5
+			default:
+				j := i + 2
+				for j < len(line) && (line[j] >= '0' && line[j] <= '9' || line[j] == ';' || line[j] == ':') {
+					j++
+				}
+				if j == len(line) || line[j] != 'm' {
+					return false
+				}
+				i = j + 1
+			}
+		case ']':
+			if !bytes.HasPrefix(line[i+2:], []byte("8;")) {
+				return false
+			}
+			payload := line[i+4:]
+			end := bytes.IndexByte(payload, 0x1b)
+			if end < 0 || end+1 >= len(payload) || payload[end+1] != '\\' {
+				return false
+			}
+			payload = payload[:end]
+			if bytes.IndexByte(payload, ';') < 0 || bytes.IndexByte(payload, 0x07) >= 0 ||
+				bytes.IndexByte(payload, 0x18) >= 0 || bytes.IndexByte(payload, 0x1a) >= 0 {
+				return false
+			}
+			i += end + 6
+		default:
+			return false
 		}
 	}
-	return sb.String()
+	return true
 }

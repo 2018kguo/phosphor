@@ -70,9 +70,9 @@ func (t *Terminal) checkInvariants() string {
 		}
 	}
 	inBounds("cursor", t.cur)
-	if t.cur.wrapPending && (t.cur.x != t.cols-1 && t.cur.x != t.right || !t.autowrap) {
-		fail("pending wrap at x=%d (autowrap %v)", t.cur.x, t.autowrap)
-	}
+	// Pending wrap is saved cursor state: DECRC can restore it after the
+	// margins or DECAWM changed. Grapheme widening can also set it while
+	// DECAWM is off. Bounds above remain the invariant in those states.
 	if t.saved != nil {
 		for i, s := range t.saved.screen {
 			if s.valid {

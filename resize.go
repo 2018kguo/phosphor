@@ -395,9 +395,7 @@ func (t *Terminal) popLine() ([][]cell, []bool) {
 // parseLine turns a serialized scrollback line back into rows of the
 // current width, with their wrap flags.
 func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
-	n := utf8.RuneCount(line)
-	tmp := newTerminal(t.cols, 2*n/t.cols+2, 0, 0)
-	tmp.Write(line)
+	tmp := replayLine(line, t.cols)
 	k := tmp.cur.y + 1
 	if tmp.x != nil {
 		clusterRefs, linkRefs := 0, 0
@@ -448,6 +446,36 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 		}
 	}
 	return rows, wraps
+}
+
+// replayLine first decodes clustered history away from a physical edge.
+// Otherwise an emoji base can wrap before its VS15 narrows it, even though
+// the completed cell fits. Reflow then uses the stored cell widths. Ordinary
+// history keeps its destination-width path. Text sizing shares the history
+// lexer and excludes CSI/OSC payloads: a large URL cannot allocate a wide row.
+func replayLine(line []byte, cols int) *Terminal {
+	cells := 0
+	walkHistoryText(line, func(text []byte) {
+		for len(text) > 0 {
+			r, n := utf8.DecodeRune(text)
+			text = text[n:]
+			// A zero-width selector may widen the preceding cell by one;
+			// counting one for each mark is a safe bound for mixed modes.
+			cells += max(1, CodepointWidth(r))
+		}
+	})
+	if !bytes.Contains(line, []byte("\x1b[?2027h")) {
+		tmp := newTerminal(cols, cells/cols+2, 0, 0)
+		tmp.Write(line)
+		return tmp
+	}
+	wide := cells + 1
+	tmp := newTerminal(wide, 1, 0, 0)
+	tmp.Write(line)
+	tmp.main, tmp.mainWrap = tmp.rewrap(tmp.main, nil, wide, cols, nil)
+	tmp.cols, tmp.rows, tmp.right = cols, len(tmp.main), cols-1
+	tmp.cur.y = len(tmp.main) - 1
+	return tmp
 }
 
 // Restart prepares the terminal for a new program after the previous one

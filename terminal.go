@@ -5,8 +5,6 @@ import (
 	"strings"
 	"unicode/utf8"
 	"unsafe"
-
-	"github.com/mattn/go-runewidth"
 )
 
 // cell is one screen position. R is 0 for a blank, wideTail for the right
@@ -39,12 +37,6 @@ const (
 	maxCluster             = 32 // bytes of a character with its combining marks
 	maxLogicalLine         = 32 << 10
 )
-
-var widthCond = func() *runewidth.Condition {
-	c := runewidth.NewCondition()
-	c.EastAsianWidth = false
-	return c
-}()
 
 type cursor struct {
 	x, y        int
@@ -89,6 +81,7 @@ type Terminal struct {
 	lrmm              bool      // DECLRMM: left and right margins enabled
 	protISO           bool      // protection was last set by SPA (ISO), not DECSCA
 	ss                uint8     // pending single shift (2 or 3)
+	grapheme          bool      // 2027: Unicode grapheme clustering
 	x                 *extra    // state few programs use, nil until one does
 	cfg               *config   // options and palette changes, nil if none
 	dirty             *dirtySet // damage, nil until ClearDirty is first called
@@ -108,7 +101,7 @@ type Terminal struct {
 	sync         bool   // 2026: synchronized update in progress
 	mouse        uint16 // 0, 9, 1000, 1002 or 1003
 	mouseEnc     uint16 // 0, 1005, 1006 or 1015
-	cursorStyle  int    // DECSCUSR parameter, 0 = default
+	cursorStyle  cursorAppearance
 	kitty        []uint16
 	title        string
 	lastChar     rune
@@ -144,7 +137,7 @@ type extra struct {
 	tabs       []uint64    // tab stops, nil for every 8 columns
 	savedModes []savedMode // XTSAVE
 	// characters with combining marks, referenced by cells
-	clusters   []string
+	clusters   []cluster
 	clusterCap int
 	// hyperlink targets ("params;uri"), referenced by cells
 	links   []string
@@ -173,11 +166,8 @@ const (
 	stCSI
 	stCSIIgnore
 	stOSC
-	stOSCEsc
 	stStr // SOS, PM, APC, and DCS strings past their start: ignored until ST
-	stStrEsc
 	stDCS // DCS: collected (into osc) for the queries answered
-	stDCSEsc
 )
 
 // New returns a blank terminal of cols x rows (each at least 1),
@@ -386,9 +376,14 @@ func (t *Terminal) c1(r rune) {
 }
 
 func (t *Terminal) printRune(r rune) {
-	w := widthCond.RuneWidth(r)
+	if t.grapheme && r > 255 && t.extendGrapheme(r) {
+		return
+	}
+	w := CodepointWidth(r)
 	if w == 0 {
-		t.combine(r)
+		if !t.grapheme {
+			t.combine(r)
+		}
 		return
 	}
 	t.print(r, w)
@@ -396,25 +391,35 @@ func (t *Terminal) printRune(r rune) {
 
 // step runs one byte through the escape-sequence state machine.
 func (t *Terminal) step(c byte) {
-	// C0 controls act in every state but strings; ESC, CAN and SUB abort.
-	if t.state < stOSC && c < 0x20 && c != 0x1b {
-		if c == 0x18 || c == 0x1a {
+	// C0 controls act in every state but strings. Only control bytes can
+	// end a string or abort a sequence; printable CSI bytes skip this work.
+	if c < 0x20 {
+		if c == 0x1b || c == 0x18 || c == 0x1a {
+			state := t.state
 			t.state = stGround
+			if c == 0x1b {
+				t.state = stEsc
+			}
+			if state == stDCS {
+				// DCS handlers finish when unhooked, including cancellation.
+				t.dcsDispatch()
+			} else if state == stOSC && c == 0x1b {
+				t.oscBel = false
+				t.oscDispatch()
+			}
 			return
 		}
-		t.execute(c)
-		return
+		if t.state < stOSC {
+			t.execute(c)
+			return
+		}
 	}
 	switch t.state {
 	case stGround:
-		if c == 0x1b {
-			t.state = stEsc
-		}
 		// 0x7f (DEL) is ignored.
 	case stEsc:
 		t.inter = 0
 		switch {
-		case c == 0x1b:
 		case c == '[':
 			t.nparams, t.paramSet, t.marker, t.inter = 0, false, 0, 0
 			t.params[0], t.sub = 0, 0
@@ -438,8 +443,6 @@ func (t *Terminal) step(c byte) {
 		}
 	case stEscInter:
 		switch {
-		case c == 0x1b:
-			t.state = stEsc
 		case c >= 0x20 && c <= 0x2f:
 			t.inter = c
 		case c >= 0x30 && c <= 0x7e:
@@ -482,16 +485,12 @@ func (t *Terminal) step(c byte) {
 				t.nparams = min(t.nparams+1, maxParams)
 			}
 			t.csiDispatch(c)
-		case c == 0x1b:
-			t.state = stEsc
 		default:
 			t.state = stCSIIgnore
 		}
 	case stCSIIgnore:
 		if c >= 0x40 && c <= 0x7e {
 			t.state = stGround
-		} else if c == 0x1b {
-			t.state = stEsc
 		}
 	case stOSC:
 		switch c {
@@ -499,8 +498,6 @@ func (t *Terminal) step(c byte) {
 			t.state = stGround
 			t.oscBel = true
 			t.oscDispatch()
-		case 0x1b:
-			t.state = stOSCEsc
 		default:
 			if len(t.osc) < maxOSC {
 				t.osc = append(t.osc, c)
@@ -508,46 +505,14 @@ func (t *Terminal) step(c byte) {
 				t.oscOver = true
 			}
 		}
-	case stOSCEsc:
-		if c == '\\' {
-			t.state = stGround
-			t.oscBel = false
-			t.oscDispatch()
-			return
-		}
-		// ESC that is not ST ends the string and starts a new sequence.
-		t.state = stEsc
-		t.step(c)
 	case stStr:
-		if c == 0x1b {
-			t.state = stStrEsc
-		}
-	case stStrEsc:
-		if c == '\\' {
-			t.state = stGround
-			return
-		}
-		t.state = stEsc
-		t.step(c)
 	case stDCS:
-		if c == 0x1b {
-			t.state = stDCSEsc
-			return
-		}
 		t.osc = append(t.osc, c)
 		// Only the queries answered are kept (DECRQSS, XTGETTCAP); the
 		// rest (sixel, tmux passthrough...) is skipped.
 		if len(t.osc) == 2 && !isDCSQuery(t.osc) || len(t.osc) > 256 {
 			t.state = stStr
 		}
-	case stDCSEsc:
-		if c == '\\' {
-			t.state = stGround
-			t.dcsDispatch()
-			return
-		}
-		t.state = stEsc
-		t.step(c)
 	}
 }
 
@@ -703,13 +668,13 @@ func (t *Terminal) restoreCursor() {
 	t.setCursor(t.saved.screen[i].cursor)
 }
 
-// setCursor installs a saved cursor, keeping it valid for the current
-// size, region and modes.
+// setCursor installs a saved cursor, clamping it to the current size.
+// Pending wrap belongs to the saved cursor, even if margins or DECAWM
+// changed since DECSC. The next print consumes it according to the mode.
 func (t *Terminal) setCursor(c cursor) {
 	t.cur = c
 	t.cur.x = min(t.cur.x, t.cols-1)
 	t.cur.y = min(t.cur.y, t.rows-1)
-	t.cur.wrapPending = t.cur.wrapPending && t.autowrap && (t.cur.x == t.cols-1 || t.cur.x == t.right)
 }
 
 // param returns parameter i (ignoring sub-parameters), or def if it is
@@ -791,7 +756,9 @@ func (t *Terminal) csiDispatch(c byte) {
 	case 0:
 	case ' ':
 		if c == 'q' {
-			t.cursorStyle = t.param(0, 0)
+			if p := t.param(0, 0); p <= 6 {
+				t.cursorStyle = cursorAppearance{shape: CursorShape((p + 1) / 2), blink: p%2 == 1}
+			}
 		}
 		return
 	case '!':
@@ -923,6 +890,7 @@ func (t *Terminal) csiDispatch(c byte) {
 
 func (t *Terminal) softReset() {
 	t.cursorHidden = false
+	t.cursorStyle = cursorAppearance{}
 	t.insert = false
 	t.cur.origin = false
 	t.autowrap = true
@@ -951,6 +919,8 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 		return t.cur.origin, true
 	case 7:
 		return t.autowrap, true
+	case 12:
+		return t.cursorStyle.blink, true
 	case 45:
 		return t.revWrap, true
 	case 69:
@@ -967,6 +937,8 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 		return t.focus, true
 	case 2004:
 		return t.bracketed, true
+	case 2027:
+		return t.grapheme, true
 	}
 	return false, false
 }
@@ -1015,6 +987,8 @@ func (t *Terminal) decMode(mode int, on bool) {
 		if !on {
 			t.cur.wrapPending = false
 		}
+	case 12:
+		t.cursorStyle.blink = on
 	case 45:
 		t.revWrap = on
 	case 69:
@@ -1045,6 +1019,8 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.bracketed = on
 	case 2026:
 		t.sync = on
+	case 2027:
+		t.grapheme = on
 	case 47, 1047:
 		t.setAlt(on, mode == 1047)
 	case 1048:
@@ -1209,6 +1185,9 @@ func (t *Terminal) graphics() bool {
 }
 
 func (t *Terminal) print(r rune, w int) {
+	// REP reprints the input scalar with the charset in effect when REP
+	// runs. Saving the mapped box character would ignore later SI/SO or SCS.
+	t.lastChar = r
 	if t.graphics() && r >= 0x5f && r <= 0x7e {
 		if r == 0x5f {
 			r = ' '
@@ -1216,7 +1195,6 @@ func (t *Terminal) print(r rune, w int) {
 			r = decGraphics[r-0x60]
 		}
 	}
-	t.lastChar = r
 	if t.cur.wrapPending && t.autowrap {
 		t.wrapLine()
 		t.cur.x = t.left
@@ -1236,8 +1214,13 @@ func (t *Terminal) print(r rune, w int) {
 			t.cur.x = max(edge+1-w, 0)
 		} else {
 			t.fillCells(t.cur.y, t.cur.x, edge+1)
-			if w == 2 && t.fullWidth() {
-				t.row(t.cur.y)[t.cur.x] = cell{R: spacerHead, Bg: t.cur.pen.Bg}
+			if w == 2 {
+				spacer := t.cur.pen
+				spacer.R = 0
+				if t.fullWidth() {
+					spacer.R = spacerHead
+				}
+				t.row(t.cur.y)[t.cur.x] = spacer
 			}
 			t.wrapLine()
 			t.cur.x = t.left
@@ -1271,7 +1254,7 @@ func (t *Terminal) print(r rune, w int) {
 	}
 	if x+w > edge {
 		t.cur.x = edge
-		t.cur.wrapPending = t.autowrap
+		t.cur.wrapPending = true
 	} else {
 		t.cur.x = x + w
 	}
@@ -1325,8 +1308,19 @@ func (t *Terminal) combine(r rune) {
 	if len(s)+utf8.RuneLen(r) > maxCluster {
 		return
 	}
-	c.R = t.intern(s + string(r))
-	t.lastChar = c.R
+	if r == 0xfe0e || r == 0xfe0f {
+		base := firstRune(s)
+		// Native mode-off filtering uses the tailored grapheme class;
+		// emoji modifier bases are separate from Extended_Pictographic.
+		if !runeInRanges(base, emojiPictographs[:]) || runeInRanges(base, emojiModifierBases[:]) {
+			return
+		}
+	}
+	var modes uint32
+	if c.R >= clusterBase {
+		modes = t.x.clusters[c.R-clusterBase].joinModes
+	}
+	c.R = t.intern(cluster{text: s + string(r), width: uint8(t.runeWidth(c.R)), joinModes: modes})
 	t.touch(y)
 }
 
@@ -2147,7 +2141,7 @@ func (t *Terminal) link(l uint16) string {
 // cellString returns the characters a cell shows.
 func (t *Terminal) cellString(c cell) string {
 	if c.R >= clusterBase {
-		return t.x.clusters[c.R-clusterBase]
+		return t.x.clusters[c.R-clusterBase].text
 	}
 	return string(c.R)
 }
@@ -2155,15 +2149,15 @@ func (t *Terminal) cellString(c cell) string {
 // runeWidth returns the width of a cell's character.
 func (t *Terminal) runeWidth(r rune) int {
 	if r >= clusterBase {
-		r, _ = utf8.DecodeRuneInString(t.x.clusters[r-clusterBase])
+		return int(t.x.clusters[r-clusterBase].width)
 	}
-	return widthCond.RuneWidth(r)
+	return CodepointWidth(r)
 }
 
 // intern returns the cell rune for a character with combining marks.
 // Recent entries are reused; when the table is full, entries no cell
 // refers to any more are dropped.
-func (t *Terminal) intern(s string) rune {
+func (t *Terminal) intern(s cluster) rune {
 	x := t.ext()
 	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
 		if x.clusters[i] == s {
@@ -2183,7 +2177,7 @@ func (t *Terminal) compactClusters() {
 	x := t.x
 	if len(x.clusters) > 0 {
 		remap := make([]rune, len(x.clusters))
-		var kept []string
+		var kept []cluster
 		ref := func(r *rune) {
 			if *r < clusterBase {
 				return
@@ -2201,8 +2195,8 @@ func (t *Terminal) compactClusters() {
 	x.clusterCap = max(64, 2*len(x.clusters))
 }
 
-// The last printed cluster remains live after erase: REP can print it
-// again even when neither screen contains it.
+// visitClusterRefs visits only stored cells. REP remembers the last
+// independently printed scalar, rather than its subsequently attached marks.
 func (t *Terminal) visitClusterRefs(ref func(*rune)) {
 	for _, scr := range [][][]cell{t.main, t.alt} {
 		for _, row := range scr {
@@ -2211,7 +2205,6 @@ func (t *Terminal) visitClusterRefs(ref func(*rune)) {
 			}
 		}
 	}
-	ref(&t.lastChar)
 }
 
 // --- scrollback ---
@@ -2321,8 +2314,8 @@ func rowAt(scr [][]cell, i int) []cell {
 // character starting next did not fit there.
 func (t *Terminal) wrapEnd(row, next []cell) int {
 	// Replayed, the wide character wraps and leaves a spacer head in its
-	// own background, so leave it out only if that recreates it.
-	if row != nil && row[t.cols-1].R == spacerHead && startsWide(next) && row[t.cols-1].Bg == next[0].Bg {
+	// own pen, so leave it out only if that recreates the original style.
+	if row != nil && row[t.cols-1].R == spacerHead && startsWide(next) && styleOf(row[t.cols-1]) == styleOf(next[0]) {
 		return t.cols - 1
 	}
 	return t.cols

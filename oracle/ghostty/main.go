@@ -57,7 +57,7 @@ func (p *phos) Write(b []byte)        { p.t.Write(b) }
 func (p *phos) Resize(c, r int)       { p.t.Resize(c, r) }
 func (p *phos) Close()                { p.t = nil }
 func (p *phos) Repaint(h bool) []byte { return p.t.Repaint(h) }
-func (p *phos) Snapshot() []byte      { return p.t.Repaint(true) }
+func (p *phos) Snapshot() []byte      { return p.t.Snapshot() }
 func (p *phos) View() View {
 	c, r := p.t.Size()
 	cur := p.t.Cursor()
@@ -154,9 +154,11 @@ func newEngine(name string, c, r int) Engine {
 }
 func restore(name string, b []byte, c, r int) Engine {
 	if name == "phosphor" {
-		t := newEngine(name, c, r)
-		t.Write(b)
-		return t
+		var t phosphor.Terminal
+		if err := t.RestoreSnapshot(b, phosphor.SnapshotLimits{}); err != nil {
+			panic(err)
+		}
+		return &phos{&t}
 	}
 	var t C.GhosttyTerminal
 	must(C.exp_restore((*C.uint8_t)(unsafe.Pointer(&b[0])), C.size_t(len(b)), &t))
@@ -520,8 +522,24 @@ func main() {
 	n := flag.Int("n", 1000, "")
 	duration := flag.Duration("duration", 150*time.Millisecond, "")
 	probes := flag.String("probes", "", "")
+	traces := flag.String("traces", "ghostty/traces.json", "bounded paired trace fixtures")
+	traceChunk := flag.Int("trace-chunk", 0, "split trace Write actions into chunks; zero uses whole action")
 	flag.Parse()
 	switch *mode {
+	case "native-info":
+		emit(nativeBuildInfo())
+	case "trace":
+		if !traceChecks(*traces, *traceChunk) {
+			os.Exit(1)
+		}
+	case "widths":
+		scalarWidths(false)
+	case "width-table":
+		scalarWidths(true)
+	case "grapheme-properties":
+		nativeGraphemeProperties()
+	case "cursor-replies":
+		cursorReplies()
 	case "layout":
 		t := reflect.TypeOf(phosphor.Terminal{})
 		fields := make([]map[string]any, 0, t.NumField())

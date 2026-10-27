@@ -316,4 +316,6 @@ type Modes struct {
 	// SyncUpdate is set while the program is drawing a frame it wants
 	// shown at once (2026): a renderer may wait for it to clear.
 	SyncUpdate bool
+	// GraphemeClustering joins Unicode grapheme clusters into cells (2027).
+	GraphemeClustering bool
 }

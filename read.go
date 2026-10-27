@@ -13,12 +13,23 @@ func (t *Terminal) Title() string { return t.title }
 
 // Cursor returns the cursor's position, visibility and shape.
 func (t *Terminal) Cursor() Cursor {
-	c := Cursor{X: t.cur.x, Y: t.cur.y, Visible: !t.cursorHidden, PendingWrap: t.cur.wrapPending}
-	if s := t.cursorStyle; s >= 1 && s <= 6 {
-		c.Shape = CursorShape((s + 1) / 2)
-		c.Blink = s%2 == 1
+	return Cursor{X: t.cur.x, Y: t.cur.y, Visible: !t.cursorHidden, PendingWrap: t.cur.wrapPending,
+		Shape: t.cursorStyle.shape, Blink: t.cursorStyle.blink}
+}
+
+// Cursor shape and blinking can be changed independently by DECSCUSR and
+// DEC private mode 12. Keep their current values rather than the last command.
+type cursorAppearance struct {
+	shape CursorShape
+	blink bool
+}
+
+func (c cursorAppearance) parameter() int {
+	p := int(max(c.shape, CursorBlock)) * 2
+	if c.blink {
+		p--
 	}
-	return c
+	return p
 }
 
 // Modes returns the modes the program has set.
@@ -37,6 +48,7 @@ func (t *Terminal) Modes() Modes {
 		Origin:                t.cur.origin,
 		ReverseVideo:          t.reverseVideo,
 		SyncUpdate:            t.sync,
+		GraphemeClustering:    t.grapheme,
 	}
 	if n := len(t.kitty); n > 0 {
 		m.KittyKeyboard = t.kitty[n-1]
@@ -70,7 +82,7 @@ func (t *Terminal) publicCell(row []cell, x int) Cell {
 		out.Rune = 0
 	default:
 		if r >= clusterBase {
-			s := t.x.clusters[r-clusterBase]
+			s := t.x.clusters[r-clusterBase].text
 			var n int
 			out.Rune, n = utf8.DecodeRuneInString(s)
 			out.Combining = s[n:]
@@ -148,8 +160,7 @@ func (t *Terminal) ScrollbackCells(i int) [][]Cell {
 		return nil
 	}
 	line := t.sb[t.sbStart+i]
-	tmp := newTerminal(t.cols, 2*utf8.RuneCount(line)/t.cols+2, 0, 0)
-	tmp.Write(line)
+	tmp := replayLine(line, t.cols)
 	rows := make([][]Cell, tmp.cur.y+1)
 	for y := range rows {
 		rows[y] = make([]Cell, t.cols)

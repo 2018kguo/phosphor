@@ -6,7 +6,7 @@ A headless VT/xterm terminal emulator for Go. Write a program's output to
 it, read back what a terminal would show: text, colors, attributes,
 hyperlinks, cursor, modes, title and scrollback. It answers the queries
 programs send, tells a renderer which rows changed, reflows on resize, and
-serializes its whole state as bytes that repaint it on another terminal.
+exports ANSI bytes for attaching clients and exact snapshots for checkpoints.
 
 ```go
 t := phosphor.New(80, 24)
@@ -17,7 +17,7 @@ fmt.Println(t.Lines())
 It is the emulator inside [ptyd](https://github.com/2018kguo/ptyd), a
 daemon that keeps thousands of terminals alive, attaches clients to them
 and checkpoints them to disk, which is why it is small and fast when idle
-and why its serialization is exact.
+and why it has a separate exact checkpoint format.
 
 ## Why
 
@@ -34,15 +34,13 @@ and why its serialization is exact.
   an agent TUI, logs) and about 1 GiB/s on progress bars, 10-75x the
   throughput of `charmbracelet/x/vt` and `hinshun/vt10x` on the same
   streams, and redrawing a frame allocates nothing.
-- **Round-trips.** `Repaint` output replayed on a fresh terminal gives
-  the same screen, scrollback, cursor and modes, byte for byte under
-  fuzzing, so a client can attach mid-session and a checkpoint can be
-  restored, subject to the limits under Serialization below.
+- **Checkpoints.** `Snapshot` preserves both screens, saved cursors,
+  modes, colors, REP and unfinished input. `Repaint` draws a session
+  into another terminal, with the limits under Serialization below.
 
 The honest caveats: it does not encode input (keys, mouse, paste are the
 caller's job; `Modes` says what the program asked for), it has no
-graphics (sixel, kitty), no grapheme clustering (widths are per code
-point, as in xterm), and damage is per row with no scroll hints. If you
+graphics (sixel, kitty), and damage is per row with no scroll hints. If you
 need a full terminal UI stack, `charmbracelet/x/vt` integrates with the
 Charm ecosystem and does more around rendering and input; phosphor is the
 screen model.
@@ -63,8 +61,8 @@ draws the screen back from `Terminal.Cell` alone, redrawing only the rows
 go get github.com/2018kguo/phosphor
 ```
 
-Go 1.24 or later. The only dependency is
-[go-runewidth](https://github.com/mattn/go-runewidth).
+Go 1.24 or later. Unicode 17 scalar widths are built in. Grapheme
+boundaries use [uax29](https://github.com/clipperhouse/uax29).
 
 ## Use
 
@@ -91,7 +89,12 @@ m := t.Modes()                        // AltScreen, BracketedPaste, Mouse, Kitty
 t.Title()
 
 t.Resize(120, 40)                     // reflows; also resize the PTY
-snapshot := t.Repaint(true)           // replay on a fresh 120x40 terminal to restore
+snapshot := t.Snapshot()              // exact checkpoint, including geometry
+var restored phosphor.Terminal
+err := restored.RestoreSnapshot(snapshot, phosphor.SnapshotLimits{})
+_ = err
+attach := t.Repaint(true)             // ANSI for an attached terminal of the same size
+_ = attach
 ```
 
 The [examples](https://pkg.go.dev/github.com/2018kguo/phosphor#pkg-examples)
@@ -137,13 +140,24 @@ while a program draws a frame it wants shown at once (mode 2026).
 
 Applications hosting many sessions can call `Compact()` after output
 settles. It frees completely zeroed rows, unused Unicode and hyperlink
-storage, and temporary buffers. Clusters needed by REP and links held by
-saved cursors remain live; unchanged live tables stay in place. It does so
+storage, and temporary buffers. Clusters visible on either screen and links
+held by saved cursors remain live; unchanged live tables stay in place. It does so
 without changing the screen, scrollback, input modes or unfinished parser
 state. Later output can allocate rows again. It is an explicit idle-time
 tradeoff; ordinary writes do not run it.
 
 ### Serialization
+
+Use `Snapshot()` for persistence and `RestoreSnapshot(data, limits)` to
+restore it into an existing or zero `Terminal`. The versioned binary format
+preserves exact cells on both screens, all saved cursors, REP, palette base
+and overrides, scrollback policy, damage and unfinished parser input.
+`AppendSnapshot` reuses a buffer. Restore is atomic, copies its input and
+retains only the receiver's reply writer and bell callback. It invokes
+neither callback. Zero limits allow 64 MiB of decoded storage and four
+million cells per screen; callers can choose other positive limits.
+Malformed, unsupported-version and limit errors are distinguishable with
+`errors.Is`. A snapshot is not terminal output.
 
 `Repaint(withScrollback)` returns bytes that, written to a terminal of the
 same size in its initial state (another `phosphor.Terminal`, or a real
@@ -166,6 +180,19 @@ output; preserving unfinished parser input does not remove that limit.
 With origin mode enabled, repaint clamps the live cursor to the scrolling
 region. A restored cursor or scroll-and-clear (`CSI 22 J`) can leave it
 outside that region, so the next printed character can move after repaint.
+Also, scalar ANSI output cannot always replay an emoji narrowed by VS15
+at the right edge of a one- or two-column screen after reflow. These are
+portable ANSI export limits; exact snapshots preserve those states.
+
+### Unicode
+
+Mode 2027 (`CSI ? 2027 h`) enables streaming grapheme clustering, including
+emoji sequences, flags, skin tones, Hangul and variation selectors. It is
+off initially, matching libghostty-vt. Clusters survive split writes,
+history, resizing, compaction and exact snapshots. Each cell retains at
+most 32 UTF-8 bytes of text; longer clusters are truncated at that bound.
+`CodepointWidth` reports a scalar's Unicode 17 terminal width (0, 1 or 2).
+It does not measure the width of a grapheme by summing its parts.
 
 `Restart()` is for running a new program in the same terminal: it resets
 everything as RIS does but keeps the scrollback and the old screen in
@@ -189,7 +216,7 @@ the `Terminal`.
   1045).
 - Cursor: CUU/CUD/CUF/CUB, CNL/CPL, CHA/HPA/HPR, VPA/VPR, CUP/HVP, origin
   mode, DECSC/DECRC, SCOSC/SCORC, 1048, IND/RI/NEL, HT/CHT/CBT with
-  HTS/TBC, DECSCUSR.
+  HTS/TBC, DECSCUSR, independent cursor blinking (mode 12).
 - Editing: ICH/DCH/ECH, IL/DL, SU/SD, ED/EL with the current background
   (BCE), ED 3, scroll-and-clear (ED 22), DECALN, character protection
   (DECSCA, SPA/EPA) with DECSED/DECSEL.
@@ -199,7 +226,7 @@ the `Terminal`.
   top of the main screen, stored as logical lines.
 - Modes: DECAWM, IRM, LNM, DECOM, DECTCEM, DECCKM, DECKPAM, DECSCNM,
   mouse tracking and encodings, focus events, bracketed paste,
-  synchronized update, kitty keyboard flags, XTSAVE/XTRESTORE.
+  synchronized update, grapheme clustering, kitty keyboard flags, XTSAVE/XTRESTORE.
 - SGR: bold, faint, italic, underline styles (single, double, curly,
   dotted, dashed), blink, inverse, hidden, strikethrough, overline,
   16/256/RGB colors in the `;` and `:` forms.
@@ -215,10 +242,7 @@ the `Terminal`.
 - Double-width and double-height lines, rectangular area operations
   (DECCRA, DECERA, DECFRA, DECIC...), 132-column mode (DECCOLM),
   national character sets, SGR fonts and super/subscript, underline color
-  (SGR 58 is parsed and dropped), mode 12 (cursor blink; DECSCUSR's blink
-  is kept).
-- Grapheme clustering (mode 2027): a ZWJ emoji sequence takes the width
-  of its parts.
+  (SGR 58 is parsed and dropped).
 - Sixel and kitty graphics, OSC 52 (clipboard), OSC 7 and 133 (shell
   integration), icon names, the title stack.
 - 8-bit C1 controls outside UTF-8, and S8C1T replies.
@@ -232,8 +256,8 @@ Five external suites run as ordinary Go tests (`VT_CONF_REPORT=1 go test
 
 | Suite | How | Pass | Fail | Deliberate difference | Out of scope |
 |---|---|---|---|---|---|
-| libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 730 | 0 | 28 | 195 |
-| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 459 | 0 | 6 | 84 |
+| libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 731 | 0 | 26 | 195 |
+| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 502 | 0 | 5 | 42 |
 | wezterm `term/src/test` | translated cases | 128 | 0 | 6 | 4 |
 | esctest2 (xterm) | independently written cases (the GPL source is not used) | 410 | 0 | 12 | 215 |
 | alacritty ref tests | recordings and reference grids, per line | 1507 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |
@@ -245,8 +269,8 @@ SGR 21 and keeps a pending wrap across EL, libvterm brightens bold colors
 in the pen and answers DA1 as a VT100), places where the upstream harness
 fakes state, and the few gaps in the list above. "Out of scope" counts
 cases for features listed as not modeled, mostly input encoding,
-graphics-adjacent and window operations, palette rendering, rectangular
-operations and grapheme clustering. Query replies are checked by the
+graphics-adjacent and window operations, palette rendering and rectangular
+operations. Query replies are checked by the
 libvterm scripts and by `TestReplies`.
 
 Besides the suites:
@@ -257,7 +281,10 @@ Besides the suites:
   `FuzzStream` (raw bytes and resizes), `FuzzChunking` (how output
   is split into writes does not matter), `FuzzWrite`, `FuzzDamage` (every
   row whose cells changed is dirty), `FuzzReplies` (answering queries
-  never changes the state), and, in the `oracle` module, `FuzzOracle`, a
+  never changes the state), `FuzzGraphemeTransitions` (clustering, mode
+  changes and reflow), `FuzzRestoreSnapshot` (malformed binary data and
+  atomic failure), `FuzzSnapshotContinuation` (exact restore followed by
+  continued output), and, in the `oracle` module, `FuzzOracle`, a
   differential fuzzer against `charmbracelet/x/vt` on the subset where it
   agrees with xterm. CI runs each for 30 seconds. Before
   the extraction the targets had about 2.3 hours of fuzzing; since, each
@@ -274,6 +301,11 @@ Besides the suites:
   `TestCellDoesNotAllocate` reading every cell.
 
 ## Performance
+
+The [Unicode and exact-checkpoint comparison](oracle/ghostty/results/2026-10-27-round3/README.md)
+records the broader native compatibility corpus, Unicode audits, idle memory
+and checkpoint costs. Passing those finite tests is not universal terminal
+compatibility.
 
 The [October 2026 follow-up comparison](oracle/ghostty/results/2026-10-27-round2/README.md)
 measures idle metadata reclamation, parsing, replay and compatibility against
