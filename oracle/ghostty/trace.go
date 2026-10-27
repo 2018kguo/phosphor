@@ -41,7 +41,7 @@ type modelState struct {
 	Cols, Rows     int
 	Cursor         modelCursor
 	Alt            bool
-	Modes          [18]bool
+	Modes          [21]bool
 	Mouse          uint16
 	MouseEncoding  uint16
 	Kitty          uint16
@@ -116,11 +116,12 @@ func (t *tracedEngine) state() (modelState, error) {
 			shape = 1
 		} // host default is a block in both constructors
 		s := modelState{Cols: cols, Rows: rows, Cursor: modelCursor{cur.X, cur.Y, shape, cur.Visible, cur.Blink, cur.PendingWrap}, Alt: m.AltScreen, Kitty: m.KittyKeyboard, Title: p.t.Title(), Replies: t.replies.String(), Mouse: uint16(m.Mouse), MouseEncoding: uint16(m.MouseEncoding)}
-		s.Modes = [18]bool{m.ApplicationCursorKeys, m.ApplicationKeypad, m.BracketedPaste, m.FocusEvents, m.Autowrap, m.Insert, m.Newline, m.Origin, m.ReverseVideo, m.SyncUpdate,
+		s.Modes = [21]bool{m.ApplicationCursorKeys, m.ApplicationKeypad, m.BracketedPaste, m.FocusEvents, m.Autowrap, m.Insert, m.Newline, m.Origin, m.ReverseVideo, m.SyncUpdate,
 			m.MouseTrackingModes&phosphor.MouseTrackingX10 != 0, m.MouseTrackingModes&phosphor.MouseTrackingNormal != 0,
 			m.MouseTrackingModes&phosphor.MouseTrackingButtonEvent != 0, m.MouseTrackingModes&phosphor.MouseTrackingAnyEvent != 0,
 			m.MouseEncodingModes&phosphor.MouseEncodingModeUTF8 != 0, m.MouseEncodingModes&phosphor.MouseEncodingModeSGR != 0,
-			m.MouseEncodingModes&phosphor.MouseEncodingModeURXVT != 0, m.MouseEncodingModes&phosphor.MouseEncodingModeSGRPixels != 0}
+			m.MouseEncodingModes&phosphor.MouseEncodingModeURXVT != 0, m.MouseEncodingModes&phosphor.MouseEncodingModeSGRPixels != 0,
+			m.Columns132, m.AllowColumnSwitching, m.SmoothScrolling}
 		for y := 0; y < rows; y++ {
 			row := make([]modelCell, cols)
 			for x := range row {

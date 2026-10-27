@@ -255,6 +255,25 @@ func (t *Terminal) rewrap(scr [][]cell, wrap []bool, oldCols, cols int, pts []po
 		for length > extent && isZero(cells[length-1]) {
 			length--
 		}
+		// A clipped wide glyph consumes one destination cell. Native also
+		// keeps the blank under the live cursor after it, rather than
+		// turning that cursor into a pending wrap on the destroyed glyph.
+		clippedWide := false
+		if cols == 1 {
+			for _, c := range cells[:length] {
+				if c.R == wideTail {
+					clippedWide = true
+					break
+				}
+			}
+		}
+		if clippedWide && len(orig) > 0 {
+			p := orig[len(orig)-1]
+			if !p.pending && p.x > 0 && p.y >= y && p.y <= e {
+				off := starts[p.y-y] + p.x
+				length = max(length, min(off+1, len(cells)))
+			}
+		}
 		extent = 0
 		// Offsets of the points on this line.
 		type pref struct {
@@ -285,7 +304,9 @@ func (t *Terminal) rewrap(scr [][]cell, wrap []bool, oldCols, cols int, pts []po
 				w = 2
 			}
 			if w > cols {
-				c, w = cell{Fg: c.Fg, Bg: c.Bg, A: c.A}, 1
+				// Unlike a glyph printed into an already narrow terminal,
+				// native reflow destroys a clipped wide glyph's whole cell.
+				c, w = cell{}, 1
 			}
 			if col+w > cols {
 				if col == cols-1 && w == 2 {

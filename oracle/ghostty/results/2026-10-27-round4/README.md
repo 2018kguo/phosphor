@@ -48,15 +48,25 @@ New native cases exercise the remaining non-image groups:
 | 2 national charsets | British designation A maps # to pound; single shift must be consumed by a combining mark. Native REP maps the saved input scalar under the current charset. |
 | 2 images | Outside the declared headless text contract; not counted as newly passing. |
 
-## Remaining five translated native differences
+## Audit of the five old translated native differences
 
-Two disabled-autowrap wide-character cases retain a deliberate difference:
-native drops a wide character that does not fit; phosphor and libvterm back up
-to fit it. Another case concerns native setting pending-wrap in a one-column
-terminal for an unprintable wide character. Two CBT cases retain native pending
-wrap while autowrap is disabled; the existing translated suffix cases that print
-before enabling wrap agree. These distinctions need explicit future-observable
-probes before deciding whether to change phosphor's policy.
+All five former native differences are now closed. The historical
+`traces-existing-policies.jsonl` preserves their pre-fix raw differences,
+including subsequent prints after re-enabling autowrap. Phosphor now drops an
+unprintable wide character at the edge when autowrap is disabled, retains
+pending wrap through mode and tab changes, and matches native's one-column
+dropped-wide behavior. The normal corpus now includes those future-observable
+cases. Conflicting Alacritty and libvterm references remain unchanged and
+documented as known policy differences.
+
+`traces-policies-clipped.jsonl` extends the corpus to 149 cases /468 parity
+actions. It captures all21 mode bits including3/40/4. It adds eight styled
+wide/narrowed-cluster4-to1-column resize cases, 12 alternate-screen transition
+cases, same-size column switches, smooth scrolling, sync resize and mode69
+reset after a pending wrap. Clipped-wide reflow clears every cell attribute,
+keeps the native cursor mapping and preserves narrowed-cluster attributes.
+The only remaining direct-input mismatches are the two semantic prompt
+annotation cases; both engines' own export failures remain visible separately.
 
 Column-width changes now reset tab stops to defaults, matching native's explicit
 Terminal.resize contract. Five unchanged WezTerm translated expectations preserve

@@ -25,7 +25,7 @@ typedef struct {
   ExpCell *cells;
   uint8_t *wraps;
   size_t history_rows, total_rows;
-  bool modes[18], cursor_blink;
+  bool modes[21], cursor_blink;
   uint8_t cursor_shape, kitty;
   uint16_t mouse, mouse_encoding;
   GhosttyString title;

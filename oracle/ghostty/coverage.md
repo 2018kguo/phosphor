@@ -30,7 +30,8 @@ The mode array order is: application cursor, application keypad,
 bracketed paste, focus events, autowrap, insert, newline, origin,
 reverse video, synchronized output, X10 mouse, normal mouse, button
 mouse, any-event mouse, UTF8 mouse, SGR mouse, URXVT mouse, SGR-pixel
-mouse. Stored mode bits are compared as reported; the oracle does not
+mouse, DECCOLM132-column selection, permission to switch columns, and
+smooth scrolling. Stored mode bits are compared as reported; the oracle does not
 collapse native settings to make them agree.
 
 Each trace also reports direct parity between untouched engines separately

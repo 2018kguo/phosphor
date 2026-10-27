@@ -1044,7 +1044,6 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.lrmm = on
 		if !on {
 			t.left, t.right = 0, t.cols-1
-			t.cur.wrapPending = t.cur.wrapPending && t.cur.x == t.cols-1
 		}
 	case 1045:
 		t.revWrapExt = on
@@ -1111,7 +1110,11 @@ func (t *Terminal) setAlt(on, clearOnExit bool) {
 			t.alt, t.altWrap = nil, nil
 		}
 	}
-	t.cur.wrapPending = false
+	if !on && clearOnExit {
+		// Native1047 erases the alternate screen before copying its cursor
+		// back to main; that erase consumes a pending wrap.
+		t.cur.wrapPending = false
+	}
 }
 
 func (t *Terminal) altBlank() bool {
@@ -1315,7 +1318,7 @@ func (t *Terminal) print(r rune, w int) {
 // row it left as continuing there.
 func (t *Terminal) wrapLine() {
 	y := t.cur.y
-	if !t.fullWidth() {
+	if !t.fullWidth() || t.cur.x != t.cols-1 {
 		t.index() // soft wraps are only kept for full rows
 		return
 	}
