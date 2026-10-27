@@ -14,6 +14,7 @@ import (
 func TestRepaintContinuation(t *testing.T) {
 	cases := []struct{ name, stream string }{
 		{"csi-style", "\x1b[38:2::10:20:30mX\x1b[0mY"},
+		{"csi-style-missing-final", "\x1b[58;5;9m\x1b[58:5:mX\x1b[58;mY\x1b[58:2:1:2mZ"},
 		{"csi-mode", "\x1b[?2004hX"},
 		{"csi-intermediate", "\x1b[4 qX"},
 		{"csi-control", "abc\x1b[3\b\a1mX"},
@@ -139,6 +140,7 @@ func TestContinuationBound(t *testing.T) {
 func FuzzRepaintContinuation(f *testing.F) {
 	for _, in := range []string{
 		"\x1b[38:2::1:2:3mX\x1b[?2004hY",
+		"\x1b[58;5;9m\x1b[58:5:mX\x1b[58;mY\x1b[58:2:1:2mZ",
 		"\x1b[?" + strings.Repeat("999;", maxParams-2) + "999:25lX",
 		"\x1b[" + strings.Repeat("0;", maxParams-1) + "31;32mX",
 		"\x1b[38:2::65536:65535:999999999999999999999mX",

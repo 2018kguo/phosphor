@@ -515,7 +515,7 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 		if t.marker != 0 {
 			b = append(b, t.marker)
 		}
-		if t.paramSet {
+		if t.paramSet || t.nparams != 0 {
 			for i := 0; i <= min(int(t.nparams), maxParams-1); i++ {
 				if i > 0 {
 					separator := byte(';')
@@ -524,7 +524,9 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 					}
 					b = append(b, separator)
 				}
-				b = strconv.AppendInt(b, int64(t.params[i]), 10)
+				if i != int(t.nparams) || t.paramSet {
+					b = strconv.AppendInt(b, int64(t.params[i]), 10)
+				}
 			}
 			if t.nparams == maxParams {
 				// Further parameter bytes are ignored once the array fills.

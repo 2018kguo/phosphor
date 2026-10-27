@@ -79,8 +79,8 @@ func TestCSIParameterBoundaryBehavior(t *testing.T) {
 		{"overflowed-column", "\x1b[999999999999999999999999G", 0, 11, ""},
 		{"last-sgr-slot", "\x1b[" + strings.Repeat("0;", maxParams-1) + "31m", IndexedColor(1), 0, ""},
 		{"extra-sgr-slot-ignored", "\x1b[" + strings.Repeat("0;", maxParams-1) + "31;32m", IndexedColor(1), 0, ""},
-		{"colon-rgb-saturation", "\x1b[38:2::65536:65535:65537m", RGBColor(0, 255, 0), 0, ""},
-		{"semicolon-rgb-saturation", "\x1b[38;2;65536;65535;65537m", RGBColor(0, 255, 0), 0, ""},
+		{"colon-rgb-saturation", "\x1b[38:2::65536:65535:65537m", RGBColor(255, 255, 255), 0, ""},
+		{"semicolon-rgb-saturation", "\x1b[38;2;65536;65535;65537m", RGBColor(255, 255, 255), 0, ""},
 		{"saturated-mode-reply", "\x1b[?999999999999999999999999$p", 0, 0, "\x1b[?65536;0$y"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

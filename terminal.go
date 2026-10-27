@@ -125,10 +125,10 @@ type Terminal struct {
 	nparams  uint8 // at most maxParams; also the partial CSI's current slot
 	state    uint8
 	utf8n    uint8 // an unfinished UTF-8 scalar has at most four bytes
-	paramSet bool
-	marker   byte // private marker: ? > < =
-	inter    byte // last intermediate byte
-	oscBel   bool // the OSC string was ended by BEL (replies end the same way)
+	paramSet bool  // the current CSI parameter has digits
+	marker   byte  // private marker: ? > < =
+	inter    byte  // last intermediate byte
+	oscBel   bool  // the OSC string was ended by BEL (replies end the same way)
 	oscOver  bool
 }
 
@@ -476,9 +476,9 @@ func (t *Terminal) step(c byte) {
 			} else {
 				t.nparams = maxParams
 			}
-			t.paramSet = true
+			t.paramSet = false
 		case c >= '<' && c <= '?':
-			if t.paramSet || t.marker != 0 {
+			if t.paramSet || t.nparams != 0 || t.marker != 0 {
 				t.state = stCSIIgnore
 			} else {
 				t.marker = c
@@ -487,8 +487,13 @@ func (t *Terminal) step(c byte) {
 			t.inter = c
 		case c >= 0x40 && c <= 0x7e:
 			t.state = stGround
-			if t.paramSet {
+			missingColon := !t.paramSet && t.nparams < maxParams && t.subParam(int(t.nparams))
+			if t.paramSet || t.nparams != 0 {
 				t.nparams = min(t.nparams+1, maxParams)
+			}
+			if missingColon && c == 'm' && t.marker == 0 && t.inter == 0 {
+				// A final colon has no implicit zero sub-parameter in SGR.
+				t.nparams--
 			}
 			t.csiDispatch(c)
 		default:
@@ -1926,6 +1931,11 @@ func (t *Terminal) sgr() {
 		for next < nparams && t.subParam(next) {
 			next++
 		}
+		colon := t.subParam(i + 1)
+		if colon && v != 4 && v != 38 && v != 48 && v != 58 {
+			i = next - 1 // unknown colon groups do not apply their leading SGR
+			continue
+		}
 		switch {
 		case v == 0:
 			t.setUnderlineColor(0)
@@ -1937,6 +1947,9 @@ func (t *Terminal) sgr() {
 		case v == 3:
 			p.A |= AttrItalic
 		case v == 4:
+			if colon && next == i+1 {
+				break
+			}
 			style := 1
 			if next > i+1 {
 				style = int(t.params[i+1])
@@ -1969,14 +1982,16 @@ func (t *Terminal) sgr() {
 		case v >= 30 && v <= 37:
 			p.Fg = colorIndexed | Color(v-30)
 		case v == 38, v == 48, v == 58:
-			c, end := t.extColor(i, next)
-			switch v {
-			case 38:
-				p.Fg = c
-			case 48:
-				p.Bg = c
-			case 58:
-				t.setUnderlineColor(c)
+			c, end, valid := t.extColor(i, next)
+			if valid {
+				switch v {
+				case 38:
+					p.Fg = c
+				case 48:
+					p.Bg = c
+				case 58:
+					t.setUnderlineColor(c)
+				}
 			}
 			next = end
 		case v == 39:
@@ -2003,39 +2018,39 @@ func (t *Terminal) sgr() {
 // extColor parses the color after an extended-color parameter at i, in
 // either the colon form (38:5:n, 38:2::r:g:b, 38:2:r:g:b) or the legacy
 // semicolon form (38;5;n, 38;2;r;g;b). It returns the color and the index
-// of the next parameter to interpret.
-func (t *Terminal) extColor(i, next int) (Color, int) {
+// of the next parameter to interpret and whether a color was complete.
+// Invalid colors leave the old color in place; unconsumed parameters can
+// still be independent SGRs. Colon groups require exactly three RGB
+// channels, optionally preceded by a colorspace slot.
+func (t *Terminal) extColor(i, next int) (Color, int, bool) {
 	nparams := int(t.nparams)
-	if next > i+1 { // colon form: everything is in sub-parameters
-		args := t.params[i+1 : next]
-		switch {
-		case args[0] == 5 && len(args) >= 2:
-			return colorIndexed | Color(args[1]&0xff), next
-		case args[0] == 2 && len(args) >= 5:
-			return rgb(int(args[2]), int(args[3]), int(args[4])), next
-		case args[0] == 2 && len(args) == 4:
-			return rgb(int(args[1]), int(args[2]), int(args[3])), next
-		}
-		return 0, next
-	}
 	if i+1 >= nparams {
-		return 0, i + 1
+		return 0, i + 1, false
 	}
 	switch t.params[i+1] {
 	case 5:
 		if i+2 < nparams {
-			return colorIndexed | Color(t.params[i+2]&0xff), i + 3
+			return colorIndexed | Color(min(t.params[i+2], 0xffff)&0xff), i + 3, true
 		}
 	case 2:
 		if i+4 < nparams {
-			return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), i + 5
+			if !t.subParam(i + 1) { // legacy semicolon form
+				return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), i + 5, true
+			}
+			switch next - i {
+			case 5:
+				return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), next, true
+			case 6:
+				return rgb(int(t.params[i+3]), int(t.params[i+4]), int(t.params[i+5])), next, true
+			}
+			return 0, max(next, i+2), false
 		}
 	}
-	return 0, nparams
+	return 0, i + 1, false
 }
 
 func rgb(r, g, b int) Color {
-	return colorRGB | Color(r&0xff)<<16 | Color(g&0xff)<<8 | Color(b&0xff)
+	return colorRGB | Color(min(r, 0xffff)&0xff)<<16 | Color(min(g, 0xffff)&0xff)<<8 | Color(min(b, 0xffff)&0xff)
 }
 
 func (t *Terminal) oscDispatch() {
