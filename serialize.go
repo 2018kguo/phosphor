@@ -575,6 +575,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.reverseVideo {
 		b = appendMode(b, 5, true)
 	}
+	if t.privateModes()&privateModeSlowScroll != 0 {
+		b = appendMode(b, 4, true)
+	}
 	if t.revWrap {
 		b = appendMode(b, 45, true)
 	}

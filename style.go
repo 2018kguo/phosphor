@@ -346,4 +346,5 @@ type Modes struct {
 	GraphemeClustering   bool
 	Columns132           bool // DECCOLM (3): the program selected 132-column mode
 	AllowColumnSwitching bool // mode40 permits DECCOLM to resize the terminal
+	SmoothScrolling      bool // DEC mode4 requests smooth scrolling from the renderer
 }

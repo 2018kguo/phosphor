@@ -1,30 +1,31 @@
 package phosphor
 
 const (
-	columnMode132 uint8 = 1 << iota
-	columnModeAllow
+	privateMode132 uint8 = 1 << iota
+	privateModeAllowColumns
+	privateModeSlowScroll
 )
 
-func (t *Terminal) columnModes() uint8 {
+func (t *Terminal) privateModes() uint8 {
 	if t.x != nil {
-		return t.x.columnModes
+		return t.x.privateModes
 	}
 	return 0
 }
 
 func (t *Terminal) setColumnMode(on bool) {
-	if t.columnModes()&columnModeAllow == 0 {
+	if t.privateModes()&privateModeAllowColumns == 0 {
 		if t.x != nil {
-			t.x.columnModes &^= columnMode132
+			t.x.privateModes &^= privateMode132
 		}
 		return
 	}
 	cols := 80
 	if on {
-		t.x.columnModes |= columnMode132
+		t.x.privateModes |= privateMode132
 		cols = 132
 	} else {
-		t.x.columnModes &^= columnMode132
+		t.x.privateModes &^= privateMode132
 	}
 	t.Resize(cols, t.rows)
 	// A same-size resize preserves margins and tabs. A width change resets
@@ -58,11 +59,11 @@ func (t *Terminal) appendColumnModes(b []byte, saved []savedMode) []byte {
 		}
 		b = append(b, 's')
 	}
-	if on := t.columnModes()&columnMode132 != 0; on != current132 {
+	if on := t.privateModes()&privateMode132 != 0; on != current132 {
 		b = appendMode(b, 40, true)
 		b = appendMode(b, 3, on)
 	}
-	b = appendMode(b, 40, t.columnModes()&columnModeAllow != 0)
+	b = appendMode(b, 40, t.privateModes()&privateModeAllowColumns != 0)
 	// DECCOLM's resize ends a synchronized update, even at the same size.
 	return append(b, "\x1b[?2026h"...)
 }
