@@ -165,6 +165,10 @@ func (t *Terminal) Resize(cols, rows int) {
 		}
 	}
 	t.resizeTabs(oldCols)
+	// Imported history and rewrapped rows are now visible to the pool
+	// collectors. Reclaim detached entries here too: a window can resize
+	// repeatedly while its program prints nothing.
+	t.compactPools()
 }
 
 func (t *Terminal) anyWrap(w []bool) bool {
@@ -418,7 +422,7 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 			x.clusterCap = max(clusterCap, len(x.clusters)+clusterRefs)
 			x.linkCap = max(linkCap, len(x.links)+linkRefs)
 			defer func() {
-				// A later write can collect after all rows are attached.
+				// Resize collects only after all working rows are attached.
 				x.clusterCap, x.linkCap = clusterCap, linkCap
 			}()
 		}

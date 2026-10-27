@@ -57,24 +57,15 @@ func TestCompactResizeHistoryPools(t *testing.T) {
 						}
 					}
 					compacted.Compact()
-					clusterCap, linkCap := compacted.x.clusterCap, compacted.x.linkCap
 					original.Resize(size[0], size[1])
 					compacted.Resize(size[0], size[1])
-					if compacted.x.clusterCap != clusterCap || compacted.x.linkCap != linkCap {
-						t.Fatal("resize did not restore collection thresholds")
-					}
 					assertPoolEquivalent(t, original, compacted)
-					collectClusters := len(compacted.x.clusters) > 0 && len(compacted.x.clusters) >= clusterCap
-					collectLinks := len(compacted.x.links) >= linkCap
-					// Cross the restored collection thresholds only after all
-					// imported and rewrapped rows are attached to the terminal.
+					// Continue across normal collection thresholds after the
+					// imported and rewrapped rows are installed.
 					for i := range 100 {
 						next := fmt.Appendf(nil, "\x1b[%d;%dH\x1b]8;;https://future/%d\x1b\\z%c%c", size[1]-1, size[0], i, rune(0x300+i%64), rune(0x300+i/64))
 						original.Write(next)
 						compacted.Write(next)
-						if i == 0 && (collectClusters && compacted.x.clusterCap == clusterCap || collectLinks && compacted.x.linkCap == linkCap) {
-							t.Fatal("ordinary write did not resume pool collection")
-						}
 					}
 					assertPoolEquivalent(t, original, compacted)
 					for _, next := range []string{"\x1b8X", "\x1b[?1049l", "\x1b8Y", "\x1b[?47h\x1b8Z\x1b[?47l", "\x1b[2b"} {
@@ -92,6 +83,47 @@ func TestCompactResizeHistoryPools(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestResizeHistoryPoolsStayBoundedWithoutOutput(t *testing.T) {
+	for _, kind := range []string{"clusters", "links", "mixed"} {
+		t.Run(kind, func(t *testing.T) {
+			var input strings.Builder
+			for y := range 4 {
+				fmt.Fprintf(&input, "\x1b[%d;1H", y+1)
+				for x := range 100 {
+					if kind != "clusters" {
+						fmt.Fprintf(&input, "\x1b]8;;https://history/%d/%d\x1b\\", y, x)
+					}
+					input.WriteByte('a')
+					if kind != "links" {
+						fmt.Fprintf(&input, "%c%c", rune(0x300+x%64), rune(0x300+(100*y+x)/64))
+					}
+				}
+			}
+			input.WriteString("\x1b]8;;\x1b\\\x1b[2;1H\x1b[J\x1b[4;1H\r\n$ ")
+			term := New(100, 4)
+			term.Write([]byte(input.String()))
+			term.Compact()
+			before := term.Repaint(true)
+			for cycle := range 100 {
+				term.Resize(100, 5)
+				first := term.Cell(0, 0)
+				if first.Rune != 'a' || kind != "links" && first.Combining != "\u0300\u0300" || kind != "clusters" && first.Link.URI != "https://history/0/0" {
+					t.Fatalf("cycle %d lost imported metadata: %+v", cycle, first)
+				}
+				term.Resize(100, 4)
+				if got := term.Repaint(true); string(got) != string(before) {
+					t.Fatalf("cycle %d changed the checkpoint", cycle)
+				}
+				// One retained history row has no live pool IDs. Allow a
+				// bounded cache, but never one entry set per resize cycle.
+				if term.x != nil && len(term.x.clusters)+len(term.x.links) > 4*100 {
+					t.Fatalf("cycle %d retained %d clusters and %d links", cycle, len(term.x.clusters), len(term.x.links))
+				}
+			}
+		})
 	}
 }
 
