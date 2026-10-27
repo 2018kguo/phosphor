@@ -1319,8 +1319,13 @@ func (t *Terminal) combine(r rune) {
 	if len(s)+utf8.RuneLen(r) > maxCluster {
 		return
 	}
-	if (r == 0xfe0e || r == 0xfe0f) && !runeInRanges(firstRune(s), emojiPictographs[:]) {
-		return
+	if r == 0xfe0e || r == 0xfe0f {
+		base := firstRune(s)
+		// Native mode-off filtering uses the tailored grapheme class;
+		// emoji modifier bases are separate from Extended_Pictographic.
+		if !runeInRanges(base, emojiPictographs[:]) || runeInRanges(base, emojiModifierBases[:]) {
+			return
+		}
 	}
 	var modes uint32
 	if c.R >= clusterBase {

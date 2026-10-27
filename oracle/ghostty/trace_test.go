@@ -114,6 +114,29 @@ func TestNativeREPMapsInputScalarUsingCurrentCharset(t *testing.T) {
 	}
 }
 
+func TestNativeModifierRequiresImmediateBase(t *testing.T) {
+	for _, prefix := range []string{
+		"👋\x1b[?2027h", "👋\u200b\x1b[?2027h", "👋\u0301\x1b[?2027h",
+		"👋\ufe0f\x1b[?2027h", "👋\u200d\x1b[?2027h", "👋\u0600\x1b[?2027h", "👋\x00\x1b[?2027h",
+		"✍\ufe0f\x1b[?2027h", "\x1b[?2027h✍\ufe0f", "\x1b[?2027h👋\u0301", "\x1b[?2027h👋🏿",
+	} {
+		t.Run(fmt.Sprintf("prefix-%x", prefix), func(t *testing.T) {
+			phos := newTracedEngine("phosphor", 12, 3)
+			defer phos.Close()
+			native := newTracedEngine("ghostty", 12, 3)
+			defer native.Close()
+			for _, part := range []string{prefix, "🏿X"} {
+				phos.Write([]byte(part))
+				native.Write([]byte(part))
+				p, n := traceState(t, phos), traceState(t, native)
+				if diff := differences(p, n); len(diff) != 0 {
+					t.Fatalf("native modifier context: %+v", diff)
+				}
+			}
+		})
+	}
+}
+
 func TestNativeTabsResetOnlyWhenColumnsChange(t *testing.T) {
 	e := newTracedEngine("ghostty", 20, 3)
 	defer e.Close()

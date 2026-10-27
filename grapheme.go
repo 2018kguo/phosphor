@@ -73,21 +73,12 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 		return false
 	}
 	s := t.cellString(row[x])
-	// Ghostty tailors UAX #29 so a modifier only joins a valid emoji
-	// modifier base. Ignore intervening Extend scalars, as rule GB10 does.
+	// Outside GB9b's Prepend rule, Ghostty follows UTS #51: a modifier
+	// must immediately follow its base. Extend, Control and ZWJ cannot
+	// bridge that boundary, including text attached while mode was off.
 	if emojiModifier(r) {
-		base := s
-		for len(base) > 0 {
-			cp, n := utf8.DecodeLastRuneInString(base)
-			if runeInRanges(cp, emojiModifierBases[:]) {
-				break
-			}
-			if CodepointWidth(cp) != 0 {
-				return false
-			}
-			base = base[:len(base)-n]
-		}
-		if len(base) == 0 {
+		previous, _ := utf8.DecodeLastRuneInString(s)
+		if !runeInRanges(previous, emojiModifierBases[:]) && !runeInRanges(previous, graphemePrepends[:]) {
 			return false
 		}
 	}
