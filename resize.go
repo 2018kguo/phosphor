@@ -512,6 +512,12 @@ func replayLine(line []byte, cols int) *Terminal {
 		})
 		tmp.Write(line[start:])
 	}
+	if tmp.main[0] != nil {
+		// Narrowing a styled wide base leaves its old tail's style behind.
+		// Past the formatter's final column that tail was never serialized;
+		// it must not become extra content when the temporary row reflows.
+		tmp.main[0] = tmp.main[0][:tmp.cur.x]
+	}
 	position := []point{{x: tmp.cur.x}}
 	tmp.main, tmp.mainWrap = tmp.rewrap(tmp.main, nil, wide, cols, position, tmp.cur.x)
 	tmp.cols, tmp.rows, tmp.right = cols, len(tmp.main), cols-1
