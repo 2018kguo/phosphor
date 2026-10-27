@@ -5,11 +5,11 @@ It measures emulator work, not a whole PTY daemon. Normal builds and tests
 do not need Ghostty or cgo; this directory requires the `ghostty` build tag.
 
 The October 2026 experiment pins Ghostty to
-`919dca5c848d43a489a4cb2e1feade016f0fa2db` and uses Zig 0.17.0:
+`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c` and uses Zig 0.17.0:
 
 ```sh
 git clone https://github.com/ghostty-org/ghostty.git /tmp/ghostty-comparison
-git -C /tmp/ghostty-comparison checkout 919dca5c848d43a489a4cb2e1feade016f0fa2db
+git -C /tmp/ghostty-comparison checkout 46e9dc9a927b2e7e7cba79e6902c176127dbdf2c
 cd /tmp/ghostty-comparison
 zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4
 ```
@@ -24,6 +24,12 @@ export PHOSPHOR_DIR="$(cd .. && pwd)"
 go build -tags ghostty -o /tmp/phosphor-ghostty ./ghostty
 
 /tmp/phosphor-ghostty -mode check -probes ghostty/probes.json > checks.jsonl
+/tmp/phosphor-ghostty -mode trace -traces ghostty/traces.json > traces.jsonl
+/tmp/phosphor-ghostty -mode trace -trace-chunk 1 -traces ghostty/traces.json > byte-traces.jsonl
+/tmp/phosphor-ghostty -mode trace -trace-chunk 7 -traces ghostty/traces.json > seven-byte-traces.jsonl
+/tmp/phosphor-ghostty -mode cursor-replies > cursor-replies.jsonl
+/tmp/phosphor-ghostty -mode width-table > native-widths.jsonl
+go test -tags ghostty ./ghostty
 /tmp/phosphor-ghostty -mode throughput -duration 200ms > throughput.jsonl
 /tmp/phosphor-ghostty -mode state -duration 300ms > state.jsonl
 /tmp/phosphor-ghostty -mode memory -engine phosphor -workload prompt -n 1024
@@ -82,8 +88,8 @@ continuation appended for attach, and still does not export both screens
 and saved cursors in one call. Phosphor's regular tests additionally
 verify styles, links, wrapping, bounded memory and replay behavior.
 
-All output is evidence, including failed cases. The driver does not turn
-an engine's failed probe into a process exit: inspect the `pass`,
+All output is evidence, including failed cases. The legacy `check` mode
+does not turn an engine's failed probe into a process exit: inspect the `pass`,
 `restored_view_equal` and `continued_view_equal` fields.
 
 The `scroll-clear-outside-origin` replay case exposes a shared VT limit.
@@ -91,3 +97,36 @@ CSI 22 J can leave the physical cursor above or left of an enabled origin
 region. Both engines' VT exports clamp it back into that region, moving
 subsequent output; Ghostty's binary snapshot preserves it. The driver
 compares the physical cursor and continued text without normalizing them.
+
+`trace` compares a deeper [text-model contract](coverage.md). It records
+full cell text and widths, typed colors and attributes, underline styles
+and colors, hyperlink targets, protected cells, row wraps, physical
+cursor and appearance, modes, title, history cells and raw PTY replies.
+Each action is checked. An untouched control for each engine checks
+continuation after snapshots, ANSI replay and compaction, including
+later writes and resizes. Cells are collected in one C call per state;
+benchmark modes keep their existing extraction path.
+
+`trace` exits 1 when any `parity` action fails. Identity strings,
+deliberate host defaults and documented capacity limits have separate
+scope counts and retain their raw failures. Counts describe these named
+traces; they are not a compliance percentage. JSON includes input bytes,
+geometry, action index, differing cells and raw reply hex. `-trace-chunk`
+splits each Write action at byte boundaries; it does not change where
+the trace observes state.
+
+Fixture input is limited to 2 MiB, 512 cases, 256 actions per case and
+1 MiB written per case. Dimensions are 1..256 columns and 1..128 rows.
+Native capture rejects more than 256 total history+screen rows, 32768
+cells, 1024 codepoints per cell, 4096 URI bytes per cell or 1 MiB of PTY
+replies. It reports capture failure instead of truncating state. These
+are oracle bounds, independent of either engine's supported limits.
+
+`width-table` emits all native scalar width-0/2 ranges (other scalars
+have width 1), excluding surrogates. `widths` instead lists differences
+against the baseline runewidth dependency. Neither measures grapheme
+folding. Table generation requires `GHOSTTY_SOURCE` to point at the
+clean pinned checkout used to build the linked library. The library
+currently reports `0.1.0-dev` without commit metadata, so output records
+that version separately from the verified source revision. The source
+and linked library must come from the same build command above.

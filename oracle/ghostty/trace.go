@@ -1,0 +1,535 @@
+//go:build ghostty
+
+package main
+
+/*
+#include "bridge.h"
+*/
+import "C"
+
+import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"reflect"
+	"strings"
+	"unsafe"
+
+	"github.com/2018kguo/phosphor"
+	"github.com/mattn/go-runewidth"
+)
+
+// This is a closed projection of the headless text model. Differences are
+// retained, including blanks, pending wrap, physical cursor and typed colors.
+// Underline color is observed on Ghostty even though phosphor lacks that field.
+type modelCell struct {
+	Text           string `json:"text"`
+	Width          int    `json:"width"`
+	Fg, Bg         uint32
+	Attrs          uint16 `json:"attrs"`
+	Underline      uint8  `json:"underline"`
+	UnderlineColor uint32 `json:"underline_color"`
+	URI            string `json:"uri"`
+}
+type modelCursor struct {
+	X, Y, Shape                 int
+	Visible, Blink, PendingWrap bool
+}
+type modelState struct {
+	Cols, Rows     int
+	Cursor         modelCursor
+	Alt            bool
+	Modes          [18]bool
+	Kitty          uint16
+	Title          string
+	Screen         [][]modelCell
+	Wrapped        []bool
+	History        [][]modelCell
+	HistoryWrapped []bool
+	Replies        string
+}
+type tracedEngine struct {
+	Engine
+	replies   bytes.Buffer
+	native    *C.ExpReplies
+	replyBase string
+}
+
+func newTracedEngine(name string, cols, rows int) *tracedEngine {
+	t := &tracedEngine{}
+	if name == "phosphor" {
+		t.Engine = &phos{phosphor.New(cols, rows, phosphor.WithReply(&t.replies))}
+	} else {
+		t.Engine = newEngine(name, cols, rows)
+		t.native = C.exp_replies_new(t.Engine.(*ghost).t)
+		if t.native == nil {
+			t.Engine.Close()
+			panic("native reply sink")
+		}
+	}
+	return t
+}
+func (t *tracedEngine) Close() { t.Engine.Close(); C.exp_replies_free(t.native) }
+func phosCell(c phosphor.Cell) modelCell {
+	return modelCell{Text: c.Text(), Width: c.Width, Fg: uint32(c.Style.Fg), Bg: uint32(c.Style.Bg), Attrs: uint16(c.Style.Attrs), Underline: uint8(c.Style.Underline), URI: c.Link.URI}
+}
+func (t *tracedEngine) state() (modelState, error) {
+	if p, ok := t.Engine.(*phos); ok {
+		cols, rows := p.t.Size()
+		cur := p.t.Cursor()
+		m := p.t.Modes()
+		shape := int(cur.Shape)
+		if shape == 0 {
+			shape = 1
+		} // host default is a block in both constructors
+		s := modelState{Cols: cols, Rows: rows, Cursor: modelCursor{cur.X, cur.Y, shape, cur.Visible, cur.Blink, cur.PendingWrap}, Alt: m.AltScreen, Kitty: m.KittyKeyboard, Title: p.t.Title(), Replies: t.replies.String()}
+		s.Modes = [18]bool{m.ApplicationCursorKeys, m.ApplicationKeypad, m.BracketedPaste, m.FocusEvents, m.Autowrap, m.Insert, m.Newline, m.Origin, m.ReverseVideo, m.SyncUpdate, m.Mouse == 9, m.Mouse == 1000, m.Mouse == 1002, m.Mouse == 1003, m.MouseEncoding == 1005, m.MouseEncoding == 1006, m.MouseEncoding == 1015, m.MouseEncoding == 1016}
+		for y := 0; y < rows; y++ {
+			row := make([]modelCell, cols)
+			for x := range row {
+				row[x] = phosCell(p.t.Cell(x, y))
+			}
+			s.Screen = append(s.Screen, row)
+			s.Wrapped = append(s.Wrapped, p.t.Wrapped(y))
+		}
+		if !m.AltScreen {
+			for i := 0; i < p.t.ScrollbackLen(); i++ {
+				for j, row := range p.t.ScrollbackCells(i) {
+					cells := make([]modelCell, len(row))
+					for x, c := range row {
+						cells[x] = phosCell(c)
+					}
+					s.History = append(s.History, cells)
+					s.HistoryWrapped = append(s.HistoryWrapped, j > 0)
+				}
+			}
+		}
+		s.Replies = t.replyBase + s.Replies
+		return s, nil
+	}
+	var raw C.ExpState
+	if rc := C.exp_capture(t.Engine.(*ghost).t, &raw); rc != 0 {
+		return modelState{}, fmt.Errorf("native capture: %d", int(rc))
+	}
+	defer C.exp_capture_free(&raw)
+	i := raw.info
+	s := modelState{Cols: int(i.cols), Rows: int(i.rows), Cursor: modelCursor{int(i.x), int(i.y), int(raw.cursor_shape), bool(i.visible), bool(raw.cursor_blink), bool(i.pending_wrap)}, Alt: bool(i.alt), Kitty: uint16(raw.kitty)}
+	if raw.title.len > 0 {
+		s.Title = string(C.GoBytes(unsafe.Pointer(raw.title.ptr), C.int(raw.title.len)))
+	}
+	for n, v := range raw.modes {
+		s.Modes[n] = bool(v)
+	}
+	cells := unsafe.Slice(raw.cells, int(raw.total_rows)*s.Cols)
+	wraps := unsafe.Slice(raw.wraps, int(raw.total_rows))
+	for y := 0; y < int(raw.total_rows); y++ {
+		row := make([]modelCell, s.Cols)
+		for x := range row {
+			c := &cells[y*s.Cols+x]
+			rs := make([]rune, int(c.text_len))
+			for n := range rs {
+				rs[n] = rune(c.text[n])
+			}
+			row[x] = modelCell{Text: string(rs), Width: int(c.width), Fg: uint32(c.fg), Bg: uint32(c.bg), Attrs: uint16(c.attrs), Underline: uint8(c.underline), UnderlineColor: uint32(c.underline_color), URI: string(C.GoBytes(unsafe.Pointer(&c.uri[0]), C.int(c.uri_len)))}
+		}
+		if y < int(raw.history_rows) {
+			s.History = append(s.History, row)
+			s.HistoryWrapped = append(s.HistoryWrapped, wraps[y] != 0)
+		} else {
+			s.Screen = append(s.Screen, row)
+			s.Wrapped = append(s.Wrapped, wraps[y] != 0)
+		}
+	}
+	if t.native != nil {
+		if t.native.error != 0 {
+			return s, fmt.Errorf("native reply sink: %d", t.native.error)
+		}
+		s.Replies = t.replyBase + string(C.GoBytes(unsafe.Pointer(t.native.data), C.int(t.native.len)))
+	}
+	return s, nil
+}
+
+type traceAction struct {
+	Kind string `json:"kind"`
+	Data string `json:"data,omitempty"`
+	Hex  string `json:"hex,omitempty"`
+	Cols int    `json:"cols,omitempty"`
+	Rows int    `json:"rows,omitempty"`
+}
+type traceCase struct {
+	Name    string        `json:"name"`
+	Feature string        `json:"feature"`
+	Scope   string        `json:"scope"` // parity, identity, deliberate, or limit
+	Source  string        `json:"source"`
+	Cols    int           `json:"cols"`
+	Rows    int           `json:"rows"`
+	Actions []traceAction `json:"actions"`
+}
+
+func decodeTraces(r io.Reader) ([]traceCase, error) {
+	input, err := io.ReadAll(io.LimitReader(r, (2<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(input) > 2<<20 {
+		return nil, fmt.Errorf("trace file exceeds 2 MiB")
+	}
+	d := json.NewDecoder(bytes.NewReader(input))
+	d.DisallowUnknownFields()
+	var cases []traceCase
+	if err := d.Decode(&cases); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := d.Decode(&trailing); err != io.EOF {
+		return nil, fmt.Errorf("trailing JSON")
+	}
+	if len(cases) == 0 || len(cases) > 512 {
+		return nil, fmt.Errorf("trace count must be 1..512")
+	}
+	seen := map[string]bool{}
+	for _, c := range cases {
+		if c.Name == "" || seen[c.Name] || c.Feature == "" || c.Source == "" {
+			return nil, fmt.Errorf("missing metadata or duplicate name: %q", c.Name)
+		}
+		seen[c.Name] = true
+		if c.Scope != "parity" && c.Scope != "identity" && c.Scope != "deliberate" && c.Scope != "limit" {
+			return nil, fmt.Errorf("%s: invalid scope", c.Name)
+		}
+		if !traceDimensions(c.Cols, c.Rows) || len(c.Actions) == 0 || len(c.Actions) > 256 {
+			return nil, fmt.Errorf("%s: invalid geometry/action count", c.Name)
+		}
+		bytes := 0
+		for _, a := range c.Actions {
+			switch a.Kind {
+			case "write":
+				if a.Cols != 0 || a.Rows != 0 || (a.Data != "" && a.Hex != "") {
+					return nil, fmt.Errorf("%s: invalid write", c.Name)
+				}
+				if a.Hex != "" {
+					b, err := hex.DecodeString(a.Hex)
+					if err != nil {
+						return nil, err
+					}
+					bytes += len(b)
+				} else {
+					bytes += len(a.Data)
+				}
+			case "resize":
+				if !traceDimensions(a.Cols, a.Rows) || a.Data != "" || a.Hex != "" {
+					return nil, fmt.Errorf("%s: invalid resize", c.Name)
+				}
+			case "compact", "snapshot", "repaint":
+				if a.Cols != 0 || a.Rows != 0 || a.Data != "" || a.Hex != "" {
+					return nil, fmt.Errorf("%s: unexpected action fields", c.Name)
+				}
+			default:
+				return nil, fmt.Errorf("%s: unknown action %q", c.Name, a.Kind)
+			}
+		}
+		if bytes > 1<<20 {
+			return nil, fmt.Errorf("%s: input exceeds 1 MiB", c.Name)
+		}
+	}
+	return cases, nil
+}
+func traceDimensions(c, r int) bool { return c >= 1 && c <= 256 && r >= 1 && r <= 128 && c*r <= 32768 }
+
+const pinnedGhosttyCommit = "46e9dc9a927b2e7e7cba79e6902c176127dbdf2c"
+
+func nativeBuildInfo() map[string]any {
+	var version, build C.GhosttyString
+	must(C.int(C.ghostty_build_info(C.GHOSTTY_BUILD_INFO_VERSION_STRING, unsafe.Pointer(&version))))
+	must(C.int(C.ghostty_build_info(C.GHOSTTY_BUILD_INFO_VERSION_BUILD, unsafe.Pointer(&build))))
+	return map[string]any{"version": string(C.GoBytes(unsafe.Pointer(version.ptr), C.int(version.len))), "build": string(C.GoBytes(unsafe.Pointer(build.ptr), C.int(build.len)))}
+}
+
+type modelDifference struct {
+	Field             string `json:"field"`
+	Phosphor, Ghostty any
+}
+
+func differences(a, b modelState) []modelDifference {
+	av, bv := reflect.ValueOf(a), reflect.ValueOf(b)
+	typ := av.Type()
+	var out []modelDifference
+	for n := 0; n < av.NumField(); n++ {
+		if !reflect.DeepEqual(av.Field(n).Interface(), bv.Field(n).Interface()) {
+			// Preserve exact differing cells while keeping bounded reports readable.
+			name := typ.Field(n).Name
+			if name == "Screen" || name == "History" {
+				x, y := av.Field(n).Interface().([][]modelCell), bv.Field(n).Interface().([][]modelCell)
+				if len(x) != len(y) {
+					out = append(out, modelDifference{name + ".rows", len(x), len(y)})
+					continue
+				}
+				for row := range x {
+					for col := range x[row] {
+						if !reflect.DeepEqual(x[row][col], y[row][col]) {
+							out = append(out, modelDifference{fmt.Sprintf("%s[%d][%d]", name, row, col), x[row][col], y[row][col]})
+							if len(out) >= 12 {
+								return out
+							}
+						}
+					}
+				}
+				continue
+			}
+			out = append(out, modelDifference{name, av.Field(n).Interface(), bv.Field(n).Interface()})
+		}
+	}
+	return out
+}
+func (t *tracedEngine) replace(data []byte, cols, rows int, snapshot bool) {
+	old, e := t.state()
+	if e != nil {
+		panic(e)
+	}
+	name := "ghostty"
+	if _, ok := t.Engine.(*phos); ok {
+		name = "phosphor"
+	}
+	var engine Engine
+	if name == "phosphor" {
+		// The base revision's snapshot is ANSI. The exact snapshot API replaces
+		// this branch when it lands; failures remain visible in trace output.
+		p := phosphor.New(cols, rows, phosphor.WithReply(&t.replies))
+		engine = &phos{p}
+		t.replies.Reset()
+		engine.Write(data)
+		t.replies.Reset()
+	} else {
+		if snapshot {
+			engine = restore(name, data, cols, rows)
+		} else {
+			engine = newEngine(name, cols, rows)
+			engine.Write(data)
+		}
+	}
+	t.Engine.Close()
+	C.exp_replies_free(t.native)
+	t.native = nil
+	t.Engine = engine
+	t.replyBase = old.Replies
+	if name == "ghostty" {
+		t.native = C.exp_replies_new(engine.(*ghost).t)
+		if t.native == nil {
+			panic("restored native reply sink")
+		}
+	}
+}
+func traceWrite(t *tracedEngine, data []byte, chunk int) {
+	if chunk <= 0 {
+		t.Write(data)
+		return
+	}
+	for len(data) > 0 {
+		n := min(chunk, len(data))
+		t.Write(data[:n])
+		data = data[n:]
+	}
+}
+func traceChecks(path string, chunk int) bool {
+	if chunk < 0 || chunk > 1<<20 {
+		panic("trace chunk must be 0..1048576")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	cases, err := decodeTraces(f)
+	if err != nil {
+		panic(err)
+	}
+	ok := true
+	totals := map[string][2]int{}
+	for _, c := range cases {
+		a, b := newTracedEngine("phosphor", c.Cols, c.Rows), newTracedEngine("ghostty", c.Cols, c.Rows)
+		controlA, controlB := newTracedEngine("phosphor", c.Cols, c.Rows), newTracedEngine("ghostty", c.Cols, c.Rows)
+		for n, action := range c.Actions {
+			var local []modelDifference
+			switch action.Kind {
+			case "write":
+				data := []byte(action.Data)
+				if action.Hex != "" {
+					data, _ = hex.DecodeString(action.Hex)
+				}
+				for _, t := range []*tracedEngine{a, b, controlA, controlB} {
+					traceWrite(t, data, chunk)
+				}
+			case "resize":
+				for _, t := range []*tracedEngine{a, b, controlA, controlB} {
+					t.Resize(action.Cols, action.Rows)
+				}
+			case "compact":
+				before, e := a.state()
+				if e != nil {
+					panic(e)
+				}
+				a.Engine.(*phos).t.Compact()
+				after, e := a.state()
+				if e != nil {
+					panic(e)
+				}
+				local = differences(before, after)
+			case "snapshot", "repaint":
+				for _, t := range []*tracedEngine{a, b} {
+					before, e := t.state()
+					if e != nil {
+						panic(e)
+					}
+					var data []byte
+					if action.Kind == "snapshot" {
+						data = t.Snapshot()
+					} else {
+						data = t.Repaint(true)
+					}
+					t.replace(data, before.Cols, before.Rows, action.Kind == "snapshot")
+					after, e := t.state()
+					if e != nil {
+						panic(e)
+					}
+					engine := "ghostty"
+					if t == a {
+						engine = "phosphor"
+					}
+					for _, diff := range differences(before, after) {
+						diff.Field = engine + "." + action.Kind + "." + diff.Field
+						local = append(local, diff)
+					}
+				}
+			}
+			x, e := a.state()
+			if e != nil {
+				panic(e)
+			}
+			y, e := b.state()
+			if e != nil {
+				panic(e)
+			}
+			diff := append(local, differences(x, y)...)
+			pass := len(diff) == 0
+			for i, t := range []*tracedEngine{controlA, controlB} {
+				control, e := t.state()
+				if e != nil {
+					panic(e)
+				}
+				actual := x
+				engine := "phosphor"
+				if i == 1 {
+					actual = y
+					engine = "ghostty"
+				}
+				for _, d := range differences(control, actual) {
+					d.Field = engine + ".continuation." + d.Field
+					diff = append(diff, d)
+				}
+			}
+			pass = len(diff) == 0
+			if c.Scope == "parity" && !pass {
+				ok = false
+			}
+			counts := totals[c.Scope]
+			counts[1]++
+			if pass {
+				counts[0]++
+			}
+			totals[c.Scope] = counts
+			emit(map[string]any{"kind": "trace", "case": c.Name, "feature": c.Feature, "scope": c.Scope, "source": c.Source, "chunk": chunk, "step": n, "action": action, "pass": pass, "differences": diff, "phosphor_replies_hex": hex.EncodeToString([]byte(x.Replies)), "ghostty_replies_hex": hex.EncodeToString([]byte(y.Replies))})
+		}
+		a.Close()
+		b.Close()
+		controlA.Close()
+		controlB.Close()
+	}
+	emit(map[string]any{"kind": "trace_summary", "native_build": nativeBuildInfo(), "chunk": chunk, "cases": len(cases), "steps_by_scope_pass_total": totals, "parity_pass": ok, "coverage": "bounded named traces; not a terminal compliance percentage"})
+	return ok
+}
+func scalarWidths(table bool) {
+	widths := make([]byte, 0x110000)
+	C.exp_widths((*C.uint8_t)(unsafe.Pointer(&widths[0])), C.size_t(len(widths)))
+	c := runewidth.NewCondition()
+	c.EastAsianWidth = false
+	start := -1
+	var pw, nw int
+	flush := func(end int) {
+		if start >= 0 {
+			kind := "scalar_width_difference"
+			if table {
+				kind = "native_scalar_width_range"
+			}
+			emit(map[string]any{"kind": kind, "first": start, "last": end, "phosphor_dependency_width": pw, "ghostty_width": nw})
+			start = -1
+		}
+	}
+	count := 0
+	for r := 0; r < len(widths); r++ {
+		if r >= 0xd800 && r <= 0xdfff {
+			flush(r - 1)
+			continue
+		}
+		p, n := c.RuneWidth(rune(r)), int(widths[r])
+		if table {
+			p = 1
+		}
+		if p == n {
+			flush(r - 1)
+			continue
+		}
+		count++
+		if start >= 0 && (p != pw || n != nw) {
+			flush(r - 1)
+		}
+		if start < 0 {
+			start, pw, nw = r, p, n
+		}
+	}
+	flush(0x10ffff)
+	if table {
+		build := nativeBuildInfo()
+		// libghostty currently hardcodes the library version without a commit.
+		// Verify the explicitly supplied source checkout and record the library's
+		// self-reported version separately; do not invent runtime provenance.
+		source := os.Getenv("GHOSTTY_SOURCE")
+		if source == "" {
+			panic("width-table requires GHOSTTY_SOURCE pointing at the linked source checkout")
+		}
+		commit, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
+		if err != nil {
+			panic(err)
+		}
+		if strings.TrimSpace(string(commit)) != pinnedGhosttyCommit {
+			panic("width-table source does not match pinned Ghostty commit")
+		}
+		if err := exec.Command("git", "-C", source, "diff", "--quiet", "HEAD", "--", "src/terminal", "build.zig", "build.zig.zon").Run(); err != nil {
+			panic("width-table source has modified terminal/build code")
+		}
+		emit(map[string]any{"kind": "native_scalar_width_summary", "native_build": build, "ghostty_commit": pinnedGhosttyCommit, "unicode_version": "17.0.0", "unicode_scalars": 0x110000 - 0x800, "non_default_scalars": count, "default_width": 1, "first": 0, "last": 0x10ffff, "excluded_first": 0xd800, "excluded_last": 0xdfff, "mode": "native-codepoint-width", "basis": "batched ghostty_unicode_codepoint_width; no grapheme folding"})
+	} else {
+		emit(map[string]any{"kind": "scalar_width_summary", "unicode_scalars": 0x110000 - 0x800, "different": count, "basis": "phosphor baseline mattn/go-runewidth condition vs native Ghostty scalar API; excludes surrogates; does not test terminal grapheme behavior"})
+	}
+}
+
+// Keep raw replies independently runnable while evolving the wider trace model.
+func cursorReplies() {
+	inputs := []string{"", "\x1b[?12h", "\x1b[?12l", "\x1b[1 q", "\x1b[2 q", "\x1b[3 q", "\x1b[4 q", "\x1b[5 q", "\x1b[6 q", "\x1b[7 q", "\x1b[65536 q", "\x1b[5 q\x1b[!p", "\x1b[5 q\x1bc", "\x1b[?12h\x1b[?12s\x1b[?12l\x1b[?12r"}
+	for _, input := range inputs {
+		for _, engine := range []string{"phosphor", "ghostty"} {
+			t := newTracedEngine(engine, 12, 4)
+			t.Write([]byte(input + "\x1bP$q q\x1b\\\x1b[?12$p"))
+			var replies string
+			if t.native != nil {
+				replies = string(C.GoBytes(unsafe.Pointer(t.native.data), C.int(t.native.len)))
+			} else {
+				replies = t.replies.String()
+			}
+			emit(map[string]any{"kind": "cursor_reply", "engine": engine, "input_hex": hex.EncodeToString([]byte(input)), "replies_hex": hex.EncodeToString([]byte(replies)), "replies": strings.ReplaceAll(replies, "\x1b", "<ESC>")})
+			t.Close()
+		}
+	}
+}

@@ -520,8 +520,22 @@ func main() {
 	n := flag.Int("n", 1000, "")
 	duration := flag.Duration("duration", 150*time.Millisecond, "")
 	probes := flag.String("probes", "", "")
+	traces := flag.String("traces", "ghostty/traces.json", "bounded paired trace fixtures")
+	traceChunk := flag.Int("trace-chunk", 0, "split trace Write actions into chunks; zero uses whole action")
 	flag.Parse()
 	switch *mode {
+	case "native-info":
+		emit(nativeBuildInfo())
+	case "trace":
+		if !traceChecks(*traces, *traceChunk) {
+			os.Exit(1)
+		}
+	case "widths":
+		scalarWidths(false)
+	case "width-table":
+		scalarWidths(true)
+	case "cursor-replies":
+		cursorReplies()
 	case "layout":
 		t := reflect.TypeOf(phosphor.Terminal{})
 		fields := make([]map[string]any, 0, t.NumField())

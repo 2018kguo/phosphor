@@ -2,6 +2,7 @@
 
 #include "bridge.h"
 #include <stdlib.h>
+#include <string.h>
 #ifdef __APPLE__
 #include <mach/mach.h>
 #else
@@ -112,4 +113,128 @@ uint64_t exp_rss(void) {
   fclose(file);
   return count == 2 ? resident * (uint64_t)sysconf(_SC_PAGESIZE) : 0;
 #endif
+}
+
+// A C-owned reply sink never retains a pointer into Go memory. Overflow is
+// reported as a capture error instead of silently dropping protocol output.
+static void exp_reply(GhosttyTerminal t, void *userdata, const uint8_t *data, size_t len) {
+  (void)t;
+  ExpReplies *r = userdata;
+  if (r->error) return;
+  if (len > 1024 * 1024 - r->len) { r->error = GHOSTTY_LIMIT_EXCEEDED; return; }
+  size_t required = r->len + len;
+  if (required > r->cap) {
+    size_t cap = required * 2;
+    uint8_t *p = realloc(r->data, cap);
+    if (!p) { r->error = GHOSTTY_OUT_OF_MEMORY; return; }
+    r->data = p; r->cap = cap;
+  }
+  if (len) memcpy(r->data + r->len, data, len);
+  r->len = required;
+}
+ExpReplies *exp_replies_new(GhosttyTerminal t) {
+  ExpReplies *r = calloc(1, sizeof(*r));
+  if (!r) return NULL;
+  if (ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_USERDATA, r) ||
+      ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_WRITE_PTY, exp_reply)) {
+    free(r); return NULL;
+  }
+  return r;
+}
+void exp_replies_free(ExpReplies *r) {
+  if (r) { free(r->data); free(r); }
+}
+void exp_widths(uint8_t *out, size_t len) {
+  for (size_t i = 0; i < len; i++) out[i] = ghostty_unicode_codepoint_width((uint32_t)i);
+}
+static uint32_t exp_color(GhosttyStyleColor c) {
+  switch (c.tag) {
+    case GHOSTTY_STYLE_COLOR_PALETTE: return 0x1000000 | c.value.palette;
+    case GHOSTTY_STYLE_COLOR_RGB: return 0x2000000 | ((uint32_t)c.value.rgb.r << 16) |
+      ((uint32_t)c.value.rgb.g << 8) | c.value.rgb.b;
+    default: return 0;
+  }
+}
+void exp_capture_free(ExpState *out) {
+  free(out->cells); free(out->wraps);
+  out->cells = NULL; out->wraps = NULL;
+}
+int exp_capture(GhosttyTerminal t, ExpState *out) {
+  memset(out, 0, sizeof(*out));
+  int rc = exp_info(t, &out->info);
+  if (rc) return rc;
+  if ((rc = ghostty_terminal_get(t, GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS, &out->history_rows))) return rc;
+  out->total_rows = out->history_rows + out->info.rows;
+  // Trace fixtures are bounded independently of production terminal limits.
+  if (out->info.cols > 256 || out->total_rows > 256 || out->total_rows * out->info.cols > 32768)
+    return GHOSTTY_LIMIT_EXCEEDED;
+  out->cells = calloc(out->total_rows * out->info.cols, sizeof(ExpCell));
+  out->wraps = calloc(out->total_rows, 1);
+  if (!out->cells || !out->wraps) { rc = GHOSTTY_OUT_OF_MEMORY; goto fail; }
+  for (size_t y = 0; y < out->total_rows; y++) {
+    for (size_t x = 0; x < out->info.cols; x++) {
+      GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+      GhosttyPoint point = {.tag = y < out->history_rows ? GHOSTTY_POINT_TAG_HISTORY : GHOSTTY_POINT_TAG_ACTIVE,
+        .value = {.coordinate = {(uint16_t)x, (uint32_t)(y < out->history_rows ? y : y - out->history_rows)}}};
+      if ((rc = ghostty_terminal_grid_ref(t, point, &ref))) goto fail;
+      if (!x) {
+        GhosttyRow row; bool wrap;
+        if ((rc = ghostty_grid_ref_row(&ref, &row)) ||
+            (rc = ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &wrap))) goto fail;
+        out->wraps[y] = wrap;
+      }
+      ExpCell *c = &out->cells[y * out->info.cols + x];
+      GhosttyCell raw; GhosttyCellWide wide; GhosttyCellContentTag tag; bool protected;
+      GhosttyStyle style = GHOSTTY_INIT_SIZED(GhosttyStyle);
+      if ((rc = ghostty_grid_ref_cell(&ref, &raw)) ||
+          (rc = ghostty_cell_get(raw, GHOSTTY_CELL_DATA_WIDE, &wide)) ||
+          (rc = ghostty_cell_get(raw, GHOSTTY_CELL_DATA_CONTENT_TAG, &tag)) ||
+          (rc = ghostty_cell_get(raw, GHOSTTY_CELL_DATA_PROTECTED, &protected)) ||
+          (rc = ghostty_grid_ref_style(&ref, &style))) goto fail;
+      size_t n = 0;
+      if ((rc = ghostty_grid_ref_graphemes(&ref, c->text, 1024, &n))) goto fail;
+      c->text_len = (uint16_t)n;
+      if ((rc = ghostty_grid_ref_hyperlink_uri(&ref, c->uri, 4096, &n))) goto fail;
+      c->uri_len = (uint16_t)n;
+      c->width = wide == GHOSTTY_CELL_WIDE_WIDE ? 2 : wide == GHOSTTY_CELL_WIDE_SPACER_TAIL ? 0 : 1;
+      c->fg = exp_color(style.fg_color); c->bg = exp_color(style.bg_color);
+      c->underline_color = exp_color(style.underline_color); c->underline = (uint8_t)style.underline;
+      c->attrs = style.bold | (style.faint << 1) | (style.italic << 2) | (style.blink << 3) |
+        (style.inverse << 4) | (style.invisible << 5) | (style.strikethrough << 6) |
+        (style.overline << 7) | (protected << 8);
+      if (tag == GHOSTTY_CELL_CONTENT_BG_COLOR_PALETTE) {
+        uint8_t color; if ((rc = ghostty_cell_get(raw, GHOSTTY_CELL_DATA_COLOR_PALETTE, &color))) goto fail;
+        c->bg = 0x1000000 | color;
+      } else if (tag == GHOSTTY_CELL_CONTENT_BG_COLOR_RGB) {
+        GhosttyColorRgb color; if ((rc = ghostty_cell_get(raw, GHOSTTY_CELL_DATA_COLOR_RGB, &color))) goto fail;
+        c->bg = 0x2000000 | ((uint32_t)color.r << 16) | ((uint32_t)color.g << 8) | color.b;
+      }
+    }
+  }
+  GhosttyMode modes[] = {GHOSTTY_MODE_DECCKM, GHOSTTY_MODE_KEYPAD_KEYS,
+    GHOSTTY_MODE_BRACKETED_PASTE, GHOSTTY_MODE_FOCUS_EVENT, GHOSTTY_MODE_WRAPAROUND,
+    GHOSTTY_MODE_INSERT, GHOSTTY_MODE_LINEFEED, GHOSTTY_MODE_ORIGIN, GHOSTTY_MODE_REVERSE_COLORS,
+    GHOSTTY_MODE_SYNC_OUTPUT, GHOSTTY_MODE_X10_MOUSE, GHOSTTY_MODE_NORMAL_MOUSE,
+    GHOSTTY_MODE_BUTTON_MOUSE, GHOSTTY_MODE_ANY_MOUSE, GHOSTTY_MODE_UTF8_MOUSE,
+    GHOSTTY_MODE_SGR_MOUSE, GHOSTTY_MODE_URXVT_MOUSE, GHOSTTY_MODE_SGR_PIXELS_MOUSE};
+  for (size_t n = 0; n < sizeof(modes)/sizeof(*modes); n++) {
+    GhosttyTerminalModeConfig v = {.mode = modes[n]};
+    if ((rc = ghostty_terminal_get(t, GHOSTTY_TERMINAL_DATA_MODE, &v))) goto fail;
+    out->modes[n] = v.value;
+  }
+  if ((rc = ghostty_terminal_get(t, GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS, &out->kitty)) ||
+      (rc = ghostty_terminal_get(t, GHOSTTY_TERMINAL_DATA_TITLE, &out->title))) goto fail;
+  GhosttyRenderState render = NULL;
+  if ((rc = ghostty_render_state_new(NULL, &render))) goto fail;
+  rc = ghostty_render_state_update(render, t);
+  GhosttyRenderStateCursorVisualStyle shape;
+  if (!rc) rc = ghostty_render_state_get(render, GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE, &shape);
+  if (!rc) rc = ghostty_render_state_get(render, GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING, &out->cursor_blink);
+  ghostty_render_state_free(render);
+  if (rc) goto fail;
+  out->cursor_shape = shape == GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BAR ? 3 :
+    shape == GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_UNDERLINE ? 2 : 1;
+  return 0;
+fail:
+  exp_capture_free(out); return rc;
 }

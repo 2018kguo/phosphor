@@ -17,3 +17,9 @@ Copyright notices: libvterm, Copyright (c) 2008 Paul Evans; alacritty,
 The Alacritty Project contributors; ghostty, Copyright (c) 2024 Mitchell
 Hashimoto, Ghostty contributors; wezterm, Copyright (c) 2018-Present Wez
 Furlong.
+
+The optional native comparison under `oracle/ghostty` uses the public
+libghostty-vt C ABI at revision
+`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c` (MIT). Its paired trace
+fixtures are independently written; they are separate from the older
+translated Ghostty tables above.
