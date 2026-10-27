@@ -391,40 +391,35 @@ func (t *Terminal) printRune(r rune) {
 
 // step runs one byte through the escape-sequence state machine.
 func (t *Terminal) step(c byte) {
-	if t.state >= stOSC && (c == 0x1b || c == 0x18 || c == 0x1a) {
-		state := t.state
-		t.state = stGround
-		if c == 0x1b {
-			t.state = stEsc
-		}
-		if state == stDCS {
-			// DCS handlers finish when unhooked, including cancellation.
-			t.dcsDispatch()
-		} else if state == stOSC && c == 0x1b {
-			t.oscBel = false
-			t.oscDispatch()
-		}
-		return
-	}
-	// C0 controls act in every state but strings; ESC, CAN and SUB abort.
-	if t.state < stOSC && c < 0x20 && c != 0x1b {
-		if c == 0x18 || c == 0x1a {
+	// C0 controls act in every state but strings. Only control bytes can
+	// end a string or abort a sequence; printable CSI bytes skip this work.
+	if c < 0x20 {
+		if c == 0x1b || c == 0x18 || c == 0x1a {
+			state := t.state
 			t.state = stGround
+			if c == 0x1b {
+				t.state = stEsc
+			}
+			if state == stDCS {
+				// DCS handlers finish when unhooked, including cancellation.
+				t.dcsDispatch()
+			} else if state == stOSC && c == 0x1b {
+				t.oscBel = false
+				t.oscDispatch()
+			}
 			return
 		}
-		t.execute(c)
-		return
+		if t.state < stOSC {
+			t.execute(c)
+			return
+		}
 	}
 	switch t.state {
 	case stGround:
-		if c == 0x1b {
-			t.state = stEsc
-		}
 		// 0x7f (DEL) is ignored.
 	case stEsc:
 		t.inter = 0
 		switch {
-		case c == 0x1b:
 		case c == '[':
 			t.nparams, t.paramSet, t.marker, t.inter = 0, false, 0, 0
 			t.params[0], t.sub = 0, 0
@@ -448,8 +443,6 @@ func (t *Terminal) step(c byte) {
 		}
 	case stEscInter:
 		switch {
-		case c == 0x1b:
-			t.state = stEsc
 		case c >= 0x20 && c <= 0x2f:
 			t.inter = c
 		case c >= 0x30 && c <= 0x7e:
@@ -492,16 +485,12 @@ func (t *Terminal) step(c byte) {
 				t.nparams = min(t.nparams+1, maxParams)
 			}
 			t.csiDispatch(c)
-		case c == 0x1b:
-			t.state = stEsc
 		default:
 			t.state = stCSIIgnore
 		}
 	case stCSIIgnore:
 		if c >= 0x40 && c <= 0x7e {
 			t.state = stGround
-		} else if c == 0x1b {
-			t.state = stEsc
 		}
 	case stOSC:
 		switch c {
