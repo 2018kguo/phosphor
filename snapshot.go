@@ -321,10 +321,21 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if next.ss == 1 {
 		d.fail(ErrSnapshotMalformed, "single shift")
 	}
-	next.mouse, next.mouseEnc = uint16(d.number(1015)), uint16(d.number(1015))
-	if next.mouse != 0 && next.mouse != 9 && next.mouse != 1000 && next.mouse != 1002 && next.mouse != 1003 ||
-		next.mouseEnc != 0 && next.mouseEnc != 1005 && next.mouseEnc != 1006 && next.mouseEnc != 1015 {
-		d.fail(ErrSnapshotMalformed, "mouse mode")
+	if version == 1 {
+		tracking, encoding := int(d.number(1015)), int(d.number(1015))
+		if tracking != 0 && mouseModeBit(tracking, mouseTrackingNumbers) == 0 ||
+			encoding != 0 && (encoding == 1016 || mouseModeBit(encoding, mouseEncodingNumbers) == 0) {
+			d.fail(ErrSnapshotMalformed, "legacy mouse mode")
+		}
+		// V1 remembered only the effective mode. Other enabled bits were
+		// already lost by that release, so preserve the single known bit.
+		next.mouse = setMouseMode(0, tracking, true, mouseTrackingNumbers)
+		next.mouseEnc = setMouseMode(0, encoding, true, mouseEncodingNumbers)
+	} else {
+		next.mouse, next.mouseEnc = uint16(d.number(0x4f)), uint16(d.number(0x4f))
+		if !validMouseModes(next.mouse) || !validMouseModes(next.mouseEnc) {
+			d.fail(ErrSnapshotMalformed, "mouse modes")
+		}
 	}
 	next.cursorStyle = cursorAppearance{shape: CursorShape(d.number(uint64(CursorBar))), blink: d.boolean()}
 	next.lastChar = rune(d.number(utf8.MaxRune))

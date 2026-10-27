@@ -40,6 +40,15 @@ func TestReleasedSnapshotV1(t *testing.T) {
 			if err := json.Unmarshal(read(stem+".json"), &want); err != nil {
 				t.Fatal(err)
 			}
+			if filepath.Base(stem) == "partial-csi" {
+				// The released writer retained only AnyEvent/URXVT. The
+				// suffix resets other modes: native behavior clears the
+				// effective selection while retaining these enabled bits.
+				want.Modes.Mouse = MouseNone
+				want.Modes.MouseEncoding = MouseEncodingDefault
+				want.Modes.MouseTrackingModes = MouseTrackingAnyEvent
+				want.Modes.MouseEncodingModes = MouseEncodingModeURXVT
+			}
 			var replies bytes.Buffer
 			term := New(1, 1, WithReply(&replies))
 			if err := term.RestoreSnapshot(read(file), SnapshotLimits{}); err != nil {
