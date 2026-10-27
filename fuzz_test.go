@@ -133,6 +133,7 @@ func fuzzOps(in []byte, maxCols, maxRows int, write func([]byte), resize func(c,
 // the state stays consistent and that Repaint, with and without the
 // scrollback, reproduces it on a fresh terminal.
 func FuzzStream(f *testing.F) {
+	f.Add([]byte("old\r\n\x1b[44mabcdefg\x1b[22JX\x00\x01\x03\x1b[?22J\x1b8Y"), uint8(3), uint8(2))
 	f.Add([]byte("\x1b[2;4r\x1b[?1049h漢\x1b[3M\x1b[?6h\x1b[5;5H"), uint8(10), uint8(4))
 	f.Add([]byte("hello world this wraps\x00\x05\x03more text é\x00\x0c\x05"), uint8(8), uint8(3))
 	f.Add([]byte("\x1b[41mcolored line that wraps around\r\n\x1b[0mnext\x00\x03\x09\x1b[3g\x1bH\tX"), uint8(9), uint8(2))

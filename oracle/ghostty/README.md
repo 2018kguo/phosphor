@@ -85,3 +85,9 @@ verify styles, links, wrapping, bounded memory and replay behavior.
 All output is evidence, including failed cases. The driver does not turn
 an engine's failed probe into a process exit: inspect the `pass`,
 `restored_view_equal` and `continued_view_equal` fields.
+
+The `scroll-clear-outside-origin` replay case exposes a shared VT limit.
+CSI 22 J can leave the physical cursor above or left of an enabled origin
+region. Both engines' VT exports clamp it back into that region, moving
+subsequent output; Ghostty's binary snapshot preserves it. The driver
+compares the physical cursor and continued text without normalizing them.

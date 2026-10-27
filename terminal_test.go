@@ -221,7 +221,7 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	cur := t.cur
 	if cur.origin {
 		// Repaint positions the cursor with origin mode on, which cannot
-		// reach outside the region (only DECRC can leave it there).
+		// reach outside the region (DECRC and scroll-and-clear can).
 		cur.wrapPending = false
 		cur.x = min(max(cur.x, t.left), t.right)
 		cur.y = min(max(cur.y, t.top), t.bot)

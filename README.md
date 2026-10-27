@@ -37,7 +37,7 @@ and why its serialization is exact.
 - **Round-trips.** `Repaint` output replayed on a fresh terminal gives
   the same screen, scrollback, cursor and modes, byte for byte under
   fuzzing, so a client can attach mid-session and a checkpoint can be
-  restored.
+  restored, subject to the limits under Serialization below.
 
 The honest caveats: it does not encode input (keys, mouse, paste are the
 caller's job; `Modes` says what the program asked for), it has no
@@ -161,6 +161,9 @@ them would change the receiving terminal's own colors.
 The preceding character used by REP (`CSI b`) is not serialized. Resuming
 a pending REP after a repaint can therefore differ from uninterrupted
 output; preserving unfinished parser input does not remove that limit.
+With origin mode enabled, repaint clamps the live cursor to the scrolling
+region. A restored cursor or scroll-and-clear (`CSI 22 J`) can leave it
+outside that region, so the next printed character can move after repaint.
 
 `Restart()` is for running a new program in the same terminal: it resets
 everything as RIS does but keeps the scrollback and the old screen in
@@ -186,8 +189,8 @@ the `Terminal`.
   mode, DECSC/DECRC, SCOSC/SCORC, 1048, IND/RI/NEL, HT/CHT/CBT with
   HTS/TBC, DECSCUSR.
 - Editing: ICH/DCH/ECH, IL/DL, SU/SD, ED/EL with the current background
-  (BCE), ED 3, DECALN, character protection (DECSCA, SPA/EPA) with
-  DECSED/DECSEL.
+  (BCE), ED 3, scroll-and-clear (ED 22), DECALN, character protection
+  (DECSCA, SPA/EPA) with DECSED/DECSEL.
 - Regions: DECSTBM, and DECLRMM/DECSLRM left and right margins with every
   operation they constrain.
 - Screens: alternate screen modes 47, 1047, 1049; scrollback fed from the
@@ -228,7 +231,7 @@ Five external suites run as ordinary Go tests (`VT_CONF_REPORT=1 go test
 | Suite | How | Pass | Fail | Deliberate difference | Out of scope |
 |---|---|---|---|---|---|
 | libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 730 | 0 | 28 | 195 |
-| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 458 | 0 | 7 | 84 |
+| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 459 | 0 | 6 | 84 |
 | wezterm `term/src/test` | translated cases | 128 | 0 | 6 | 4 |
 | esctest2 (xterm) | independently written cases (the GPL source is not used) | 410 | 0 | 12 | 215 |
 | alacritty ref tests | recordings and reference grids, per line | 1507 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |

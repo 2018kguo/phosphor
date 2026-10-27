@@ -399,7 +399,7 @@ func replayChecks() {
 	edge := []struct {
 		Name          string
 		Before, After []byte
-	}{{"mid-csi", []byte("\x1b[3"), []byte("1mX")}, {"mid-osc", []byte("\x1b]0;hello"), []byte(" world\x07X")}, {"mid-utf8", []byte{0xf0, 0x9f}, []byte{0x98, 0x80, 'X'}}, {"inactive-main-screen", []byte("MAIN\x1b[?1049h\x1b[HALT"), []byte("\x1b[?1049l!")}, {"saved-cursor", []byte("\x1b[2;3H\x1b7\x1b[1;1HA"), []byte("\x1b8B")}, {"pending-wrap", []byte("123456789012"), []byte("X")}, {"origin-and-margins", []byte("\x1b[2;4r\x1b[?6h\x1b[1;1HO"), []byte("\x1b[1;1HX")}}
+	}{{"mid-csi", []byte("\x1b[3"), []byte("1mX")}, {"mid-osc", []byte("\x1b]0;hello"), []byte(" world\x07X")}, {"mid-utf8", []byte{0xf0, 0x9f}, []byte{0x98, 0x80, 'X'}}, {"inactive-main-screen", []byte("MAIN\x1b[?1049h\x1b[HALT"), []byte("\x1b[?1049l!")}, {"saved-cursor", []byte("\x1b[2;3H\x1b7\x1b[1;1HA"), []byte("\x1b8B")}, {"pending-wrap", []byte("123456789012"), []byte("X")}, {"origin-and-margins", []byte("\x1b[2;4r\x1b[?6h\x1b[1;1HO"), []byte("\x1b[1;1HX")}, {"scroll-clear-outside-origin", []byte("A\x1b[2;4r\x1b[?69h\x1b[3;8s\x1b[?6hB\x1b[22J"), []byte("X")}}
 	for _, c := range edge {
 		for _, name := range []string{"phosphor", "ghostty"} {
 			for _, kind := range []string{"snapshot", "ansi-attach", "ansi-attach-with-continuation"} {

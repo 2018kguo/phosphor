@@ -1665,6 +1665,48 @@ func (t *Terminal) eraseDisplay(mode int, selective bool) {
 		if !selective {
 			t.ClearScrollback()
 		}
+	case 22:
+		t.scrollClear()
+	}
+}
+
+// scrollClear moves written rows into history, regardless of scrolling
+// margins or protection. Trailing empty rows stay on screen. New rows have
+// the default background; the cursor keeps its pen and input modes.
+func (t *Terminal) scrollClear() {
+	scr := t.screen()
+	n := t.rows
+	for n > 0 {
+		written := false
+		for _, c := range scr[n-1] {
+			if c.R != 0 || c.Bg != 0 {
+				written = true
+				break
+			}
+		}
+		if written {
+			break
+		}
+		n--
+	}
+	if n == 0 {
+		return
+	}
+	if !t.altActive {
+		for y, row := range scr[:n] {
+			t.pushScrollback(row, t.mainWrap != nil && t.mainWrap[y], rowAt(scr, y+1))
+		}
+	}
+	// rotate normally erases with the pen's background. Scroll-and-clear
+	// adds fresh rows instead, without changing subsequent printed colors.
+	bg := t.cur.pen.Bg
+	t.cur.pen.Bg = 0
+	t.rotate(0, t.rows-1, n)
+	t.cur.pen.Bg = bg
+	if t.cur.y < n {
+		t.cur.x, t.cur.y = 0, 0
+	} else {
+		t.cur.y -= n
 	}
 }
 
