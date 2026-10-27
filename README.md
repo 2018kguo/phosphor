@@ -136,7 +136,9 @@ while a program draws a frame it wants shown at once (mode 2026).
 `Palette().Resolve(color, background)` turns a cell color into RGB.
 
 Applications hosting many sessions can call `Compact()` after output
-settles. It frees completely zeroed rows and unused temporary buffers,
+settles. It frees completely zeroed rows, unused Unicode and hyperlink
+storage, and temporary buffers. Clusters needed by REP and links held by
+saved cursors remain live; unchanged live tables stay in place. It does so
 without changing the screen, scrollback, input modes or unfinished parser
 state. Later output can allocate rows again. It is an explicit idle-time
 tradeoff; ordinary writes do not run it.

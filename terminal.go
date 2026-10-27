@@ -61,8 +61,8 @@ type savedCursor struct {
 }
 
 // savedCursors is allocated on the first save and reused until a full
-// reset. A shell prompt pays for none of the three cursor slots; repeated
-// saves and alternate-screen switches do not allocate another block.
+// reset or Compact finds every slot invalid. A shell prompt pays for none
+// of the three slots; repeated active saves and screen switches reuse it.
 type savedCursors struct {
 	screen    [2]savedCursor // DECSC slots: main, alternate
 	alternate savedCursor    // cursor saved by ?1049h
@@ -2105,23 +2105,33 @@ func (t *Terminal) compactLinks() {
 			}
 			*l = remap[i]
 		}
-		for _, scr := range [][][]cell{t.main, t.alt} {
-			for _, row := range scr {
-				for i := range row {
-					ref(&row[i].L)
-				}
-			}
-		}
-		ref(&t.cur.pen.L)
-		if t.saved != nil {
-			for i := range t.saved.screen {
-				ref(&t.saved.screen[i].pen.L)
-			}
-			ref(&t.saved.alternate.pen.L)
-		}
+		t.visitLinkRefs(ref)
 		x.links = kept
 	}
 	x.linkCap = max(16, 2*len(x.links))
+}
+
+// visitLinkRefs covers the cells and pens which can still supply a link.
+// An invalid saved cursor cannot restore its pen; clear its old index so
+// that it cannot become a dangling reference after its table is collected.
+func (t *Terminal) visitLinkRefs(ref func(*uint16)) {
+	for _, scr := range [][][]cell{t.main, t.alt} {
+		for _, row := range scr {
+			for i := range row {
+				ref(&row[i].L)
+			}
+		}
+	}
+	ref(&t.cur.pen.L)
+	if t.saved != nil {
+		for _, saved := range [...]*savedCursor{&t.saved.screen[0], &t.saved.screen[1], &t.saved.alternate} {
+			if saved.valid {
+				ref(&saved.pen.L)
+			} else {
+				saved.pen.L = 0
+			}
+		}
+	}
 }
 
 // link returns a cell's hyperlink target ("params;uri"), or "".
@@ -2185,17 +2195,23 @@ func (t *Terminal) compactClusters() {
 			}
 			*r = remap[i]
 		}
-		for _, scr := range [][][]cell{t.main, t.alt} {
-			for _, row := range scr {
-				for i := range row {
-					ref(&row[i].R)
-				}
-			}
-		}
-		ref(&t.lastChar)
+		t.visitClusterRefs(ref)
 		x.clusters = kept
 	}
 	x.clusterCap = max(64, 2*len(x.clusters))
+}
+
+// The last printed cluster remains live after erase: REP can print it
+// again even when neither screen contains it.
+func (t *Terminal) visitClusterRefs(ref func(*rune)) {
+	for _, scr := range [][][]cell{t.main, t.alt} {
+		for _, row := range scr {
+			for i := range row {
+				ref(&row[i].R)
+			}
+		}
+	}
+	ref(&t.lastChar)
 }
 
 // --- scrollback ---
