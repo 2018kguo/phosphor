@@ -73,13 +73,15 @@ func (t *Terminal) checkInvariants() string {
 	if t.cur.wrapPending && (t.cur.x != t.cols-1 && t.cur.x != t.right || !t.autowrap) {
 		fail("pending wrap at x=%d (autowrap %v)", t.cur.x, t.autowrap)
 	}
-	for i, s := range t.saved {
-		if s.valid {
-			inBounds(fmt.Sprintf("saved[%d]", i), s.cursor)
+	if t.saved != nil {
+		for i, s := range t.saved.screen {
+			if s.valid {
+				inBounds(fmt.Sprintf("saved[%d]", i), s.cursor)
+			}
 		}
-	}
-	if t.saved1049.valid {
-		inBounds("saved1049", t.saved1049.cursor)
+		if t.saved.alternate.valid {
+			inBounds("saved1049", t.saved.alternate.cursor)
+		}
 	}
 	if t.top < 0 || t.top > t.bot || t.bot >= t.rows {
 		fail("region %d-%d", t.top, t.bot)

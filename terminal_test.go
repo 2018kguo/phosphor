@@ -215,8 +215,8 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	if t.alt != nil {
 		dump("alt", t.alt, t.altWrap)
 	}
-	if t.altActive && t.saved1049.valid {
-		fmt.Fprintf(&b, "saved1049 %d,%d\n", t.saved1049.x, t.saved1049.y)
+	if t.altActive && t.saved != nil && t.saved.alternate.valid {
+		fmt.Fprintf(&b, "saved1049 %d,%d\n", t.saved.alternate.x, t.saved.alternate.y)
 	}
 	cur := t.cur
 	if cur.origin {
@@ -233,7 +233,10 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	if t.altActive {
 		slot = 1
 	}
-	s := t.saved[slot]
+	var s savedCursor
+	if t.saved != nil {
+		s = t.saved.screen[slot]
+	}
 	if s.valid {
 		s.wrapPending = false
 	}

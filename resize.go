@@ -36,15 +36,17 @@ func (t *Terminal) Resize(cols, rows int) {
 
 	// The positions on each screen.
 	var mainPts, altPts []*cursor
-	if t.saved[0].valid {
-		mainPts = append(mainPts, &t.saved[0].cursor)
-	}
-	if t.saved[1].valid {
-		altPts = append(altPts, &t.saved[1].cursor)
+	if t.saved != nil {
+		if t.saved.screen[0].valid {
+			mainPts = append(mainPts, &t.saved.screen[0].cursor)
+		}
+		if t.saved.screen[1].valid {
+			altPts = append(altPts, &t.saved.screen[1].cursor)
+		}
 	}
 	if t.altActive {
-		if t.saved1049.valid {
-			mainPts = append(mainPts, &t.saved1049.cursor)
+		if t.saved != nil && t.saved.alternate.valid {
+			mainPts = append(mainPts, &t.saved.alternate.cursor)
 		}
 		altPts = append(altPts, &t.cur)
 	} else {
@@ -157,8 +159,10 @@ func (t *Terminal) Resize(cols, rows int) {
 	t.top, t.bot, t.left, t.right = 0, rows-1, 0, cols-1
 	// Saved cursors of a screen not in use (the alternate one's DECSC
 	// slot) are just kept in bounds.
-	for _, c := range []*cursor{&t.saved[0].cursor, &t.saved[1].cursor, &t.saved1049.cursor} {
-		t.place(c, point{c.x, c.y, c.wrapPending})
+	if t.saved != nil {
+		for _, c := range []*cursor{&t.saved.screen[0].cursor, &t.saved.screen[1].cursor, &t.saved.alternate.cursor} {
+			t.place(c, point{c.x, c.y, c.wrapPending})
+		}
 	}
 	t.resizeTabs(oldCols)
 }

@@ -60,6 +60,14 @@ type savedCursor struct {
 	valid bool
 }
 
+// savedCursors is allocated on the first save and reused until a full
+// reset. A shell prompt pays for none of the three cursor slots; repeated
+// saves and alternate-screen switches do not allocate another block.
+type savedCursors struct {
+	screen    [2]savedCursor // DECSC slots: main, alternate
+	alternate savedCursor    // cursor saved by ?1049h
+}
+
 // Terminal is a VT/xterm screen model: write a program's output to it and
 // read back what a terminal would show. Create one with New.
 //
@@ -75,16 +83,15 @@ type Terminal struct {
 	mainWrap, altWrap []bool
 	altActive         bool
 	cur               cursor
-	saved             [2]savedCursor // DECSC slots: main, alt
-	saved1049         savedCursor    // cursor saved by ?1049h
-	top, bot          int            // scroll region, inclusive
-	left, right       int            // left and right margins, inclusive
-	lrmm              bool           // DECLRMM: left and right margins enabled
-	protISO           bool           // protection was last set by SPA (ISO), not DECSCA
-	ss                uint8          // pending single shift (2 or 3)
-	x                 *extra         // state few programs use, nil until one does
-	cfg               *config        // options and palette changes, nil if none
-	dirty             *dirtySet      // damage, nil until ClearDirty is first called
+	saved             *savedCursors
+	top, bot          int       // scroll region, inclusive
+	left, right       int       // left and right margins, inclusive
+	lrmm              bool      // DECLRMM: left and right margins enabled
+	protISO           bool      // protection was last set by SPA (ISO), not DECSCA
+	ss                uint8     // pending single shift (2 or 3)
+	x                 *extra    // state few programs use, nil until one does
+	cfg               *config   // options and palette changes, nil if none
+	dirty             *dirtySet // damage, nil until ClearDirty is first called
 
 	// modes
 	autowrap     bool
@@ -668,7 +675,14 @@ func (t *Terminal) saveCursor() {
 	if t.altActive {
 		i = 1
 	}
-	t.saved[i] = savedCursor{cursor: t.cur, valid: true}
+	t.cursorSaves().screen[i] = savedCursor{cursor: t.cur, valid: true}
+}
+
+func (t *Terminal) cursorSaves() *savedCursors {
+	if t.saved == nil {
+		t.saved = &savedCursors{}
+	}
+	return t.saved
 }
 
 func (t *Terminal) restoreCursor() {
@@ -676,12 +690,11 @@ func (t *Terminal) restoreCursor() {
 	if t.altActive {
 		i = 1
 	}
-	s := t.saved[i]
-	if !s.valid {
+	if t.saved == nil || !t.saved.screen[i].valid {
 		t.cur = cursor{}
 		return
 	}
-	t.setCursor(s.cursor)
+	t.setCursor(t.saved.screen[i].cursor)
 }
 
 // setCursor installs a saved cursor, keeping it valid for the current
@@ -912,7 +925,9 @@ func (t *Terminal) softReset() {
 	t.cur.pen = cell{}
 	t.cur.g, t.cur.gl, t.ss = [4]bool{}, 0, 0
 	t.cur.wrapPending = false
-	t.saved[0], t.saved[1] = savedCursor{}, savedCursor{}
+	if t.saved != nil {
+		t.saved.screen = [2]savedCursor{}
+	}
 }
 
 // modeValue reports the state of a DEC private mode XTSAVE can save, and
@@ -1032,12 +1047,15 @@ func (t *Terminal) decMode(mode int, on bool) {
 	case 1049:
 		if on {
 			if !t.altActive {
-				t.saved1049 = savedCursor{cursor: t.cur, valid: true}
+				t.cursorSaves().alternate = savedCursor{cursor: t.cur, valid: true}
 			}
 			t.setAlt(true, true)
 			t.clearScreen()
 		} else if t.altActive {
-			saved := t.saved1049
+			var saved savedCursor
+			if t.saved != nil {
+				saved = t.saved.alternate
+			}
 			t.setAlt(false, true)
 			if saved.valid {
 				t.setCursor(saved.cursor)
@@ -1060,7 +1078,9 @@ func (t *Terminal) setAlt(on, clearOnExit bool) {
 			t.alt = make([][]cell, t.rows)
 		}
 	} else {
-		t.saved1049.valid = false
+		if t.saved != nil {
+			t.saved.alternate.valid = false
+		}
 		if clearOnExit || t.altBlank() {
 			t.alt, t.altWrap = nil, nil
 		}
@@ -2040,10 +2060,12 @@ func (t *Terminal) compactLinks() {
 			}
 		}
 		ref(&t.cur.pen.L)
-		for i := range t.saved {
-			ref(&t.saved[i].pen.L)
+		if t.saved != nil {
+			for i := range t.saved.screen {
+				ref(&t.saved.screen[i].pen.L)
+			}
+			ref(&t.saved.alternate.pen.L)
 		}
-		ref(&t.saved1049.pen.L)
 		x.links = kept
 	}
 	x.linkCap = max(16, 2*len(x.links))

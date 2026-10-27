@@ -281,8 +281,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.altActive {
 		// Enter the alternate screen from the main screen's saved cursor so
 		// leaving it later restores the right position.
-		if t.saved1049.valid {
-			b = appendCUP(b, t.saved1049.y, t.saved1049.x)
+		if t.saved != nil && t.saved.alternate.valid {
+			b = appendCUP(b, t.saved.alternate.y, t.saved.alternate.x)
 			b = append(b, "\x1b[?1049h"...)
 		} else {
 			b = append(b, "\x1b[?1047h"...)
@@ -326,7 +326,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.altActive {
 		slot = 1
 	}
-	if s := t.saved[slot]; s.valid {
+	if t.saved != nil && t.saved.screen[slot].valid {
+		s := t.saved.screen[slot]
 		// Origin mode homes the cursor, so it goes first. The region and
 		// margins are not set yet, so the position is absolute even then
 		// (a saved cursor may lie outside the region set since).
