@@ -599,7 +599,17 @@ func (t *Terminal) appendScreen(b []byte, scr [][]cell, wrap []bool, open, addre
 
 // rowText returns a row's characters with trailing blanks removed.
 func (t *Terminal) rowText(row []cell) string {
+	end := len(row)
+	for end > 0 {
+		r := row[end-1].R
+		if r != 0 && r != ' ' && r != spacerHead {
+			break
+		}
+		end--
+	}
+	row = row[:end]
 	var sb strings.Builder
+	sb.Grow(len(row))
 	for i := range row {
 		switch r := row[i].R; {
 		case uint32(r-1) < utf8.RuneSelf-1:
