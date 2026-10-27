@@ -222,10 +222,13 @@ func (e *snapshotEncoder) cursor(c cursor) {
 	e.u(uint64(c.y))
 	e.style(c.pen)
 	var flags uint64
-	for i, on := range []bool{c.wrapPending, c.origin, c.g[0], c.g[1], c.g[2], c.g[3]} {
+	for i, on := range []bool{c.wrapPending, c.origin} {
 		if on {
 			flags |= 1 << uint(i)
 		}
+	}
+	for i, g := range c.g {
+		flags |= uint64(g) << uint(2+2*i)
 	}
 	e.u(flags)
 	e.u(uint64(c.gl))
@@ -296,7 +299,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if binary.LittleEndian.Uint32(data[20:]) != crc32.Checksum(payload, snapshotCRC) {
 		return fmt.Errorf("%w: checksum", ErrSnapshotMalformed)
 	}
-	d := snapshotDecoder{b: payload, remaining: limits.MaxBytes, section: "terminal"}
+	d := snapshotDecoder{b: payload, remaining: limits.MaxBytes, section: "terminal", version: version}
 	d.charge(1, int(unsafe.Sizeof(Terminal{})))
 	var next Terminal
 	next.cols, next.rows = d.integer(), d.integer()
@@ -463,7 +466,13 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		next.sb = make([][]byte, n)
 		for i := range next.sb {
 			b := d.blob(int(^uint(0) >> 1))
-			if d.err == nil && !walkHistoryText(b, nil) {
+			valid := false
+			if version == 1 {
+				valid = walkHistoryText(b, nil)
+			} else {
+				valid = validateHistoryLine(b)
+			}
+			if d.err == nil && !valid {
 				d.fail(ErrSnapshotMalformed, "history formatter syntax")
 			}
 			if d.err != nil {
@@ -530,6 +539,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 
 type snapshotDecoder struct {
 	b         []byte
+	version   uint16
 	remaining int
 	section   string
 	err       error
@@ -624,10 +634,21 @@ func snapshotColor(c Color) bool {
 }
 func (d *snapshotDecoder) cursor(t *Terminal) cursor {
 	c := cursor{x: d.integer(), y: d.integer(), pen: d.style(t)}
-	flags := d.number(63)
+	maximum := uint64(1023)
+	if d.version == 1 {
+		maximum = 63
+	}
+	flags := d.number(maximum)
 	c.wrapPending, c.origin = flags&1 != 0, flags&2 != 0
 	for i := range c.g {
-		c.g[i] = flags&(1<<uint(i+2)) != 0
+		if d.version == 1 {
+			c.g[i] = charset(flags >> uint(i+2) & 1)
+		} else {
+			c.g[i] = charset(flags >> uint(2+2*i) & 3)
+			if c.g[i] > charsetBritish {
+				d.fail(ErrSnapshotMalformed, "character set")
+			}
+		}
 	}
 	c.gl = uint8(d.number(3))
 	if c.x >= t.cols || c.y >= t.rows {

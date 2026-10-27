@@ -361,10 +361,7 @@ func appendMode(b []byte, mode int, on bool) []byte {
 
 func appendCharsets(b []byte, c cursor) []byte {
 	for i, g := range c.g {
-		b = append(b, 0x1b, "()*+"[i], 'B')
-		if g {
-			b[len(b)-1] = '0'
-		}
+		b = append(b, 0x1b, "()*+"[i], [...]byte{'B', '0', 'A'}[g])
 	}
 	return append(b, [...]string{"\x0f", "\x0e", "\x1bn", "\x1bo"}[c.gl]...)
 }
@@ -426,26 +423,34 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	}
 	b = t.appendScreen(b, t.main, t.mainWrap, sbOpen, false, &usedSave)
 	if t.altActive {
-		if usedSave {
+		if usedSave || t.saved != nil && t.saved.screen[0].valid {
 			b = t.appendSavedCursor(b, 0, false)
 			usedSave = false
 		}
 		// Enter the alternate screen from the main screen's saved cursor so
 		// leaving it later restores the right position.
 		if t.saved != nil && t.saved.alternate.valid {
-			b = appendCUP(b, t.saved.alternate.y, t.saved.alternate.x)
+			s := t.saved.alternate.cursor
+			b = appendMode(b, 6, s.origin)
+			b = appendCUP(b, s.y, s.x)
+			b = t.appendSGR(b, s.pen)
+			b = appendProtect(b, s.pen.A&AttrProtected != 0)
+			if t.link(s.pen.E) != "" {
+				b = t.appendLink(b, s.pen.E)
+			}
+			b = appendCharsets(b, s)
 			b = append(b, "\x1b[?1049h"...)
 		} else {
 			b = append(b, "\x1b[?1047h"...)
 		}
-		b = append(b, "\x1b[H\x1b[2J"...)
+		b = append(b, "\x1b[?6l\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[H\x1b[2J"...)
 		b = t.appendScreen(b, t.alt, t.altWrap, false, true, &usedSave)
 	} else if t.alt != nil {
 		// An alternate screen left with mode 47 keeps its contents.
 		b = append(b, "\x1b[?47h\x1b[H\x1b[2J"...)
 		altUsedSave := false
 		b = t.appendScreen(b, t.alt, t.altWrap, false, true, &altUsedSave)
-		if altUsedSave {
+		if altUsedSave || t.saved != nil && t.saved.screen[1].valid {
 			b = t.appendSavedCursor(b, 1, false)
 		}
 		b = append(b, "\x1b[?47l"...)

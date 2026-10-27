@@ -39,13 +39,21 @@ const (
 	maxLogicalLine         = 32 << 10
 )
 
+type charset uint8
+
+const (
+	charsetASCII charset = iota
+	charsetGraphics
+	charsetBritish
+)
+
 type cursor struct {
 	x, y        int
 	pen         cell
 	wrapPending bool
 	origin      bool
-	g           [4]bool // G0-G3 designated as DEC special graphics
-	gl          uint8   // which of G0-G3 is invoked into GL
+	g           [4]charset // G0-G3 designated character sets
+	gl          uint8      // which of G0-G3 is invoked into GL
 }
 
 type savedCursor struct {
@@ -382,6 +390,11 @@ func (t *Terminal) c1(r rune) {
 }
 
 func (t *Terminal) printRune(r rune) {
+	// A single shift applies to the next character, including a Unicode
+	// combining mark. National character sets only translate GL bytes.
+	if r > 0x7f {
+		t.ss = 0
+	}
 	if t.grapheme && r > 255 && t.extendGrapheme(r) {
 		return
 	}
@@ -561,7 +574,13 @@ func (t *Terminal) escDispatch(c byte) {
 	switch t.inter {
 	case 0:
 	case '(', ')', '*', '+':
-		t.cur.g[t.inter-'('] = c == '0'
+		g := charsetASCII
+		if c == '0' {
+			g = charsetGraphics
+		} else if c == 'A' {
+			g = charsetBritish
+		}
+		t.cur.g[t.inter-'('] = g
 		return
 	case '#':
 		if c == '8' {
@@ -911,10 +930,14 @@ func (t *Terminal) softReset() {
 	t.appKeypad = false
 	t.top, t.bot, t.left, t.right = 0, t.rows-1, 0, t.cols-1
 	t.cur.pen = cell{}
-	t.cur.g, t.cur.gl, t.ss = [4]bool{}, 0, 0
+	t.cur.g, t.cur.gl, t.ss = [4]charset{}, 0, 0
 	t.cur.wrapPending = false
 	if t.saved != nil {
-		t.saved.screen = [2]savedCursor{}
+		slot := 0
+		if t.altActive {
+			slot = 1
+		}
+		t.saved.screen[slot] = savedCursor{}
 	}
 }
 
@@ -1176,9 +1199,9 @@ var decGraphics = [...]rune{
 	'⎻', '─', '⎼', '⎽', '├', '┤', '┴', '┬', '│', '≤', '≥', 'π', '≠', '£', '·',
 }
 
-// charset returns whether the character set for the next printed
-// character is DEC special graphics, consuming a single shift.
-func (t *Terminal) graphics() bool {
+// characterSet consumes a single shift when choosing the next character's
+// mapping. REP uses the designation in effect when the repeat runs.
+func (t *Terminal) characterSet() charset {
 	if t.ss != 0 {
 		g := t.cur.g[t.ss]
 		t.ss = 0
@@ -1191,7 +1214,11 @@ func (t *Terminal) print(r rune, w int) {
 	// REP reprints the input scalar with the charset in effect when REP
 	// runs. Saving the mapped box character would ignore later SI/SO or SCS.
 	t.lastChar = r
-	if t.graphics() && r >= 0x5f && r <= 0x7e {
+	g := t.characterSet()
+	if g == charsetBritish && r == '#' {
+		r = '£'
+	}
+	if g == charsetGraphics && r >= 0x5f && r <= 0x7e {
 		if r == 0x5f {
 			r = ' '
 		} else {
@@ -1332,7 +1359,7 @@ func (t *Terminal) combine(r rune) {
 // cells directly; anything else goes through print.
 func (t *Terminal) printASCII(p []byte) {
 	for len(p) > 0 {
-		if t.cur.g[t.cur.gl] || t.ss != 0 || t.insert || t.cur.wrapPending || !t.autowrap {
+		if t.cur.g[t.cur.gl] != charsetASCII || t.ss != 0 || t.insert || t.cur.wrapPending || !t.autowrap {
 			t.print(rune(p[0]), 1)
 			p = p[1:]
 			continue
@@ -2068,6 +2095,19 @@ func (t *Terminal) oscDispatch() {
 			t.setLink("")
 		} else {
 			t.setLink(params + ";" + uri)
+		}
+	case len(s) >= 5 && string(s[:4]) == "133;":
+		// Shell prompt A/N commands first request a fresh line, as L
+		// does on its own. Other prompt markers do not change text.
+		if (s[4] == 'L' || s[4] == 'A' || s[4] == 'N') && (len(s) == 5 || s[5] == ';') {
+			left := 0
+			if t.cur.x >= t.left {
+				left = t.left
+			}
+			if t.cur.x != left {
+				t.carriageReturn()
+				t.index()
+			}
 		}
 	default:
 		t.oscColor(s)

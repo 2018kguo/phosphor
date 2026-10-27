@@ -458,7 +458,7 @@ var ghostty3Cases = append([]confCase{
 		in: "\x1b[1m\x1b[1\"q\x1b(0\x1b[!p",
 		check: g3all(
 			g3is("pen not default", func(t *Terminal) bool { return t.cur.pen == cell{} }),
-			g3is("G0 still DEC special graphics", func(t *Terminal) bool { return !t.cur.g[0] }))},
+			g3is("G0 still DEC special graphics", func(t *Terminal) bool { return t.cur.g[0] == charsetASCII }))},
 	{name: "softReset ends ISO protection for erase", cols: 10, rows: 10,
 		in: "\x1bVA\x1bW\x1b[!p\x1b[2J", screen: scr(""), gap: g3gapProt},
 	{name: "softReset palette", cols: 10, rows: 10,
