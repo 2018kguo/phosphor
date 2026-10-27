@@ -48,7 +48,7 @@ func TestCompactReleasesDeadPools(t *testing.T) {
 	original, compacted := New(80, 24), New(80, 24)
 	original.Write(input)
 	compacted.Write(input)
-	if compacted.x == nil || len(compacted.x.links) == 0 || len(compacted.x.clusters) == 0 {
+	if compacted.x == nil || len(compacted.x.rare) == 0 || len(compacted.x.clusters) == 0 {
 		t.Fatal("trace did not populate both pools")
 	}
 	compacted.ClearDirty()
@@ -127,11 +127,11 @@ func TestCompactDoesNotRebuildLivePools(t *testing.T) {
 	term := New(12, 4)
 	term.Write([]byte("\x1b]8;;https://live\x1b\\á\x1b7"))
 	term.Compact()
-	cluster, link := &term.x.clusters[0], &term.x.links[0]
+	cluster, link := &term.x.clusters[0], &term.x.rare[0]
 	if n := testing.AllocsPerRun(100, term.Compact); n != 0 {
 		t.Fatalf("repeated compaction of unchanged live pools allocated %g times", n)
 	}
-	if cluster != &term.x.clusters[0] || link != &term.x.links[0] {
+	if cluster != &term.x.clusters[0] || link != &term.x.rare[0] {
 		t.Fatal("unchanged live pool storage was replaced")
 	}
 }
@@ -216,12 +216,12 @@ func TestCompactLargeLivePools(t *testing.T) {
 	}
 	term.ClearDirty()
 	before := term.Repaint(true)
-	cluster, link := &term.x.clusters[0], &term.x.links[0]
+	cluster, link := &term.x.clusters[0], &term.x.rare[0]
 	term.Compact()
 	if !bytes.Equal(before, term.Repaint(true)) || term.Dirty() {
 		t.Fatal("large liveness map changed the rendered state")
 	}
-	if cluster != &term.x.clusters[0] || link != &term.x.links[0] {
+	if cluster != &term.x.clusters[0] || link != &term.x.rare[0] {
 		t.Fatal("large unchanged pools were rebuilt")
 	}
 }

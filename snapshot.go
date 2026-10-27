@@ -29,7 +29,7 @@ var (
 
 const snapshotMagic = "PHOSNP\x00\x00"
 const snapshotHeader = 24
-const snapshotVersion = 1
+const snapshotVersion = 2
 
 var snapshotCRC = crc32.MakeTable(crc32.Castagnoli)
 
@@ -63,8 +63,8 @@ func (t *Terminal) Snapshot() []byte {
 		for _, c := range x.clusters {
 			n += len(c.text) + 8
 		}
-		for _, s := range x.links {
-			n += len(s) + 4
+		for _, s := range x.rare {
+			n += len(s.link) + 9
 		}
 		n += 10*len(x.tabs) + 5*len(x.savedModes)
 	}
@@ -127,9 +127,10 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 		e.u(uint64(c.width))
 		e.u(uint64(c.joinModes))
 	}
-	e.u(uint64(len(x.links)))
-	for _, s := range x.links {
-		e.blob([]byte(s))
+	e.u(uint64(len(x.rare)))
+	for _, s := range x.rare {
+		e.blob([]byte(s.link))
+		e.u(uint64(s.underline))
 	}
 	e.u(uint64(len(x.tabs)))
 	for _, bits := range x.tabs {
@@ -213,7 +214,7 @@ func (e *snapshotEncoder) style(c cell) {
 	e.u(uint64(c.Fg))
 	e.u(uint64(c.Bg))
 	e.u(uint64(c.A))
-	e.u(uint64(c.L))
+	e.u(uint64(c.E))
 }
 func (e *snapshotEncoder) cursor(c cursor) {
 	e.u(uint64(c.x))
@@ -283,7 +284,8 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if len(data) < snapshotHeader || string(data[:8]) != snapshotMagic {
 		return fmt.Errorf("%w: header", ErrSnapshotMalformed)
 	}
-	if binary.LittleEndian.Uint16(data[8:]) != snapshotVersion {
+	version := binary.LittleEndian.Uint16(data[8:])
+	if version != 1 && version != snapshotVersion {
 		return ErrSnapshotVersion
 	}
 	if binary.LittleEndian.Uint16(data[10:]) != 0 || binary.LittleEndian.Uint64(data[12:]) != uint64(len(data)-snapshotHeader) {
@@ -353,16 +355,22 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 		x.clusterCap = max(64, len(x.clusters)*2)
 	}
-	n = d.count(0xffff, int(unsafe.Sizeof("")))
+	n = d.count(0xffff, int(unsafe.Sizeof(cellExtra{})))
 	if n > 0 {
-		x.links = make([]string, n)
-		for i := range x.links {
-			x.links[i] = d.text(maxOSC)
-			if !snapshotOSCText(x.links[i]) {
+		x.rare = make([]cellExtra, n)
+		for i := range x.rare {
+			x.rare[i].link = d.text(maxOSC)
+			if !snapshotOSCText(x.rare[i].link) {
 				d.fail(ErrSnapshotMalformed, "hyperlink terminator")
 			}
+			if version >= 2 {
+				x.rare[i].underline = Color(d.number(0xffffffff))
+				if !snapshotColor(x.rare[i].underline) {
+					d.fail(ErrSnapshotMalformed, "underline color")
+				}
+			}
 		}
-		x.linkCap = max(16, len(x.links)*2)
+		x.rareCap = min(0xffff, max(16, len(x.rare)*2))
 	}
 	n = d.count((next.cols+63)/64, 8)
 	if n > 0 {
@@ -390,7 +398,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 			x.savedModes[i] = s
 		}
 	}
-	if x.clusters != nil || x.links != nil || x.tabs != nil || x.savedModes != nil {
+	if x.clusters != nil || x.rare != nil || x.tabs != nil || x.savedModes != nil {
 		if d.charge(1, int(unsafe.Sizeof(extra{}))) {
 			next.x = new(extra)
 			*next.x = x
@@ -567,15 +575,18 @@ func (d *snapshotDecoder) rgb() RGB {
 	return RGB{b[0], b[1], b[2]}
 }
 func (d *snapshotDecoder) style(t *Terminal) cell {
-	c := cell{Fg: Color(d.number(0xffffffff)), Bg: Color(d.number(0xffffffff)), A: Attr(d.number(0xffff)), L: uint16(d.number(0xffff))}
-	validColor := func(c Color) bool { return c == 0 || c>>24 == 1 && c&0x00ffff00 == 0 || c>>24 == 2 }
-	if !validColor(c.Fg) || !validColor(c.Bg) || c.A & ^(AttrBold|AttrFaint|AttrItalic|AttrBlink|AttrInverse|AttrHidden|AttrStrikethrough|AttrOverline|AttrProtected|ulMask) != 0 || (c.A&ulMask)>>ulShift > Attr(UnderlineDashed) {
+	c := cell{Fg: Color(d.number(0xffffffff)), Bg: Color(d.number(0xffffffff)), A: Attr(d.number(0xffff)), E: uint16(d.number(0xffff))}
+	if !snapshotColor(c.Fg) || !snapshotColor(c.Bg) || c.A & ^(AttrBold|AttrFaint|AttrItalic|AttrBlink|AttrInverse|AttrHidden|AttrStrikethrough|AttrOverline|AttrProtected|ulMask) != 0 || (c.A&ulMask)>>ulShift > Attr(UnderlineDashed) {
 		d.fail(ErrSnapshotMalformed, "cell style")
 	}
-	if c.L != 0 && (t.x == nil || int(c.L) > len(t.x.links)) {
-		d.fail(ErrSnapshotMalformed, "hyperlink reference")
+	if c.E != 0 && (t.x == nil || int(c.E) > len(t.x.rare)) {
+		d.fail(ErrSnapshotMalformed, "cell attribute reference")
 	}
 	return c
+}
+
+func snapshotColor(c Color) bool {
+	return c == 0 || c>>24 == 1 && c&0x00ffff00 == 0 || c>>24 == 2
 }
 func (d *snapshotDecoder) cursor(t *Terminal) cursor {
 	c := cursor{x: d.integer(), y: d.integer(), pen: d.style(t)}

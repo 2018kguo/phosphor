@@ -82,9 +82,9 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 func snapshotCursorsEqual(a, b *Terminal, left, right cursor) bool {
 	// Pool collection can renumber IDs at different times after restore.
 	// Compare the referenced targets while keeping every cursor flag exact.
-	leftLink, rightLink := a.link(left.pen.L), b.link(right.pen.L)
-	left.pen.L, right.pen.L = 0, 0
-	return left == right && leftLink == rightLink
+	leftExtra, rightExtra := a.extraAt(left.pen.E), b.extraAt(right.pen.E)
+	left.pen.E, right.pen.E = 0, 0
+	return left == right && leftExtra == rightExtra
 }
 
 func snapshotScene() string {
@@ -260,7 +260,7 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 		"wide-head":         func(t *Terminal) { t.row(0)[0].R = '漢' },
 		"cell-scalar":       func(t *Terminal) { t.row(0)[0].R = 0xd800 },
 		"cluster-reference": func(t *Terminal) { t.row(0)[0].R = clusterBase },
-		"link-reference":    func(t *Terminal) { t.cur.pen.L = 1 },
+		"link-reference":    func(t *Terminal) { t.cur.pen.E = 1 },
 		"color":             func(t *Terminal) { t.cur.pen.Fg = Color(0x1000100) },
 		"attribute":         func(t *Terminal) { t.cur.pen.A = 1 << 10 },
 		"tabs":              func(t *Terminal) { t.ext().tabs = []uint64{0, 0} },
@@ -275,7 +275,8 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 		"palette-slot":      func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 259}}} },
 		"palette-duplicate": func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 1}, {i: 1}}} },
 		"title-command":     func(t *Terminal) { t.title = "title\x1b[c" },
-		"link-command":      func(t *Terminal) { t.ext().links = []string{";https://example.com\a"} },
+		"link-command":      func(t *Terminal) { t.ext().rare = []cellExtra{{link: ";https://example.com\a"}} },
+		"underline-color":   func(t *Terminal) { t.ext().rare = []cellExtra{{underline: Color(3 << 24)}} },
 		"history-query":     func(t *Terminal) { t.sb = [][]byte{[]byte("\x1b[cX")}; t.sbBytes = 28 },
 		"history-bell":      func(t *Terminal) { t.sb = [][]byte{[]byte("hello\a")}; t.sbBytes = 30 },
 		"history-OSC":       func(t *Terminal) { t.sb = [][]byte{[]byte("\x1b]52;;clipboard\x1b\\")}; t.sbBytes = 42 },

@@ -11,8 +11,8 @@ import (
 
 func TestCompactKeepsNonzeroCells(t *testing.T) {
 	term := New(5, 6)
-	link := term.internLink(";https://example.com")
-	values := []cell{{}, {R: ' '}, {R: spacerHead}, {Bg: IndexedColor(1)}, {A: AttrProtected}, {L: link}}
+	link := term.internExtra(cellExtra{link: ";https://example.com"})
+	values := []cell{{}, {R: ' '}, {R: spacerHead}, {Bg: IndexedColor(1)}, {A: AttrProtected}, {E: link}}
 	term.alt = make([][]cell, term.rows)
 	for _, screen := range [][][]cell{term.main, term.alt} {
 		for y, c := range values {

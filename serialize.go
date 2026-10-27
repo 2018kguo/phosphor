@@ -20,7 +20,7 @@ var sgrAttributeCodes = [...]struct {
 
 // appendSGR appends the escape sequence that sets exactly c's style,
 // starting from a reset.
-func appendSGR(b []byte, c cell) []byte {
+func (t *Terminal) appendSGR(b []byte, c cell) []byte {
 	b = append(b, "\x1b[0"...)
 	// Range by reference so each style does not copy the encoding table.
 	for _, a := range &sgrAttributeCodes {
@@ -38,6 +38,7 @@ func appendSGR(b []byte, c cell) []byte {
 	}
 	b = appendColor(b, c.Fg, 30)
 	b = appendColor(b, c.Bg, 40)
+	b = appendColor(b, t.extraAt(c.E).underline, 50)
 	return append(b, 'm')
 }
 
@@ -58,9 +59,9 @@ func appendColor(b []byte, c Color, base int) []byte {
 	n := int(c & 0xff)
 	b = append(b, ';')
 	switch {
-	case n < 8:
+	case n < 8 && base != 50:
 		return strconv.AppendInt(b, int64(base+n), 10)
-	case n < 16:
+	case n < 16 && base != 50:
 		return strconv.AppendInt(b, int64(base+60+n-8), 10)
 	}
 	b = strconv.AppendInt(b, int64(base+8), 10)
@@ -68,7 +69,7 @@ func appendColor(b []byte, c Color, base int) []byte {
 	return strconv.AppendInt(b, int64(n), 10)
 }
 
-func styleOf(c cell) cell { return cell{Fg: c.Fg, Bg: c.Bg, A: c.A, L: c.L} }
+func styleOf(c cell) cell { return cell{Fg: c.Fg, Bg: c.Bg, A: c.A, E: c.E} }
 
 // appendRow appends one row's characters with the escape sequences for
 // their styles, starting and ending in the default style. With trim,
@@ -89,17 +90,17 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 		}
 	}
 	var style cell
-	// The style as two words (Fg; Bg, A and L), for two compares a cell.
+	// The style as two words (Fg; Bg, A and E), for two compares a cell.
 	var fg Color
 	var rest uint64
 	cells := row[:end]
 	for i := 0; i < len(cells); {
 		c := &cells[i]
 		if c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
-			if c.L != style.L || (c.A^style.A)&AttrProtected != 0 {
+			if c.E != style.E || (c.A^style.A)&AttrProtected != 0 {
 				b = t.appendStyle(b, style, *c)
 			} else {
-				b = appendSGR(b, *c)
+				b = t.appendSGR(b, *c)
 			}
 			style = styleOf(*c)
 			fg, rest = c.Fg, *(*uint64)(unsafe.Pointer(&c.Bg))
@@ -130,10 +131,10 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 	if style.A&AttrProtected != 0 {
 		b = appendProtect(b, false)
 	}
-	if style.L != 0 {
+	if t.link(style.E) != "" {
 		b = t.appendLink(b, 0)
 	}
-	if style.A&^AttrProtected != 0 || style.Fg != 0 || style.Bg != 0 {
+	if style.A&^AttrProtected != 0 || style.Fg != 0 || style.Bg != 0 || t.extraAt(style.E).underline != 0 {
 		b = append(b, "\x1b[0m"...)
 	}
 	return b
@@ -158,14 +159,15 @@ func copyASCIICells(dst []byte, src []cell) int {
 // appendStyle appends what changes the style from to that of c.
 func (t *Terminal) appendStyle(b []byte, from, c cell) []byte {
 	s := styleOf(c)
+	oldExtra, newExtra := t.extraAt(from.E), t.extraAt(s.E)
 	if (s.A^from.A)&AttrProtected != 0 {
 		b = appendProtect(b, s.A&AttrProtected != 0)
 	}
-	if (s.A^from.A)&^AttrProtected != 0 || s.Fg != from.Fg || s.Bg != from.Bg {
-		b = appendSGR(b, s)
+	if (s.A^from.A)&^AttrProtected != 0 || s.Fg != from.Fg || s.Bg != from.Bg || oldExtra.underline != newExtra.underline {
+		b = t.appendSGR(b, s)
 	}
-	if s.L != from.L {
-		b = t.appendLink(b, s.L)
+	if oldExtra.link != newExtra.link {
+		b = t.appendLink(b, s.E)
 	}
 	return b
 }
@@ -173,10 +175,10 @@ func (t *Terminal) appendStyle(b []byte, from, c cell) []byte {
 // appendLink appends OSC 8 starting hyperlink l, or ending one (0).
 func (t *Terminal) appendLink(b []byte, l uint16) []byte {
 	b = append(b, "\x1b]8;"...)
-	if l == 0 {
+	if target := t.link(l); target == "" {
 		b = append(b, ';')
 	} else {
-		b = append(b, t.link(l)...)
+		b = append(b, target...)
 	}
 	return append(b, "\x1b\\"...)
 }
@@ -346,15 +348,15 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			b = append(b, "\x1b[?6l"...) // DECSC saves origin mode too
 		}
 		b = appendCUP(b, s.y, s.x)
-		b = appendSGR(b, s.pen)
+		b = t.appendSGR(b, s.pen)
 		b = appendProtect(b, s.pen.A&AttrProtected != 0)
-		if s.pen.L != 0 {
-			b = t.appendLink(b, s.pen.L)
+		if t.link(s.pen.E) != "" {
+			b = t.appendLink(b, s.pen.E)
 		}
 		b = appendCharsets(b, s.cursor)
 		b = append(b, "\x1b7"...)
 		b = appendProtect(b, false)
-		if s.pen.L != 0 {
+		if t.link(s.pen.E) != "" {
 			b = t.appendLink(b, 0)
 		}
 		if s.origin {
@@ -419,9 +421,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	} else {
 		b = appendCUP(b, y, x)
 	}
-	b = appendSGR(b, t.cur.pen)
-	if t.cur.pen.L != 0 {
-		b = t.appendLink(b, t.cur.pen.L)
+	b = t.appendSGR(b, t.cur.pen)
+	if t.link(t.cur.pen.E) != "" {
+		b = t.appendLink(b, t.cur.pen.E)
 	}
 	switch prot := t.cur.pen.A&AttrProtected != 0; {
 	case t.protISO && prot:
@@ -644,7 +646,7 @@ func stripSGR(line []byte) string {
 }
 
 // walkHistoryText scans the bounded grammar produced by appendRow: text,
-// CSI styles/modes/EL and OSC 8 links terminated by ST. Sharing this lexer
+// CSI styles/modes/EL and OSC 8 rare terminated by ST. Sharing this lexer
 // keeps text extraction and history allocation sizing independent of URLs.
 func walkHistoryText(line []byte, text func([]byte)) bool {
 	for i := 0; i < len(line); {

@@ -194,7 +194,7 @@ func (t *Terminal) appendDECRQSS(b []byte, q string) []byte {
 	case "m": // SGR, as "0;1;31m"
 		b = append(b, ok...)
 		n := len(b)
-		b = appendSGR(b, t.cur.pen)
+		b = t.appendSGR(b, t.cur.pen)
 		b = append(b[:n], b[n+2:]...) // drop the CSI
 	case "r":
 		b = appendPair(b, t.top+1, t.bot+1, "r")

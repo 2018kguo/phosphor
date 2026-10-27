@@ -16,7 +16,7 @@ type cell struct {
 	Fg Color
 	Bg Color
 	A  Attr
-	L  uint16 // hyperlink (OSC 8): 0 for none, else the Terminal's links[L-1]
+	E  uint16 // rare attributes: 0 for default, else the Terminal's rare[E-1]
 }
 
 const (
@@ -139,9 +139,14 @@ type extra struct {
 	// characters with combining marks, referenced by cells
 	clusters   []cluster
 	clusterCap int
-	// hyperlink targets ("params;uri"), referenced by cells
-	links   []string
-	linkCap int
+	// Uncommon cell attributes share the cell's 16-bit index.
+	rare    []cellExtra
+	rareCap int
+}
+
+type cellExtra struct {
+	link      string // OSC 8 target ("params;uri")
+	underline Color
 }
 
 // ext returns t.x, allocating it.
@@ -1346,11 +1351,11 @@ func (t *Terminal) printASCII(p []byte) {
 			p = p[1:]
 			continue
 		}
-		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.L
+		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.E
 		row = row[x : x+n]
 		for i, b := range p[:n] {
 			c := &row[i]
-			c.R, c.Fg, c.Bg, c.A, c.L = rune(b), fg, bg, attrs, link
+			c.R, c.Fg, c.Bg, c.A, c.E = rune(b), fg, bg, attrs, link
 		}
 		t.lastChar = rune(p[n-1])
 		if x+n > edge {
@@ -1921,7 +1926,8 @@ func (t *Terminal) resizeTabs(oldCols int) {
 
 func (t *Terminal) sgr() {
 	if t.nparams == 0 {
-		t.cur.pen = cell{A: t.cur.pen.A & AttrProtected, L: t.cur.pen.L}
+		t.setUnderlineColor(0)
+		t.cur.pen = cell{A: t.cur.pen.A & AttrProtected, E: t.cur.pen.E}
 		return
 	}
 	p := &t.cur.pen
@@ -1935,7 +1941,8 @@ func (t *Terminal) sgr() {
 		}
 		switch {
 		case v == 0:
-			*p = cell{A: p.A & AttrProtected, L: p.L}
+			t.setUnderlineColor(0)
+			*p = cell{A: p.A & AttrProtected, E: p.E}
 		case v == 1:
 			p.A |= AttrBold
 		case v == 2:
@@ -1981,6 +1988,8 @@ func (t *Terminal) sgr() {
 				p.Fg = c
 			case 48:
 				p.Bg = c
+			case 58:
+				t.setUnderlineColor(c)
 			}
 			next = end
 		case v == 39:
@@ -1993,6 +2002,8 @@ func (t *Terminal) sgr() {
 			p.A |= AttrOverline
 		case v == 55:
 			p.A &^= AttrOverline
+		case v == 59:
+			t.setUnderlineColor(0)
 		case v >= 90 && v <= 97:
 			p.Fg = colorIndexed | Color(v-90+8)
 		case v >= 100 && v <= 107:
@@ -2052,88 +2063,120 @@ func (t *Terminal) oscDispatch() {
 		// OSC 8 ; params ; uri: start a hyperlink, or end it (no uri).
 		params, uri, ok := strings.Cut(string(s[2:]), ";")
 		if !ok || uri == "" {
-			t.cur.pen.L = 0
+			t.setLink("")
 		} else {
-			t.cur.pen.L = t.internLink(params + ";" + uri)
+			t.setLink(params + ";" + uri)
 		}
 	default:
 		t.oscColor(s)
 	}
 }
 
-// internLink returns the cell link index for a hyperlink target. Recent
-// entries are reused; when the table is full, links no cell refers to are
-// dropped. Past 65535 live links, new ones are not recorded.
-func (t *Terminal) internLink(target string) uint16 {
+// internExtra shares uncommon attributes without enlarging ordinary cells.
+// Recent pairs are reused. Collection drops unreachable pairs; at the
+// 16-bit limit, a full search also reuses older pairs. Zero means the
+// default pair, or that all 65535 entries are live and the new pair cannot
+// be stored. Pen setters retain their current pair in the latter case.
+func (t *Terminal) internExtra(v cellExtra) uint16 {
+	if v == (cellExtra{}) {
+		return 0
+	}
 	x := t.ext()
-	for i := len(x.links) - 1; i >= max(len(x.links)-16, 0); i-- {
-		if x.links[i] == target {
+	for i := len(x.rare) - 1; i >= max(len(x.rare)-16, 0); i-- {
+		if x.rare[i] == v {
 			return uint16(i + 1)
 		}
 	}
-	if len(x.links) >= x.linkCap {
-		t.compactLinks()
+	if len(x.rare) >= x.rareCap {
+		t.compactExtras()
 	}
-	if len(x.links) >= 0xffff {
+	if len(x.rare) >= 0xffff {
+		for i, old := range x.rare {
+			if old == v {
+				return uint16(i + 1)
+			}
+		}
 		return 0
 	}
-	x.links = append(x.links, target)
-	return uint16(len(x.links))
+	x.rare = append(x.rare, v)
+	return uint16(len(x.rare))
 }
 
-// compactLinks drops the links no cell or cursor refers to, renumbering
+func (t *Terminal) setPenExtra(v cellExtra) {
+	if id := t.internExtra(v); id != 0 || v == (cellExtra{}) {
+		t.cur.pen.E = id
+	}
+}
+
+func (t *Terminal) setLink(target string) {
+	v := t.extraAt(t.cur.pen.E)
+	v.link = target
+	t.setPenExtra(v)
+}
+
+func (t *Terminal) setUnderlineColor(c Color) {
+	v := t.extraAt(t.cur.pen.E)
+	v.underline = c
+	t.setPenExtra(v)
+}
+
+// compactExtras drops the attribute pairs no cell or cursor refers to, renumbering
 // the rest, and sets the next compaction point.
-func (t *Terminal) compactLinks() {
+func (t *Terminal) compactExtras() {
 	x := t.x
-	if len(x.links) > 0 {
-		remap := make([]uint16, len(x.links))
-		var kept []string
+	if len(x.rare) > 0 {
+		remap := make([]uint16, len(x.rare))
+		var kept []cellExtra
 		ref := func(l *uint16) {
 			if *l == 0 {
 				return
 			}
 			i := *l - 1
 			if remap[i] == 0 {
-				kept = append(kept, x.links[i])
+				kept = append(kept, x.rare[i])
 				remap[i] = uint16(len(kept))
 			}
 			*l = remap[i]
 		}
-		t.visitLinkRefs(ref)
-		x.links = kept
+		t.visitExtraRefs(ref)
+		x.rare = kept
 	}
-	x.linkCap = max(16, 2*len(x.links))
+	x.rareCap = min(0xffff, max(16, 2*len(x.rare)))
 }
 
-// visitLinkRefs covers the cells and pens which can still supply a link.
+// visitExtraRefs covers the cells and pens which can still supply attributes.
 // An invalid saved cursor cannot restore its pen; clear its old index so
 // that it cannot become a dangling reference after its table is collected.
-func (t *Terminal) visitLinkRefs(ref func(*uint16)) {
+func (t *Terminal) visitExtraRefs(ref func(*uint16)) {
 	for _, scr := range [][][]cell{t.main, t.alt} {
 		for _, row := range scr {
 			for i := range row {
-				ref(&row[i].L)
+				ref(&row[i].E)
 			}
 		}
 	}
-	ref(&t.cur.pen.L)
+	ref(&t.cur.pen.E)
 	if t.saved != nil {
 		for _, saved := range [...]*savedCursor{&t.saved.screen[0], &t.saved.screen[1], &t.saved.alternate} {
 			if saved.valid {
-				ref(&saved.pen.L)
+				ref(&saved.pen.E)
 			} else {
-				saved.pen.L = 0
+				saved.pen.E = 0
 			}
 		}
 	}
 }
 
-// link returns a cell's hyperlink target ("params;uri"), or "".
-func (t *Terminal) link(l uint16) string {
-	if l == 0 {
-		return ""
+func (t *Terminal) extraAt(id uint16) cellExtra {
+	if id == 0 {
+		return cellExtra{}
 	}
-	return t.x.links[l-1]
+	return t.x.rare[id-1]
+}
+
+// link returns a cell's hyperlink target ("params;uri"), or "".
+func (t *Terminal) link(id uint16) string {
+	return t.extraAt(id).link
 }
 
 // --- characters with combining marks ---
@@ -2338,7 +2381,7 @@ func isZero(c cell) bool { return isZeroAt(&c) }
 // isZeroAt is isZero for a cell in place (field tests are about twice
 // as fast as comparing whole cells in the trimming loops).
 func isZeroAt(c *cell) bool {
-	// A cell is two words: R and Fg, then Bg, A and L.
+	// A cell is two words: R and Fg, then Bg, A and E.
 	w := *(*uint64)(unsafe.Pointer(c))
 	return *(*uint64)(unsafe.Pointer(&c.Bg)) == 0 && (w == 0 || w == spacerWord)
 }

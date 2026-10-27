@@ -398,30 +398,30 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 	tmp := replayLine(line, t.cols)
 	k := tmp.cur.y + 1
 	if tmp.x != nil {
-		clusterRefs, linkRefs := 0, 0
+		clusterRefs, extraRefs := 0, 0
 		for _, row := range tmp.main[:k] {
 			for _, c := range row {
 				if c.R >= clusterBase {
 					clusterRefs++
 				}
-				if c.L != 0 {
-					linkRefs++
+				if c.E != 0 {
+					extraRefs++
 				}
 			}
 		}
-		if clusterRefs > 0 || linkRefs > 0 {
+		if clusterRefs > 0 || extraRefs > 0 {
 			x := t.ext()
-			clusterCap, linkCap := x.clusterCap, x.linkCap
+			clusterCap, rareCap := x.clusterCap, x.rareCap
 			// Imported cells, earlier history batches and rewrapped rows
 			// are detached until Resize installs the finished screen. No
 			// receiver collection may run while any of them are detached.
 			// Bound by references, since recent-only interning may append
 			// a repeated entry more than once during this batch.
 			x.clusterCap = max(clusterCap, len(x.clusters)+clusterRefs)
-			x.linkCap = max(linkCap, len(x.links)+linkRefs)
+			x.rareCap = max(rareCap, len(x.rare)+extraRefs)
 			defer func() {
 				// Resize collects only after all working rows are attached.
-				x.clusterCap, x.linkCap = clusterCap, linkCap
+				x.clusterCap, x.rareCap = clusterCap, rareCap
 			}()
 		}
 	}
@@ -436,8 +436,8 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 			if r := row[x].R; r >= clusterBase {
 				row[x].R = t.intern(tmp.x.clusters[r-clusterBase])
 			}
-			if l := row[x].L; l != 0 {
-				row[x].L = t.internLink(tmp.link(l))
+			if l := row[x].E; l != 0 {
+				row[x].E = t.internExtra(tmp.extraAt(l))
 			}
 		}
 		rows[y] = row
@@ -511,10 +511,10 @@ func (t *Terminal) Restart() {
 	sbOpen, x := t.sbOpen, t.x
 	t.reset()
 	t.sbOpen = sbOpen
-	if x != nil && (x.clusters != nil || x.links != nil) {
+	if x != nil && (x.clusters != nil || x.rare != nil) {
 		// The kept rows may refer to characters with combining marks and
-		// to hyperlinks.
-		t.x = &extra{clusters: x.clusters, clusterCap: x.clusterCap, links: x.links, linkCap: x.linkCap}
+		// to rare cell attributes.
+		t.x = &extra{clusters: x.clusters, clusterCap: x.clusterCap, rare: x.rare, rareCap: x.rareCap}
 	}
 	if over := len(old) - (t.rows - 1); over > 0 {
 		for i, row := range old[:over] {

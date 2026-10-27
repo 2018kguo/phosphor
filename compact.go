@@ -2,7 +2,7 @@ package phosphor
 
 // Compact releases unused storage after a terminal becomes idle. It drops
 // rows containing only zero cells, unused wrap flags, dead Unicode and
-// hyperlink entries, invalid saved cursor storage and temporary buffers.
+// cell attribute entries, invalid saved cursor storage and temporary buffers.
 // It keeps screen contents, scrollback, cursors, modes, damage and unfinished
 // parser input unchanged. Later output may allocate those buffers again.
 //
@@ -33,22 +33,22 @@ func (t *Terminal) Compact() {
 }
 
 // Pool indexes remain stable when everything is still live. The small
-// mark set stays on the stack for up to 256 pooled strings, so an already
+// mark set stays on the stack for up to 256 pooled entries, so an already
 // compact prompt does not allocate or rebuild its tables on every call.
 func (t *Terminal) compactPools() {
 	x := t.x
 	if x == nil {
 		return
 	}
-	nClusters, nLinks := len(x.clusters), len(x.links)
-	if n := nClusters + nLinks; n > 0 {
+	nClusters, nExtras := len(x.clusters), len(x.rare)
+	if n := nClusters + nExtras; n > 0 {
 		var small [4]uint64
 		words := (n + 63) / 64
 		marks := small[:]
 		if words > len(small) {
 			marks = make([]uint64, words)
 		}
-		liveClusters, liveLinks := 0, 0
+		liveClusters, liveExtras := 0, 0
 		mark := func(i int) {
 			bit := uint64(1) << uint(i%64)
 			if marks[i/64]&bit != 0 {
@@ -58,7 +58,7 @@ func (t *Terminal) compactPools() {
 			if i < nClusters {
 				liveClusters++
 			} else {
-				liveLinks++
+				liveExtras++
 			}
 		}
 		t.visitClusterRefs(func(r *rune) {
@@ -66,7 +66,7 @@ func (t *Terminal) compactPools() {
 				mark(int(*r - clusterBase))
 			}
 		})
-		t.visitLinkRefs(func(l *uint16) {
+		t.visitExtraRefs(func(l *uint16) {
 			if *l != 0 {
 				mark(nClusters + int(*l) - 1)
 			}
@@ -74,11 +74,11 @@ func (t *Terminal) compactPools() {
 		if liveClusters < nClusters {
 			t.compactClusters()
 		}
-		if liveLinks < nLinks {
-			t.compactLinks()
+		if liveExtras < nExtras {
+			t.compactExtras()
 		}
 	}
-	if x.tabs == nil && len(x.savedModes) == 0 && len(x.clusters) == 0 && len(x.links) == 0 {
+	if x.tabs == nil && len(x.savedModes) == 0 && len(x.clusters) == 0 && len(x.rare) == 0 {
 		t.x = nil
 	}
 }

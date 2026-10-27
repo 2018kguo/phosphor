@@ -73,7 +73,7 @@ func (t *Terminal) Cell(x, y int) Cell {
 // publicCell converts row[x] (of a row of t) into a Cell.
 func (t *Terminal) publicCell(row []cell, x int) Cell {
 	c := &row[x]
-	out := Cell{Rune: c.R, Width: 1, Style: publicStyle(c)}
+	out := Cell{Rune: c.R, Width: 1, Style: t.publicStyle(c)}
 	switch r := c.R; {
 	case r < utf8.RuneSelf && r >= 0:
 	case r == wideTail:
@@ -91,8 +91,8 @@ func (t *Terminal) publicCell(row []cell, x int) Cell {
 			out.Width = 2
 		}
 	}
-	if c.L != 0 {
-		out.Link = parseLink(t.link(c.L))
+	if c.E != 0 {
+		out.Link = parseLink(t.link(c.E))
 	}
 	return out
 }
@@ -152,7 +152,7 @@ func (t *Terminal) ScrollbackLines() []string {
 }
 
 // ScrollbackCells returns scrollback line i (see ScrollbackLine) with its
-// styles and links, laid out as the rows it takes at the current width:
+// styles and rare, laid out as the rows it takes at the current width:
 // one row, or more for a line that soft wraps. Unlike the other accessors
 // it allocates, about as much as replaying the line costs.
 func (t *Terminal) ScrollbackCells(i int) [][]Cell {

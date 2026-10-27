@@ -112,13 +112,14 @@ const (
 // program set them, and AttrInverse (and Modes.ReverseVideo) say to swap
 // them.
 type Style struct {
-	Fg, Bg    Color     // foreground and background
-	Attrs     Attr      // bold, italic...
-	Underline Underline // the underline style, if underlined
+	Fg, Bg         Color     // foreground and background
+	UnderlineColor Color     // default follows the foreground
+	Attrs          Attr      // bold, italic...
+	Underline      Underline // the underline style, if underlined
 }
 
-func publicStyle(c *cell) Style {
-	return Style{Fg: c.Fg, Bg: c.Bg, Attrs: c.A &^ ulMask, Underline: Underline(c.A >> ulShift & 7)}
+func (t *Terminal) publicStyle(c *cell) Style {
+	return Style{Fg: c.Fg, Bg: c.Bg, UnderlineColor: t.extraAt(c.E).underline, Attrs: c.A &^ ulMask, Underline: Underline(c.A >> ulShift & 7)}
 }
 
 // Hyperlink is an OSC 8 hyperlink. The zero value is no link.

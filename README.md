@@ -97,6 +97,12 @@ attach := t.Repaint(true)             // ANSI for an attached terminal of the sa
 _ = attach
 ```
 
+`Style.UnderlineColor` stores the SGR 58 color; its default follows the
+foreground. Hyperlinks and underline colors share a table of up to 65535
+live pairs. Unused pairs are collected. If every entry is still live,
+setting a new pair keeps the current hyperlink and underline color until
+space becomes available.
+
 The [examples](https://pkg.go.dev/github.com/2018kguo/phosphor#pkg-examples)
 show basic use, a headless runner answering queries, a renderer driven by
 damage, attaching through `Repaint`, and `Restart`.
@@ -229,7 +235,7 @@ the `Terminal`.
   synchronized update, grapheme clustering, kitty keyboard flags, XTSAVE/XTRESTORE.
 - SGR: bold, faint, italic, underline styles (single, double, curly,
   dotted, dashed), blink, inverse, hidden, strikethrough, overline,
-  16/256/RGB colors in the `;` and `:` forms.
+  16/256/RGB colors in the `;` and `:` forms, underline color (58/59).
 - OSC: title (0, 2), hyperlinks (8), colors (4, 10, 11, 12, 104, 110-112).
 - Resize: the main screen reflows (narrowing and widening back is exact)
   and lines come back from the scrollback when it grows.
@@ -241,8 +247,7 @@ the `Terminal`.
   the PTY, using `Modes`.
 - Double-width and double-height lines, rectangular area operations
   (DECCRA, DECERA, DECFRA, DECIC...), 132-column mode (DECCOLM),
-  national character sets, SGR fonts and super/subscript, underline color
-  (SGR 58 is parsed and dropped).
+  national character sets, SGR fonts and super/subscript.
 - Sixel and kitty graphics, OSC 52 (clipboard), OSC 7 and 133 (shell
   integration), icon names, the title stack.
 - 8-bit C1 controls outside UTF-8, and S8C1T replies.

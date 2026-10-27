@@ -161,6 +161,7 @@ func appendSGR(b []byte, s phosphor.Style) []byte {
 	}
 	b = appendColor(b, s.Fg, "38")
 	b = appendColor(b, s.Bg, "48")
+	b = appendColor(b, s.UnderlineColor, "58")
 	return append(b, 'm')
 }
 
