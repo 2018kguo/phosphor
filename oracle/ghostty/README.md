@@ -54,6 +54,11 @@ the bound on what can be freed while keeping meaningful cells. The
 have no `Compact` method. `-mode layout` reports actual struct size and
 field offsets; memory comparisons still use retained allocations and RSS.
 
+`rich-cleared` writes 48 distinct links (2 KiB targets) and combining
+characters on one row, then erases back to the prompt, without history.
+`rich-cleared-compact` also runs idle compaction. These isolate retained
+metadata from row storage; they do not represent a typical shell prompt.
+
 `ab.sh OLD_BINARY NEW_BINARY OUTPUT.jsonl` alternates the old phosphor,
 new phosphor and Ghostty in five rounds. Build both binaries from this
 same driver, using a temporary Go modfile to replace the baseline's

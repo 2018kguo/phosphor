@@ -446,6 +446,16 @@ func memory(name, workload string, n int) {
 		}
 		fill = []byte(grid.String())
 	}
+	if workload == "rich-cleared" || workload == "rich-cleared-compact" {
+		var grid strings.Builder
+		for i := 0; i < 48; i++ {
+			// Keep all targets and clusters live until the erase. Staying on
+			// one row excludes history and row count as causes of the result.
+			fmt.Fprintf(&grid, "\x1b[1;%dH\x1b]8;;https://example.invalid/%s/%d\x1b\\e%c\x1b]8;;\x1b\\", i+1, strings.Repeat("x", 2048), i, rune(0x300+i))
+		}
+		grid.WriteString("\x1b[0m\x1b[2J\x1b[Huser@host:~$ ")
+		fill = []byte(grid.String())
+	}
 	terms := make([]Engine, n)
 	// Warm shared initialization before taking the baseline. Each invocation is a fresh process.
 	warm := newEngine(name, 80, 24)
