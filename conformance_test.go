@@ -87,10 +87,7 @@ func hasAttr(c cell, a Attr) bool { return c.A&a != 0 }
 // rows never drawn on).
 func (t *Terminal) cellAt(x, y int) cell {
 	row := t.screen()[y]
-	if row == nil {
-		return cell{}
-	}
-	return row[x]
+	return rowCell(row, x)
 }
 
 // cellText returns the characters at x, y: "" for a blank or the right

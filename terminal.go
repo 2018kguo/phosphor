@@ -634,11 +634,7 @@ func (t *Terminal) decaln() {
 	t.touchAll()
 	scr := t.screen()
 	for y := range scr {
-		row := scr[y]
-		if row == nil {
-			row = make([]cell, t.cols)
-			scr[y] = row
-		}
+		row := t.row(y)
 		for x := range row {
 			row[x] = cell{R: 'E'}
 		}
@@ -1137,7 +1133,7 @@ func (t *Terminal) eraseRows(from, to int) {
 	for y := from; y < to; y++ {
 		t.touch(y)
 		if row := scr[y]; row != nil {
-			t.blank(row)
+			scr[y] = t.blank(row)
 		} else {
 			scr[y] = t.blankRow()
 		}
@@ -1148,15 +1144,17 @@ func (t *Terminal) eraseRows(from, to int) {
 }
 
 // blank erases row in place with the current background.
-func (t *Terminal) blank(row []cell) {
+func (t *Terminal) blank(row []cell) []cell {
 	if t.cur.pen.Bg == 0 {
 		clear(row)
-		return
+		return row
 	}
+	row = growRow(row, t.cols)
 	blank := cell{Bg: t.cur.pen.Bg}
 	for x := range row {
 		row[x] = blank
 	}
+	return row
 }
 
 // blankRow returns an erased row: nil when the erase color is the default.
@@ -1171,15 +1169,39 @@ func (t *Terminal) blankRow() []cell {
 	return row
 }
 
-// row returns screen row y for writing, allocating it if it is still
-// blank, and marks it dirty.
+// row returns a full-width screen row for writing and marks it dirty.
+// Compact can retain only its nonzero prefix; newly exposed cells are zero
+// even when a previous width reduction left old data in the capacity.
 func (t *Terminal) row(y int) []cell {
 	t.touch(y)
 	scr := t.screen()
-	if scr[y] == nil {
-		scr[y] = make([]cell, t.cols)
+	if len(scr[y]) < t.cols {
+		scr[y] = growRow(scr[y], t.cols)
 	}
 	return scr[y]
+}
+
+func growRow(row []cell, cols int) []cell {
+	if len(row) >= cols {
+		return row
+	}
+	if cap(row) < cols {
+		next := make([]cell, cols)
+		copy(next, row)
+		return next
+	}
+	old := len(row)
+	row = row[:cols]
+	clear(row[old:])
+	return row
+}
+
+// rowCell reads an implicit zero outside a row's owned prefix.
+func rowCell(row []cell, x int) cell {
+	if uint(x) < uint(len(row)) {
+		return row[x]
+	}
+	return cell{}
 }
 
 // fillCells erases cells [from, to) of row y with the current background.
@@ -1347,8 +1369,15 @@ func (t *Terminal) combine(r rune) {
 	if x < 0 || row == nil {
 		return
 	}
-	if row[x].R == wideTail && x > 0 {
+	if rowCell(row, x).R == wideTail && x > 0 {
 		x--
+	}
+	if x >= len(row) {
+		if x == t.cols-1 && !t.autowrap && x > 0 && rowCell(row, x-1).R > 0 {
+			x--
+		} else {
+			return
+		}
 	}
 	c := &row[x]
 	if c.R <= 0 {
@@ -1498,8 +1527,7 @@ func (t *Terminal) rotate(top, bot, n int) {
 	}
 	for i := range in {
 		if i < len(recycled) && recycled[i] != nil {
-			t.blank(recycled[i])
-			in[i] = recycled[i]
+			in[i] = t.blank(recycled[i])
 		} else {
 			in[i] = t.blankRow()
 		}
@@ -1548,10 +1576,9 @@ func (t *Terminal) scrollRect(top, bot, n int) {
 			return
 		}
 		d := t.row(dst)
-		if s := scr[src]; s != nil {
-			copy(d[l:r], s[l:r])
-		} else {
-			clear(d[l:r])
+		clear(d[l:r])
+		if s := scr[src]; l < len(s) {
+			copy(d[l:r], s[l:min(r, len(s))])
 		}
 	}
 	erase := func(y int) {
@@ -1792,12 +1819,12 @@ func (t *Terminal) erase(y, from, to int, keep bool) {
 		return
 	}
 	for x := max(from, 0); x < min(to, t.cols); {
-		if row[x].A&AttrProtected != 0 {
+		if rowCell(row, x).A&AttrProtected != 0 {
 			x++
 			continue
 		}
 		end := x + 1
-		for end < min(to, t.cols) && row[end].A&AttrProtected == 0 {
+		for end < min(to, t.cols) && rowCell(row, end).A&AttrProtected == 0 {
 			end++
 		}
 		t.fillCells(y, x, end)
@@ -2330,16 +2357,12 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		// A spacer head at the end is left out: it is not text, and the
 		// wide character after it recreates it on replay at this width.
 		end := t.cols
-		if row != nil && row[end-1].R == spacerHead {
+		if rowCell(row, end-1).R == spacerHead {
 			end--
 		}
-		if row == nil {
-			t.scratch = t.appendRowHistory(t.scratch[:0], nil, false, true)
-		} else {
-			t.scratch = t.appendRowHistory(t.scratch[:0], row[:end], false, true)
-		}
+		t.scratch = t.appendRowHistory(t.scratch[:0], row, end, false, true)
 	} else {
-		t.scratch = t.appendRowHistory(t.scratch[:0], row, true, true)
+		t.scratch = t.appendRowHistory(t.scratch[:0], row, t.cols, true, true)
 	}
 	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
 	putBack := join && t.sbSpacer && !startsWide(row)
@@ -2384,7 +2407,7 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		t.sbBytes += len(line) + 24
 	}
 	t.sbOpen = wrapped
-	t.sbSpacer = wrapped && row != nil && row[t.cols-1].R == spacerHead
+	t.sbSpacer = wrapped && rowCell(row, t.cols-1).R == spacerHead
 	if len(t.scratch) > 4096 {
 		t.scratch = nil // do not keep a large buffer on an idle terminal
 	}
@@ -2403,7 +2426,7 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 
 func rowBlank(row []cell) bool {
 	for _, c := range row {
-		if !isZero(c) && !(c.R == ' ' && c.Fg == 0 && c.Bg == 0 && c.A == 0) {
+		if !isZero(c) && !(c.R == ' ' && c.Fg == 0 && c.Bg == 0 && c.A == 0 && c.E == 0) {
 			return false
 		}
 	}
@@ -2424,7 +2447,7 @@ func rowAt(scr [][]cell, i int) []cell {
 func (t *Terminal) wrapEnd(row, next []cell) int {
 	// Replayed, the wide character wraps and leaves a spacer head in its
 	// own pen, so leave it out only if that recreates the original style.
-	if row != nil && row[t.cols-1].R == spacerHead && startsWide(next) && styleOf(row[t.cols-1]) == styleOf(next[0]) {
+	if last := rowCell(row, t.cols-1); last.R == spacerHead && startsWide(next) && styleOf(last) == styleOf(next[0]) {
 		return t.cols - 1
 	}
 	return t.cols

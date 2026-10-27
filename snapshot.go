@@ -686,10 +686,10 @@ func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []bool) {
 		if n > t.cols {
 			d.fail(ErrSnapshotMalformed, "row length")
 		}
-		if n == 0 || !d.charge(t.cols, int(unsafe.Sizeof(cell{}))) {
+		if n == 0 || !d.charge(n, int(unsafe.Sizeof(cell{}))) {
 			continue
 		}
-		row := make([]cell, t.cols)
+		row := make([]cell, n)
 		screen[y] = row
 		wantTail := false
 		for i := 0; i < n && d.err == nil; {

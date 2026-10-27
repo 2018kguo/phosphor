@@ -187,10 +187,7 @@ func stateOf(t *Terminal, withScrollback bool) string {
 		for y, row := range scr {
 			fmt.Fprintf(&b, "%s%d", name, y)
 			for x := range t.cols {
-				var c cell
-				if row != nil {
-					c = row[x]
-				}
+				c := rowCell(row, x)
 				s := "' '"
 				switch {
 				case c.R == wideTail:

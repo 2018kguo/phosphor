@@ -48,6 +48,10 @@ are an error.
 Memory commands must run in fresh processes. Use three or more repeats
 and multiple terminal counts. `blank`, `prompt`, `colored-prompt` and
 `saved-cursor` measure the corresponding idle terminals;
+`prompt-compact` and `colored-prompt-compact` initialize the same prompts
+and then invoke idle compaction. Build both revisions with this driver when
+comparing them: v0.3.0's Compact frees dead rows but keeps a live row's full
+width; the new implementation also releases its unused zero tail.
 `equal-100-history` retains the same 100 short, styled history lines in
 both engines. `full` fills the configured history, while `compressed`
 additionally invokes Ghostty's idle compression. Phosphor already stores

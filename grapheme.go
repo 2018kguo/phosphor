@@ -63,8 +63,11 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	if x < 0 || row == nil {
 		return false
 	}
-	if !t.autowrap && x == edge && row[x].R == 0 && x > 0 {
+	if !t.autowrap && x == edge && rowCell(row, x).R == 0 && x > 0 {
 		x--
+	}
+	if x >= len(row) {
+		return false
 	}
 	if row[x].R == wideTail && x > 0 {
 		x--
@@ -90,7 +93,7 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 		return true
 	}
 	width := 1
-	if x+1 < t.cols && row[x+1].R == wideTail {
+	if x+1 < len(row) && row[x+1].R == wideTail {
 		width = 2
 	}
 	prev, _ := utf8.DecodeLastRuneInString(s)
@@ -126,6 +129,7 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 		return true
 	}
 	if x < edge {
+		row = t.row(y)
 		// Widening keeps the base's original pen and writes the new tail
 		// with the current pen. Clear any wide cell displaced by that tail.
 		if x+2 < t.cols && row[x+2].R == wideTail {

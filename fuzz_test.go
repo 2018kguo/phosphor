@@ -38,8 +38,8 @@ func (t *Terminal) checkInvariants() string {
 			if row == nil {
 				continue
 			}
-			if len(row) != t.cols {
-				fail("%s row %d has %d cells, want %d", name, y, len(row), t.cols)
+			if len(row) > t.cols {
+				fail("%s row %d has %d cells, beyond %d columns", name, y, len(row), t.cols)
 				continue
 			}
 			for x, c := range row {
@@ -55,7 +55,7 @@ func (t *Terminal) checkInvariants() string {
 					}
 					fallthrough
 				case c.R > 0:
-					if t.runeWidth(c.R) == 2 && (x+1 >= t.cols || row[x+1].R != wideTail) {
+					if t.runeWidth(c.R) == 2 && (x+1 >= len(row) || row[x+1].R != wideTail) {
 						fail("%s %d,%d: wide character without its right half", name, x, y)
 					}
 				case c.R < 0 && c.R != spacerHead:

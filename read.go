@@ -77,6 +77,9 @@ func (t *Terminal) Cell(x, y int) Cell {
 
 // publicCell converts row[x] (of a row of t) into a Cell.
 func (t *Terminal) publicCell(row []cell, x int) Cell {
+	if uint(x) >= uint(len(row)) {
+		return Cell{Width: 1}
+	}
 	c := &row[x]
 	out := Cell{Rune: c.R, Width: 1, Style: t.publicStyle(c)}
 	switch r := c.R; {

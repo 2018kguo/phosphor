@@ -84,7 +84,7 @@ func (t *Terminal) Resize(cols, rows int) {
 	case cols != oldCols:
 		// Without autowrap nothing wraps, so rows are cut instead.
 		for y, row := range scr {
-			scr[y] = t.resizeRow(row, oldCols)
+			scr[y] = t.resizeRow(row)
 		}
 		wrap = nil
 	}
@@ -124,7 +124,7 @@ func (t *Terminal) Resize(cols, rows int) {
 	// padded.
 	if t.alt != nil {
 		for y, row := range t.alt {
-			t.alt[y] = t.resizeRow(row, oldCols)
+			t.alt[y] = t.resizeRow(row)
 		}
 		altY := t.cur.y
 		if !t.altActive {
@@ -205,16 +205,14 @@ func fitRows(scr [][]cell, wrap []bool, rows int) ([][]cell, []bool) {
 	return out, w
 }
 
-// resizeRow truncates or pads row to t.cols (nil stays nil).
-func (t *Terminal) resizeRow(row []cell, oldCols int) []cell {
+// resizeRow drops cells beyond the new width. An absent tail stays zero.
+func (t *Terminal) resizeRow(row []cell) []cell {
 	switch {
 	case row == nil:
 		return nil
-	case t.cols < oldCols:
-		row = row[:t.cols:t.cols]
+	case t.cols < len(row):
+		row = row[:t.cols]
 		t.fixWide(row)
-	case t.cols > oldCols:
-		row = append(row, make([]cell, t.cols-oldCols)...)
 	}
 	return row
 }
@@ -238,16 +236,15 @@ func (t *Terminal) rewrap(scr [][]cell, wrap []bool, oldCols, cols int, pts []po
 		for r := y; r <= e; r++ {
 			starts = append(starts, len(cells))
 			row := scr[r]
-			if row == nil {
-				row = make([]cell, oldCols)
-			}
-			n := len(row)
+			n := oldCols
 			// A blank left at the end of a row because the wide character
 			// after it did not fit is not part of the line.
-			if r < e && row[n-1].R == spacerHead {
+			if r < e && rowCell(row, n-1).R == spacerHead {
 				n--
 			}
-			cells = append(cells, row[:n]...)
+			start := len(cells)
+			cells = append(cells, make([]cell, n)...)
+			copy(cells[start:], row[:min(n, len(row))])
 		}
 		length := len(cells)
 		// History's explicitly serialized trailing holes remain part of the
