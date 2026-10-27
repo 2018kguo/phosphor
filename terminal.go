@@ -255,6 +255,25 @@ func (t *Terminal) wrapped(y int) bool {
 func (t *Terminal) Write(p []byte) (int, error) {
 	for i := 0; i < len(p); i++ {
 		c := p[i]
+		if t.state == stCSI && c >= '0' && c <= '9' {
+			// Parameters are lexical digit runs. Accumulate each run once
+			// instead of dispatching every digit through the state machine.
+			j := i
+			v := 0
+			if t.nparams < maxParams {
+				v = t.params[t.nparams]
+			}
+			for j < len(p) && p[j] >= '0' && p[j] <= '9' {
+				v = csiDigit(v, p[j])
+				j++
+			}
+			if t.nparams < maxParams {
+				t.params[t.nparams] = v
+			}
+			t.paramSet = true
+			i = j - 1
+			continue
+		}
 		if t.state == stGround {
 			if t.utf8n > 0 {
 				t.utf8Continue(c)
@@ -426,8 +445,7 @@ func (t *Terminal) step(c byte) {
 		switch {
 		case c >= '0' && c <= '9':
 			if t.nparams < maxParams {
-				v := t.params[t.nparams]*10 + int(c-'0')
-				t.params[t.nparams] = min(v, 1<<16)
+				t.params[t.nparams] = csiDigit(t.params[t.nparams], c)
 			}
 			t.paramSet = true
 		case c == ';' || c == ':':
@@ -521,6 +539,8 @@ func (t *Terminal) step(c byte) {
 		t.step(c)
 	}
 }
+
+func csiDigit(value int, digit byte) int { return min(value*10+int(digit-'0'), 1<<16) }
 
 func (t *Terminal) execute(c byte) {
 	switch c {
