@@ -143,8 +143,9 @@ type Terminal struct {
 // extra holds the state few programs use, kept out of Terminal so an idle
 // terminal stays small.
 type extra struct {
-	tabs       []uint64    // tab stops, nil for every 8 columns
-	savedModes []savedMode // XTSAVE
+	tabs        []uint64    // tab stops, nil for every 8 columns
+	savedModes  []savedMode // XTSAVE
+	columnModes uint8       // DECCOLM (3) and permission to switch columns (40)
 	// characters with combining marks, referenced by cells
 	clusters   []cluster
 	clusterCap int
@@ -947,6 +948,10 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 	switch mode {
 	case 1:
 		return t.appCursor, true
+	case 3:
+		return t.columnModes()&columnMode132 != 0, true
+	case 40:
+		return t.columnModes()&columnModeAllow != 0, true
 	case 5:
 		return t.reverseVideo, true
 	case 6:
@@ -1008,6 +1013,14 @@ func (t *Terminal) decMode(mode int, on bool) {
 	switch mode {
 	case 1:
 		t.appCursor = on
+	case 3:
+		t.setColumnMode(on)
+	case 40:
+		if on {
+			t.ext().columnModes |= columnModeAllow
+		} else if t.x != nil {
+			t.x.columnModes &^= columnModeAllow
+		}
 	case 5:
 		if t.reverseVideo != on {
 			t.touchAll() // every cell's colors change

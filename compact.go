@@ -78,7 +78,7 @@ func (t *Terminal) compactPools() {
 			t.compactExtras()
 		}
 	}
-	if x.tabs == nil && len(x.savedModes) == 0 && len(x.clusters) == 0 && len(x.rare) == 0 {
+	if x.tabs == nil && len(x.savedModes) == 0 && x.columnModes == 0 && len(x.clusters) == 0 && len(x.rare) == 0 {
 		t.x = nil
 	}
 }

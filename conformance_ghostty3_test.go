@@ -142,7 +142,6 @@ func g3resizePendingWrap() []confCase {
 const (
 	g3gapLR    = "DECLRMM left/right margins"
 	g3gapProt  = "protected cells (DECSCA/SPA, DECSED/DECSEL)"
-	g3gapCOLM  = "DECCOLM 132-column mode"
 	g3gapCS    = "national/other charsets"
 	g3gapOSC   = "hyperlinks / semantic prompts / OSC state"
 	g3gapPal   = "palette and dynamic colors"
@@ -493,12 +492,19 @@ var ghostty3Cases = append([]confCase{
 		in: "abc\r\nAAA|\x1b7" + rz(5, 5) + rz(6, 5) + "\x1b8X", screen: scr("abc\nAAA|X")},
 
 	// ---- DECCOLM ----
-	{name: "DECCOLM without DEC mode 40", cols: 5, rows: 5, in: "\x1b[?3h", gap: g3gapCOLM},
-	{name: "DECCOLM unset", cols: 5, rows: 5, in: "\x1b[?40h\x1b[?3l", gap: g3gapCOLM},
-	{name: "DECCOLM resets pending wrap", cols: 5, rows: 5, in: "ABCDE\x1b[?40h\x1b[?3l", gap: g3gapCOLM},
-	{name: "DECCOLM preserves SGR bg", cols: 5, rows: 5, in: g3red + "\x1b[?40h\x1b[?3l", gap: g3gapCOLM},
+	{name: "DECCOLM without DEC mode 40", cols: 5, rows: 5, in: "\x1b[?3h", screen: scr(""),
+		check: g3is("disabled DECCOLM changed width or modes", func(t *Terminal) bool { return t.cols == 5 && !t.Modes().Columns132 && !t.Modes().AllowColumnSwitching })},
+	{name: "DECCOLM unset", cols: 5, rows: 5, in: "\x1b[?40h\x1b[?3l", screen: scr(""), cur: at(0, 0),
+		check: g3is("DECCOLM did not select80 columns", func(t *Terminal) bool { return t.cols == 80 && !t.Modes().Columns132 && t.Modes().AllowColumnSwitching })},
+	{name: "DECCOLM resets pending wrap", cols: 5, rows: 5, in: "ABCDE\x1b[?40h\x1b[?3l", screen: scr(""), cur: at(0, 0), pending: no(),
+		check: g3is("DECCOLM did not resize", func(t *Terminal) bool { return t.cols == 80 })},
+	{name: "DECCOLM preserves SGR bg", cols: 5, rows: 5, in: g3red + "\x1b[?40h\x1b[?3l", screen: scr(""),
+		check: g3all(g3bg(0, 80, 0, rgbColor(255, 0, 0)), g3is("DECCOLM lost background pen", func(t *Terminal) bool { return t.cols == 80 && t.cur.pen.Bg == rgbColor(255, 0, 0) }))},
 	{name: "DECCOLM resets scroll region", cols: 5, rows: 5,
-		in: "\x1b[?69h\x1b[2;3r\x1b[3;5s\x1b[?40h\x1b[?3l", gap: g3gapCOLM},
+		in: "\x1b[?69h\x1b[2;3r\x1b[3;5s\x1b[?40h\x1b[?3l", cur: at(0, 0),
+		check: g3is("DECCOLM did not reset margins", func(t *Terminal) bool {
+			return t.cols == 80 && t.top == 0 && t.bot == 4 && t.left == 0 && t.right == 79
+		})},
 
 	// ---- alternate screen modes ----
 	{name: "mode 47 alt screen plain", cols: 5, rows: 5,

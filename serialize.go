@@ -401,6 +401,11 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	// Synchronized update, normalize the receiving terminal, hide the
 	// cursor while painting.
 	b = append(b, "\x1b[?2026h\x1b[?2027l\x1b[?1049l\x1b[?5l\x1b[?69l\x1b[0\"q\x1b[0m\x1b[r\x1b[?6l\x1b[?7h\x1b[4l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[?25l\x1b[H\x1b[2J"...)
+	var savedModes []savedMode
+	if t.x != nil {
+		savedModes = t.x.savedModes
+	}
+	b = t.appendColumnModes(b, savedModes)
 	sbOpen := false
 	usedSave := false
 	if withScrollback {
@@ -464,11 +469,10 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			}
 		}
 	}
-	var savedModes []savedMode
-	if t.x != nil {
-		savedModes = t.x.savedModes
-	}
 	for _, m := range savedModes {
+		if m.mode == 3 || m.mode == 40 {
+			continue
+		}
 		b = appendMode(b, m.mode, m.on)
 		b = append(b, "\x1b[?"...)
 		b = strconv.AppendInt(b, int64(m.mode), 10)
@@ -476,6 +480,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	}
 	originOn := false // whether the restored modes left origin mode on
 	for _, m := range savedModes {
+		if m.mode == 3 || m.mode == 40 {
+			continue
+		}
 		on, _ := t.modeValue(m.mode)
 		b = appendMode(b, m.mode, on && m.mode != 25)
 		if m.mode == 6 {

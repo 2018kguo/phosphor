@@ -343,5 +343,7 @@ type Modes struct {
 	// shown at once (2026): a renderer may wait for it to clear.
 	SyncUpdate bool
 	// GraphemeClustering joins Unicode grapheme clusters into cells (2027).
-	GraphemeClustering bool
+	GraphemeClustering   bool
+	Columns132           bool // DECCOLM (3): the program selected 132-column mode
+	AllowColumnSwitching bool // mode40 permits DECCOLM to resize the terminal
 }

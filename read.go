@@ -51,6 +51,8 @@ func (t *Terminal) Modes() Modes {
 		ReverseVideo:          t.reverseVideo,
 		SyncUpdate:            t.sync,
 		GraphemeClustering:    t.grapheme,
+		Columns132:            t.columnModes()&columnMode132 != 0,
+		AllowColumnSwitching:  t.columnModes()&columnModeAllow != 0,
 	}
 	if n := len(t.kitty); n > 0 {
 		m.KittyKeyboard = t.kitty[n-1]
