@@ -302,6 +302,11 @@ Besides the suites:
 
 ## Performance
 
+The [Unicode and exact-checkpoint comparison](oracle/ghostty/results/2026-10-27-round3/README.md)
+records the broader native compatibility corpus, Unicode audits, idle memory
+and checkpoint costs. Passing those finite tests is not universal terminal
+compatibility.
+
 The [October 2026 follow-up comparison](oracle/ghostty/results/2026-10-27-round2/README.md)
 measures idle metadata reclamation, parsing, replay and compatibility against
 libghostty-vt. The [first round](oracle/ghostty/results/2026-10-27/README.md)
