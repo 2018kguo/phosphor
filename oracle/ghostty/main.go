@@ -534,6 +534,8 @@ func main() {
 		scalarWidths(false)
 	case "width-table":
 		scalarWidths(true)
+	case "grapheme-properties":
+		nativeGraphemeProperties()
 	case "cursor-replies":
 		cursorReplies()
 	case "layout":

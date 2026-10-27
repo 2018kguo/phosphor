@@ -12,6 +12,7 @@ typedef struct { uint8_t *data; size_t len, cap; int error; } ExpReplies;
 ExpReplies *exp_replies_new(GhosttyTerminal t);
 void exp_replies_free(ExpReplies *r);
 void exp_widths(uint8_t *out, size_t len);
+void exp_grapheme_properties(uint8_t *out, size_t len);
 typedef struct {
   uint32_t text[1024];
   uint8_t uri[4096];

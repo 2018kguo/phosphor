@@ -29,6 +29,7 @@ go build -tags ghostty -o /tmp/phosphor-ghostty ./ghostty
 /tmp/phosphor-ghostty -mode trace -trace-chunk 7 -traces ghostty/traces.json > seven-byte-traces.jsonl
 /tmp/phosphor-ghostty -mode cursor-replies > cursor-replies.jsonl
 /tmp/phosphor-ghostty -mode width-table > native-widths.jsonl
+/tmp/phosphor-ghostty -mode grapheme-properties > native-grapheme-properties.jsonl
 go test -tags ghostty ./ghostty
 /tmp/phosphor-ghostty -mode throughput -duration 200ms > throughput.jsonl
 /tmp/phosphor-ghostty -mode state -duration 300ms > state.jsonl
@@ -130,3 +131,11 @@ clean pinned checkout used to build the linked library. The library
 currently reports `0.1.0-dev` without commit metadata, so output records
 that version separately from the verified source revision. The source
 and linked library must come from the same build command above.
+
+`grapheme-properties` audits `[U+0600, scalar]` for every Unicode scalar,
+returning consumed count and folded width ranges. U+0600 is a Prepend
+character, so consumed=2,width=1 identifies width-neutral continuation
+under that prefix. Results retain non-joining controls and variation
+selector/modifier outcomes. The native API leaves control-character
+behavior unspecified; these ranges are evidence for the pinned build,
+not a replacement for complete Unicode grapheme conformance.

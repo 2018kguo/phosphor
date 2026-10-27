@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -70,6 +71,163 @@ func TestNativeSnapshotReplyBinding(t *testing.T) {
 	after := traceState(t, e)
 	if after.Replies != before.Replies+before.Replies {
 		t.Fatalf("reply binding lost/duplicated: %q", after.Replies)
+	}
+}
+
+func TestNativePendingWrapWithoutAutowrap(t *testing.T) {
+	for _, test := range []struct{ name, input string }{
+		{"grapheme-widening", "\x1b[?2027h\x1b[?7lA❤️"},
+		{"grapheme-saved-pending", "\x1b[?2027h\x1b[?7lA❤️\x1b7\x1b[HX\x1b8"},
+		{"ordinary-saved-pending", "abc\x1b7\x1b[?7l\x1b[HX\x1b8"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			e := newTracedEngine("ghostty", 3, 3)
+			defer e.Close()
+			e.Write([]byte(test.input))
+			s := traceState(t, e)
+			t.Logf("cursor=%+v autowrap=%v", s.Cursor, s.Modes[4])
+			if s.Cursor.X != 2 || s.Cursor.Y != 0 || !s.Cursor.PendingWrap || s.Modes[4] {
+				t.Fatal("native pending-wrap/DECAWM expectation changed")
+			}
+		})
+	}
+}
+
+func TestNativeREPMapsInputScalarUsingCurrentCharset(t *testing.T) {
+	for _, test := range []struct{ input, want string }{{"\x1b(0q\x1b(B\x1b[2b", "─qq"}, {"q\x1b(0\x1b[2b", "q──"}} {
+		e := newTracedEngine("ghostty", 8, 3)
+		e.Write([]byte(test.input))
+		s := traceState(t, e)
+		e.Close()
+		var text string
+		for _, c := range s.Screen[0] {
+			text += c.Text
+		}
+		t.Logf("input=%x native=%q", test.input, text)
+		if text != test.want {
+			t.Fatalf("want %q got %q", test.want, text)
+		}
+	}
+}
+
+func TestNativeTabsResetOnlyWhenColumnsChange(t *testing.T) {
+	e := newTracedEngine("ghostty", 20, 3)
+	defer e.Close()
+	e.Write([]byte("\x1b[3g\t"))
+	if s := traceState(t, e); s.Cursor.X != 19 {
+		t.Fatal(s.Cursor)
+	}
+	e.Write([]byte("\x1b[5G\x1bH\r\t"))
+	if s := traceState(t, e); s.Cursor.X != 4 {
+		t.Fatal(s.Cursor)
+	}
+	e.Resize(20, 4)
+	e.Write([]byte("\r\t"))
+	if s := traceState(t, e); s.Cursor.X != 4 {
+		t.Fatal(s.Cursor)
+	}
+	e.Resize(30, 4)
+	e.Write([]byte("\r\t"))
+	if s := traceState(t, e); s.Cursor.X != 8 {
+		t.Fatal(s.Cursor)
+	}
+	e.Resize(10, 4)
+	e.Write([]byte("\r\t"))
+	if s := traceState(t, e); s.Cursor.X != 8 {
+		t.Fatal(s.Cursor)
+	}
+	t.Log("clear all => HT19; custom tab4 => HT4; height-only resize preserves4; width grow30/shrink10 restore defaults => HT8")
+}
+
+func TestNativeOSC2CommitsOnEscapeBeforeST(t *testing.T) {
+	for _, suffix := range []string{"\\", "[31mX", "X"} {
+		t.Run(fmt.Sprintf("suffix-%x", suffix), func(t *testing.T) {
+			e := newTracedEngine("ghostty", 8, 3)
+			defer e.Close()
+			e.Write([]byte("\x1b]2;old\a\x1b]2;new\x1b"))
+			s := traceState(t, e)
+			if s.Title != "new" {
+				t.Fatalf("title before ST=%q", s.Title)
+			}
+			e.Write([]byte(suffix))
+			s = traceState(t, e)
+			var text string
+			for _, c := range s.Screen[0] {
+				text += c.Text
+			}
+			t.Logf("suffix=%x title=%q text=%q", suffix, s.Title, text)
+			if s.Title != "new" {
+				t.Fatal(s.Title)
+			}
+		})
+	}
+}
+
+func TestNativeCPRClampsOutsideOrigin(t *testing.T) {
+	for _, input := range []string{
+		"A\x1b[2;3r\x1b[?6hB\x1b[22J\x1b[6n",
+		"A\x1b[2;3r\x1b[?69h\x1b[3;6s\x1b[?6hB\x1b[22J\x1b[6n",
+	} {
+		e := newTracedEngine("ghostty", 8, 4)
+		e.Write([]byte(input))
+		s := traceState(t, e)
+		e.Close()
+		t.Logf("input=%x cursor=%+v reply=%q", input, s.Cursor, s.Replies)
+		if s.Cursor.X != 0 || s.Cursor.Y != 0 || s.Replies != "\x1b[1;1R" {
+			t.Fatal("native origin CPR expectation changed")
+		}
+	}
+}
+
+func TestNativeHistoryDistinguishesHolesAndSpaces(t *testing.T) {
+	for _, test := range []struct {
+		name, input, leading string
+		bg                   uint32
+	}{
+		{"cursor-hole", "\x1b[3GA", "", 0},
+		{"literal-spaces", "  A", " ", 0},
+		{"background-hole", "\x1b[41m\x1b[2J\x1b[3GA\x1b[0m", "", uint32(phosphor.IndexedColor(1))},
+		{"hyperlink-hole", "\x1b]8;;https://example.com\x1b\\\x1b[3GA\x1b]8;;\x1b\\", "", 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			e := newTracedEngine("ghostty", 8, 2)
+			defer e.Close()
+			e.Write([]byte(test.input + "\r\nB\r\nC"))
+			s := traceState(t, e)
+			if len(s.History) != 1 {
+				t.Fatalf("history rows=%d", len(s.History))
+			}
+			a, b, c := s.History[0][0], s.History[0][1], s.History[0][2]
+			t.Logf("leading=%+v,%+v text=%+v", a, b, c)
+			if a.Text != test.leading || b.Text != test.leading || a.Bg != test.bg || b.Bg != test.bg || a.URI != "" || b.URI != "" || c.Text != "A" {
+				t.Fatal("native history holes/space expectation changed")
+			}
+		})
+	}
+}
+
+func TestNativeStringCancellation(t *testing.T) {
+	for _, prefix := range []string{"\x1b]2;cancelled", "\x1b]8;;https://cancelled.example", "\x1bP$qm", "\x1bP1;2zignored", "\x1bXignored", "\x1b^ignored", "\x1b_ignored"} {
+		for _, cancel := range []byte{0x18, 0x1a} {
+			t.Run(fmt.Sprintf("prefix-%x-cancel-%x", prefix, cancel), func(t *testing.T) {
+				e := newTracedEngine("ghostty", 12, 3)
+				defer e.Close()
+				e.Write([]byte("\x1b]2;before\a" + prefix + string(cancel) + "X"))
+				s := traceState(t, e)
+				var text string
+				for _, c := range s.Screen[0] {
+					text += c.Text
+				}
+				t.Logf("title=%q text=%q replies=%q link=%q", s.Title, text, s.Replies, s.Screen[0][0].URI)
+				wantReply := ""
+				if prefix == "\x1bP$qm" {
+					wantReply = "\x1bP1$r0m\x1b\\"
+				}
+				if s.Title != "before" || text != "X" || s.Replies != wantReply || s.Screen[0][0].URI != "" {
+					t.Fatal("native cancellation contract differs")
+				}
+			})
+		}
 	}
 }
 func TestTraceDecodingRejectsMalformedInput(t *testing.T) {

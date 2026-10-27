@@ -147,6 +147,13 @@ void exp_replies_free(ExpReplies *r) {
 void exp_widths(uint8_t *out, size_t len) {
   for (size_t i = 0; i < len; i++) out[i] = ghostty_unicode_codepoint_width((uint32_t)i);
 }
+void exp_grapheme_properties(uint8_t *out, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    uint32_t cps[] = {0x600, (uint32_t)i}; uint8_t width;
+    size_t consumed = ghostty_unicode_grapheme_width(cps, 2, &width);
+    out[i] = (uint8_t)((consumed << 4) | width);
+  }
+}
 static uint32_t exp_color(GhosttyStyleColor c) {
   switch (c.tag) {
     case GHOSTTY_STYLE_COLOR_PALETTE: return 0x1000000 | c.value.palette;

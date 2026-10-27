@@ -515,6 +515,39 @@ func scalarWidths(table bool) {
 	}
 }
 
+// Prepend U+0600 joins the following printable scalar. Keeping consumed count
+// distinguishes width-neutral continuation from a control-induced boundary.
+func nativeGraphemeProperties() {
+	values := make([]byte, 0x110000)
+	C.exp_grapheme_properties((*C.uint8_t)(unsafe.Pointer(&values[0])), C.size_t(len(values)))
+	start := -1
+	var current byte
+	neutral := 0
+	flush := func(last int) {
+		if start >= 0 {
+			emit(map[string]any{"kind": "native_grapheme_property_range", "first": start, "last": last, "consumed": int(current >> 4), "width": int(current & 15)})
+			start = -1
+		}
+	}
+	for r, value := range values {
+		if r >= 0xd800 && r <= 0xdfff {
+			flush(r - 1)
+			continue
+		}
+		if value == 0x21 {
+			neutral++
+		}
+		if start >= 0 && value != current {
+			flush(r - 1)
+		}
+		if start < 0 {
+			start, current = r, value
+		}
+	}
+	flush(0x10ffff)
+	emit(map[string]any{"kind": "native_grapheme_property_summary", "ghostty_commit": pinnedGhosttyCommit, "native_build": nativeBuildInfo(), "unicode_version": "17.0.0", "prefix_scalar": 0x600, "unicode_scalars": 0x110000 - 0x800, "first": 0, "last": 0x10ffff, "excluded_first": 0xd800, "excluded_last": 0xdfff, "neutral_join_scalars": neutral, "mode": "native-grapheme-width-prepend-prefix", "basis": "batched ghostty_unicode_grapheme_width([U+0600, scalar]); ranges retain consumed count and folded width; controls unspecified per native API"})
+}
+
 // Keep raw replies independently runnable while evolving the wider trace model.
 func cursorReplies() {
 	inputs := []string{"", "\x1b[?12h", "\x1b[?12l", "\x1b[1 q", "\x1b[2 q", "\x1b[3 q", "\x1b[4 q", "\x1b[5 q", "\x1b[6 q", "\x1b[7 q", "\x1b[65536 q", "\x1b[5 q\x1b[!p", "\x1b[5 q\x1bc", "\x1b[?12h\x1b[?12s\x1b[?12l\x1b[?12r"}
