@@ -13,12 +13,23 @@ func (t *Terminal) Title() string { return t.title }
 
 // Cursor returns the cursor's position, visibility and shape.
 func (t *Terminal) Cursor() Cursor {
-	c := Cursor{X: t.cur.x, Y: t.cur.y, Visible: !t.cursorHidden, PendingWrap: t.cur.wrapPending}
-	if s := t.cursorStyle; s >= 1 && s <= 6 {
-		c.Shape = CursorShape((s + 1) / 2)
-		c.Blink = s%2 == 1
+	return Cursor{X: t.cur.x, Y: t.cur.y, Visible: !t.cursorHidden, PendingWrap: t.cur.wrapPending,
+		Shape: t.cursorStyle.shape, Blink: t.cursorStyle.blink}
+}
+
+// Cursor shape and blinking can be changed independently by DECSCUSR and
+// DEC private mode 12. Keep their current values rather than the last command.
+type cursorAppearance struct {
+	shape CursorShape
+	blink bool
+}
+
+func (c cursorAppearance) parameter() int {
+	p := int(max(c.shape, CursorBlock)) * 2
+	if c.blink {
+		p--
 	}
-	return c
+	return p
 }
 
 // Modes returns the modes the program has set.

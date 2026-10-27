@@ -202,7 +202,7 @@ func (t *Terminal) appendDECRQSS(b []byte, q string) []byte {
 		b = appendPair(b, t.left+1, t.right+1, "s")
 	case " q":
 		b = append(b, ok...)
-		b = strconv.AppendInt(b, int64(max(t.cursorStyle, 1)), 10)
+		b = strconv.AppendInt(b, int64(t.cursorStyle.parameter()), 10)
 		b = append(b, " q"...)
 	case "\"q":
 		b = append(b, ok...)

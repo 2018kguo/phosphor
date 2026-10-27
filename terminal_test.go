@@ -243,7 +243,7 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	link := t.link(s.pen.L)
 	s.pen.L = 0
 	fmt.Fprintf(&b, "saved %+v link %q\n", s, link)
-	fmt.Fprintf(&b, "modes %v %v %v %v %v %v %v %v %d %d %d %v %q\n", t.autowrap, t.insert, t.newline, t.cursorHidden,
+	fmt.Fprintf(&b, "modes %v %v %v %v %v %v %v %v %d %d %v %v %q\n", t.autowrap, t.insert, t.newline, t.cursorHidden,
 		t.appCursor, t.appKeypad, t.bracketed, t.focus, t.mouse, t.mouseEnc, t.cursorStyle, t.kitty, t.title)
 	var tabs []int
 	for x := range t.cols {

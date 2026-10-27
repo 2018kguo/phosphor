@@ -470,11 +470,12 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = strconv.AppendInt(b, int64(f), 10)
 		b = append(b, 'u')
 	}
-	if t.cursorStyle != 0 {
+	if t.cursorStyle.shape != CursorDefault {
 		b = append(b, "\x1b["...)
-		b = strconv.AppendInt(b, int64(t.cursorStyle), 10)
+		b = strconv.AppendInt(b, int64(t.cursorStyle.parameter()), 10)
 		b = append(b, " q"...)
 	}
+	b = appendMode(b, 12, t.cursorStyle.blink)
 	if t.title != "" {
 		b = append(b, "\x1b]2;"...)
 		b = append(b, t.title...)

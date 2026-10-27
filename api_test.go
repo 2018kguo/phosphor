@@ -122,7 +122,7 @@ func TestCursorAndModes(t *testing.T) {
 		n     string
 		shape CursorShape
 		blink bool
-	}{{"0", CursorDefault, false}, {"1", CursorBlock, true}, {"2", CursorBlock, false}, {"4", CursorUnderline, false}, {"5", CursorBar, true}, {"6", CursorBar, false}, {"7", CursorDefault, false}} {
+	}{{"0", CursorDefault, false}, {"1", CursorBlock, true}, {"2", CursorBlock, false}, {"4", CursorUnderline, false}, {"5", CursorBar, true}, {"6", CursorBar, false}, {"7", CursorBar, false}} {
 		term.Write([]byte("\x1b[" + c.n + " q"))
 		if got := term.Cursor(); got.Shape != c.shape || got.Blink != c.blink {
 			t.Errorf("DECSCUSR %s: %+v", c.n, got)
@@ -281,7 +281,7 @@ func TestReplies(t *testing.T) {
 		{"\x1b[?2026h\x1b[?2026$p", "\x1b[?2026;1$y"},
 		{"\x1b[?1006$p", "\x1b[?1006;2$y"},
 		{"\x1b=\x1b[?66$p", "\x1b[?66;1$y"},
-		{"\x1b[?2027$p", "\x1b[?2027;0$y"},
+		{"\x1b[?2027$p", "\x1b[?2027;2$y"},
 		{"\x1b[?9999$p", "\x1b[?9999;0$y"},
 		{"\x1b[4h\x1b[4$p\x1b[20$p\x1b[2$p", "\x1b[4;1$y\x1b[20;2$y\x1b[2;0$y"},
 		// DECRQSS
@@ -291,7 +291,7 @@ func TestReplies(t *testing.T) {
 		{"\x1bP$qr\x1b\\", "\x1bP1$r1;5r\x1b\\"},
 		{"\x1b[?69h\x1b[2;8s\x1bP$qs\x1b\\", "\x1bP1$r2;8s\x1b\\"},
 		{"\x1b[5 q\x1bP$q q\x1b\\", "\x1bP1$r5 q\x1b\\"},
-		{"\x1bP$q q\x1b\\", "\x1bP1$r1 q\x1b\\"},
+		{"\x1bP$q q\x1b\\", "\x1bP1$r2 q\x1b\\"},
 		{"\x1b[1\"q\x1bP$q\"q\x1b\\", "\x1bP1$r1\"q\x1b\\"},
 		{"\x1bP$q\"p\x1b\\", "\x1bP1$r62;1\"p\x1b\\"},
 		{"\x1bP$qx\x1b\\", "\x1bP0$r\x1b\\"},

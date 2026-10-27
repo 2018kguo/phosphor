@@ -101,7 +101,7 @@ type Terminal struct {
 	sync         bool   // 2026: synchronized update in progress
 	mouse        uint16 // 0, 9, 1000, 1002 or 1003
 	mouseEnc     uint16 // 0, 1005, 1006 or 1015
-	cursorStyle  int    // DECSCUSR parameter, 0 = default
+	cursorStyle  cursorAppearance
 	kitty        []uint16
 	title        string
 	lastChar     rune
@@ -791,7 +791,9 @@ func (t *Terminal) csiDispatch(c byte) {
 	case 0:
 	case ' ':
 		if c == 'q' {
-			t.cursorStyle = t.param(0, 0)
+			if p := t.param(0, 0); p <= 6 {
+				t.cursorStyle = cursorAppearance{shape: CursorShape((p + 1) / 2), blink: p%2 == 1}
+			}
 		}
 		return
 	case '!':
@@ -923,6 +925,7 @@ func (t *Terminal) csiDispatch(c byte) {
 
 func (t *Terminal) softReset() {
 	t.cursorHidden = false
+	t.cursorStyle = cursorAppearance{}
 	t.insert = false
 	t.cur.origin = false
 	t.autowrap = true
@@ -951,6 +954,8 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 		return t.cur.origin, true
 	case 7:
 		return t.autowrap, true
+	case 12:
+		return t.cursorStyle.blink, true
 	case 45:
 		return t.revWrap, true
 	case 69:
@@ -1017,6 +1022,8 @@ func (t *Terminal) decMode(mode int, on bool) {
 		if !on {
 			t.cur.wrapPending = false
 		}
+	case 12:
+		t.cursorStyle.blink = on
 	case 45:
 		t.revWrap = on
 	case 69:
