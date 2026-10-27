@@ -42,7 +42,7 @@ jobs:
           go-version: stable
       - name: fuzz smoke (30s per target)
         run: |
-          for f in FuzzTokens FuzzStream FuzzChunking FuzzWrite FuzzDamage FuzzReplies FuzzRepaintContinuation FuzzCompactTrace FuzzGraphemeTransitions FuzzRestoreSnapshot FuzzSnapshotContinuation; do
+          for f in FuzzTokens FuzzStream FuzzChunking FuzzWrite FuzzDamage FuzzReplies FuzzRepaintContinuation FuzzCompactTrace FuzzGraphemeTransitions FuzzRestoreSnapshot FuzzSnapshotContinuation FuzzSparseHistoryValidation; do
             go test -run '^$' -fuzz "^$f\$" -fuzztime 30s . || exit 1
           done
           cd oracle && go test -run '^$' -fuzz '^FuzzOracle$' -fuzztime 30s .
