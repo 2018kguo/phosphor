@@ -21,7 +21,7 @@ and why its serialization is exact.
 
 ## Why
 
-- **Small.** About 3 KB for an idle 80x24 terminal at a shell prompt: a
+- **Small.** About 2.5 KB for an idle 80x24 terminal at a shell prompt: a
   cell is 16 bytes, rows are allocated once drawn on, the alternate
   screen only while shown, and scrollback is kept serialized under a
   byte budget (an 80x24 terminal with 2,000 lines of log scrollback holds
@@ -269,6 +269,11 @@ Besides the suites:
   `TestCellDoesNotAllocate` reading every cell.
 
 ## Performance
+
+The [October 2026 head-to-head comparison](oracle/ghostty/results/2026-10-27/README.md)
+measures the current code against phosphor v0.1.0 and libghostty-vt,
+including native RSS, idle compaction and replay. The table below records
+the original v0.1.0 comparison with other Go emulators.
 
 Apple M5 Pro, Go 1.26, one core. `oracle/compare_test.go` feeds the same
 streams, in 8 KiB writes as a PTY reader would, to each library at

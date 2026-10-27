@@ -39,11 +39,27 @@ recording correctness uses its original 100x30 geometry. Missing recordings
 are an error.
 
 Memory commands must run in fresh processes. Use three or more repeats
-and multiple terminal counts. `prompt` measures idle terminals;
+and multiple terminal counts. `blank`, `prompt`, `colored-prompt` and
+`saved-cursor` measure the corresponding idle terminals;
 `equal-100-history` retains the same 100 short, styled history lines in
 both engines. `full` fills the configured history, while `compressed`
 additionally invokes Ghostty's idle compression. Phosphor already stores
 history as compact VT bytes and has no extra compression step.
+
+`cleared` fills every row and erases back to a prompt. `cleared-compact`
+then calls phosphor's `Compact()` or Ghostty's idle compression API.
+`full-window` and `full-window-compact` retain the filled screen, showing
+the bound on what can be freed while keeping meaningful cells. The
+`compaction_applied` field distinguishes older phosphor binaries that
+have no `Compact` method. `-mode layout` reports actual struct size and
+field offsets; memory comparisons still use retained allocations and RSS.
+
+`ab.sh OLD_BINARY NEW_BINARY OUTPUT.jsonl` alternates the old phosphor,
+new phosphor and Ghostty in five rounds. Build both binaries from this
+same driver, using a temporary Go modfile to replace the baseline's
+phosphor dependency with v0.1.0. Throughput reports wall time and process
+CPU time; CPU includes Go GC and native work. Short samples on a shared
+host do not establish small differences as regressions or wins.
 
 Both engines are configured with 2000 lines / 256 KiB history. Their
 budgets have different meanings: phosphor counts serialized logical lines,
