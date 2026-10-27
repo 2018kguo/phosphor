@@ -2,6 +2,7 @@ package phosphor
 
 import (
 	"bytes"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -88,7 +89,7 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 	var fg Color
 	var rest uint64
 	cells := row[:end]
-	for i := range cells {
+	for i := 0; i < len(cells); {
 		c := &cells[i]
 		if c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
 			if c.L != style.L || (c.A^style.A)&AttrProtected != 0 {
@@ -99,11 +100,15 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 			style = styleOf(*c)
 			fg, rest = c.Fg, *(*uint64)(unsafe.Pointer(&c.Bg))
 		}
-		r := c.R
-		if uint32(r-1) < utf8.RuneSelf-1 { // printable ASCII and C0 (never stored)
-			b = append(b, byte(r))
+		if uint32(c.R-1) < utf8.RuneSelf-1 {
+			b = slices.Grow(b, len(cells)-i)
+			n := copyASCIICells(b[len(b):cap(b)], cells[i:])
+			b = b[:len(b)+n]
+			i += n
 			continue
 		}
+		i++
+		r := c.R
 		switch {
 		case r == wideTail: // printed with its left half (same style)
 		case r == 0, r == spacerHead:
@@ -124,6 +129,22 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 		b = append(b, "\x1b[0m"...)
 	}
 	return b
+}
+
+// copyASCIICells writes the initial ASCII run in one style. The destination
+// has room for every cell, so the copy loop needs no per-byte growth check.
+func copyASCIICells(dst []byte, src []cell) int {
+	dst = dst[:len(src)]
+	fg := src[0].Fg
+	rest := *(*uint64)(unsafe.Pointer(&src[0].Bg))
+	for i := range src {
+		c := &src[i]
+		if uint32(c.R-1) >= utf8.RuneSelf-1 || c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
+			return i
+		}
+		dst[i] = byte(c.R)
+	}
+	return len(src)
 }
 
 // appendStyle appends what changes the style from to that of c.

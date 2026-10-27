@@ -1304,9 +1304,10 @@ func (t *Terminal) printASCII(p []byte) {
 			continue
 		}
 		pen := t.cur.pen
+		row = row[x : x+n]
 		for i, b := range p[:n] {
 			pen.R = rune(b)
-			row[x+i] = pen
+			row[i] = pen
 		}
 		t.lastChar = rune(p[n-1])
 		if x+n > edge {
@@ -2153,7 +2154,19 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		t.sbBytes += len(line) - len(t.sb[n-1])
 		t.sb[n-1] = line
 	} else {
-		line := append([]byte(nil), t.scratch...)
+		var reusable []byte
+		if len(t.sb) > t.sbStart && (len(t.sb)-t.sbStart >= t.sbMaxLines || t.sbBytes+len(t.scratch)+24 > t.sbMaxBytes) {
+			// This line will evict the oldest one. Reuse its storage so
+			// steady scrolling does not allocate for every log line.
+			reusable = t.sb[t.sbStart]
+			t.sbBytes -= len(reusable) + 24
+			t.sb[t.sbStart] = nil
+			t.sbStart++
+			if cap(reusable) > 2*max(len(t.scratch), 64) {
+				reusable = nil // a short line must not pin an old long line
+			}
+		}
+		line := append(reusable[:0], t.scratch...)
 		t.sb = append(t.sb, line)
 		t.sbBytes += len(line) + 24
 	}
