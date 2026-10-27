@@ -9,17 +9,20 @@ import (
 	"unsafe"
 )
 
+var sgrAttributeCodes = [...]struct {
+	bit  Attr
+	code string
+}{
+	{AttrBold, ";1"}, {AttrFaint, ";2"}, {AttrItalic, ";3"}, {AttrBlink, ";5"},
+	{AttrInverse, ";7"}, {AttrHidden, ";8"}, {AttrStrikethrough, ";9"}, {AttrOverline, ";53"},
+}
+
 // appendSGR appends the escape sequence that sets exactly c's style,
 // starting from a reset.
 func appendSGR(b []byte, c cell) []byte {
 	b = append(b, "\x1b[0"...)
-	for _, a := range [...]struct {
-		bit  Attr
-		code string
-	}{
-		{AttrBold, ";1"}, {AttrFaint, ";2"}, {AttrItalic, ";3"}, {AttrBlink, ";5"},
-		{AttrInverse, ";7"}, {AttrHidden, ";8"}, {AttrStrikethrough, ";9"}, {AttrOverline, ";53"},
-	} {
+	// Range by reference so each style does not copy the encoding table.
+	for _, a := range &sgrAttributeCodes {
 		if c.A&a.bit != 0 {
 			b = append(b, a.code...)
 		}
