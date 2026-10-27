@@ -28,7 +28,6 @@ var knownFailures = map[string]string{
 
 	"ghostty/disabled wraparound with wide char and no space":                 "divergent: ghostty drops a wide character that does not fit with DECAWM off; libvterm and this emulator back up to fit it",
 	"ghostty/disabled wraparound with wide char and one space":                "divergent: as above",
-	"ghostty/cursorLeft reverse wrap with pending wrap above top margin":      "divergent: a restored pending wrap is kept only at the right margin (Repaint can only recreate it there); ghostty keeps it anywhere",
 	"ghostty/print wide char in single-width terminal":                        "divergent: ghostty sets a pending wrap for a character that cannot be printed at all",
 	"ghostty/print with wraparound disabled clears pending wrap after CBT #4": "divergent: ghostty keeps the pending-wrap flag while DECAWM is off; it has no effect then",
 	"ghostty/print with wraparound disabled clears pending wrap after CBT":    "divergent: as above",

@@ -73,7 +73,7 @@ func TestCompactKeepsLivePoolReferences(t *testing.T) {
 	for i := range 60 {
 		fmt.Fprintf(&churn, "\x1b[4;1H\x1b]8;;https://unused/%d\x1b\\a%c", i, rune(0x300+i))
 	}
-	// The last cluster is erased from the grid but REP still refers to it.
+	// The last cluster is erased, while REP still remembers its base scalar.
 	churn.WriteString("\x1b[4;1H\x1b[2K\x1b]8;;https://current-pen\x1b\\")
 	original, compacted := New(12, 5), New(12, 5)
 	for _, term := range []*Terminal{original, compacted} {
@@ -82,8 +82,8 @@ func TestCompactKeepsLivePoolReferences(t *testing.T) {
 	}
 	compacted.Compact()
 	assertPoolEquivalent(t, original, compacted)
-	if compacted.lastChar < clusterBase || compacted.cellString(cell{R: compacted.lastChar}) != original.cellString(cell{R: original.lastChar}) {
-		t.Fatal("erased cluster needed by REP was collected")
+	if compacted.lastChar != 'a' || compacted.lastChar != original.lastChar {
+		t.Fatal("REP lost its independently printed base scalar")
 	}
 	for _, next := range []string{"\x1b[2b", "\x1b8X", "\x1b[?1049lY", "\x1b8Z", "\x1b[?47hkept\x1b[?47l"} {
 		original.Write([]byte(next))

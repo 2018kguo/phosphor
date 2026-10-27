@@ -5,8 +5,6 @@ import (
 	"strings"
 	"unicode/utf8"
 	"unsafe"
-
-	"github.com/mattn/go-runewidth"
 )
 
 // cell is one screen position. R is 0 for a blank, wideTail for the right
@@ -39,12 +37,6 @@ const (
 	maxCluster             = 32 // bytes of a character with its combining marks
 	maxLogicalLine         = 32 << 10
 )
-
-var widthCond = func() *runewidth.Condition {
-	c := runewidth.NewCondition()
-	c.EastAsianWidth = false
-	return c
-}()
 
 type cursor struct {
 	x, y        int
@@ -89,6 +81,7 @@ type Terminal struct {
 	lrmm              bool      // DECLRMM: left and right margins enabled
 	protISO           bool      // protection was last set by SPA (ISO), not DECSCA
 	ss                uint8     // pending single shift (2 or 3)
+	grapheme          bool      // 2027: Unicode grapheme clustering
 	x                 *extra    // state few programs use, nil until one does
 	cfg               *config   // options and palette changes, nil if none
 	dirty             *dirtySet // damage, nil until ClearDirty is first called
@@ -144,7 +137,7 @@ type extra struct {
 	tabs       []uint64    // tab stops, nil for every 8 columns
 	savedModes []savedMode // XTSAVE
 	// characters with combining marks, referenced by cells
-	clusters   []string
+	clusters   []cluster
 	clusterCap int
 	// hyperlink targets ("params;uri"), referenced by cells
 	links   []string
@@ -386,9 +379,14 @@ func (t *Terminal) c1(r rune) {
 }
 
 func (t *Terminal) printRune(r rune) {
-	w := widthCond.RuneWidth(r)
+	if t.grapheme && r > 255 && t.extendGrapheme(r) {
+		return
+	}
+	w := scalarWidth(r)
 	if w == 0 {
-		t.combine(r)
+		if !t.grapheme {
+			t.combine(r)
+		}
 		return
 	}
 	t.print(r, w)
@@ -709,7 +707,9 @@ func (t *Terminal) setCursor(c cursor) {
 	t.cur = c
 	t.cur.x = min(t.cur.x, t.cols-1)
 	t.cur.y = min(t.cur.y, t.rows-1)
-	t.cur.wrapPending = t.cur.wrapPending && t.autowrap && (t.cur.x == t.cols-1 || t.cur.x == t.right)
+	// Pending wrap belongs to the saved cursor, even if margins changed
+	// since DECSC. Grapheme lookup must still select the cell under it.
+	t.cur.wrapPending = t.cur.wrapPending && t.autowrap
 }
 
 // param returns parameter i (ignoring sub-parameters), or def if it is
@@ -967,6 +967,8 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 		return t.focus, true
 	case 2004:
 		return t.bracketed, true
+	case 2027:
+		return t.grapheme, true
 	}
 	return false, false
 }
@@ -1045,6 +1047,8 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.bracketed = on
 	case 2026:
 		t.sync = on
+	case 2027:
+		t.grapheme = on
 	case 47, 1047:
 		t.setAlt(on, mode == 1047)
 	case 1048:
@@ -1325,8 +1329,14 @@ func (t *Terminal) combine(r rune) {
 	if len(s)+utf8.RuneLen(r) > maxCluster {
 		return
 	}
-	c.R = t.intern(s + string(r))
-	t.lastChar = c.R
+	if (r == 0xfe0e || r == 0xfe0f) && !runeInRanges(firstRune(s), emojiPictographs[:]) {
+		return
+	}
+	var modes uint32
+	if c.R >= clusterBase {
+		modes = t.x.clusters[c.R-clusterBase].joinModes
+	}
+	c.R = t.intern(cluster{text: s + string(r), width: uint8(t.runeWidth(c.R)), joinModes: modes})
 	t.touch(y)
 }
 
@@ -2147,7 +2157,7 @@ func (t *Terminal) link(l uint16) string {
 // cellString returns the characters a cell shows.
 func (t *Terminal) cellString(c cell) string {
 	if c.R >= clusterBase {
-		return t.x.clusters[c.R-clusterBase]
+		return t.x.clusters[c.R-clusterBase].text
 	}
 	return string(c.R)
 }
@@ -2155,15 +2165,15 @@ func (t *Terminal) cellString(c cell) string {
 // runeWidth returns the width of a cell's character.
 func (t *Terminal) runeWidth(r rune) int {
 	if r >= clusterBase {
-		r, _ = utf8.DecodeRuneInString(t.x.clusters[r-clusterBase])
+		return int(t.x.clusters[r-clusterBase].width)
 	}
-	return widthCond.RuneWidth(r)
+	return scalarWidth(r)
 }
 
 // intern returns the cell rune for a character with combining marks.
 // Recent entries are reused; when the table is full, entries no cell
 // refers to any more are dropped.
-func (t *Terminal) intern(s string) rune {
+func (t *Terminal) intern(s cluster) rune {
 	x := t.ext()
 	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
 		if x.clusters[i] == s {
@@ -2183,7 +2193,7 @@ func (t *Terminal) compactClusters() {
 	x := t.x
 	if len(x.clusters) > 0 {
 		remap := make([]rune, len(x.clusters))
-		var kept []string
+		var kept []cluster
 		ref := func(r *rune) {
 			if *r < clusterBase {
 				return
@@ -2201,8 +2211,8 @@ func (t *Terminal) compactClusters() {
 	x.clusterCap = max(64, 2*len(x.clusters))
 }
 
-// The last printed cluster remains live after erase: REP can print it
-// again even when neither screen contains it.
+// visitClusterRefs visits only stored cells. REP remembers the last
+// independently printed scalar, rather than its subsequently attached marks.
 func (t *Terminal) visitClusterRefs(ref func(*rune)) {
 	for _, scr := range [][][]cell{t.main, t.alt} {
 		for _, row := range scr {
@@ -2211,7 +2221,6 @@ func (t *Terminal) visitClusterRefs(ref func(*rune)) {
 			}
 		}
 	}
-	ref(&t.lastChar)
 }
 
 // --- scrollback ---

@@ -152,7 +152,7 @@ var ghostty1Cases = []confCase{
 		in: "x️", cur: at(1, 0),
 		check: func(t *Terminal) string { return g1Cells(t, [3]int{0, 0, 'x'}, [3]int{1, 0, 0}) }},
 
-	// mode 2027 grapheme clustering (out of scope)
+	// mode 2027 grapheme clustering
 	{name: "variation selectors apply to preceding codepoint", cols: 5, rows: 5,
 		in: g2027 + "\U0001F3F4‍☠️", gap: gGraph},
 	{name: "print multicodepoint grapheme, mode 2027", cols: 80, rows: 80,

@@ -37,6 +37,7 @@ func (t *Terminal) Modes() Modes {
 		Origin:                t.cur.origin,
 		ReverseVideo:          t.reverseVideo,
 		SyncUpdate:            t.sync,
+		GraphemeClustering:    t.grapheme,
 	}
 	if n := len(t.kitty); n > 0 {
 		m.KittyKeyboard = t.kitty[n-1]
@@ -70,7 +71,7 @@ func (t *Terminal) publicCell(row []cell, x int) Cell {
 		out.Rune = 0
 	default:
 		if r >= clusterBase {
-			s := t.x.clusters[r-clusterBase]
+			s := t.x.clusters[r-clusterBase].text
 			var n int
 			out.Rune, n = utf8.DecodeRuneInString(s)
 			out.Combining = s[n:]
@@ -148,8 +149,7 @@ func (t *Terminal) ScrollbackCells(i int) [][]Cell {
 		return nil
 	}
 	line := t.sb[t.sbStart+i]
-	tmp := newTerminal(t.cols, 2*utf8.RuneCount(line)/t.cols+2, 0, 0)
-	tmp.Write(line)
+	tmp := replayLine(line, t.cols)
 	rows := make([][]Cell, tmp.cur.y+1)
 	for y := range rows {
 		rows[y] = make([]Cell, t.cols)

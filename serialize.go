@@ -117,7 +117,11 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 		case r == 0, r == spacerHead:
 			b = append(b, ' ')
 		case r >= clusterBase:
-			b = append(b, t.x.clusters[r-clusterBase]...)
+			var tail cell
+			if i < len(cells) && cells[i].R == wideTail {
+				tail = cells[i]
+			}
+			b = t.appendCluster(b, t.x.clusters[r-clusterBase], *c, tail)
 		default:
 			b = utf8.AppendRune(b, r)
 		}
@@ -260,7 +264,7 @@ func (t *Terminal) Repaint(withScrollback bool) []byte {
 func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	// Synchronized update, normalize the receiving terminal, hide the
 	// cursor while painting.
-	b = append(b, "\x1b[?2026h\x1b[?1049l\x1b[?5l\x1b[?69l\x1b[0\"q\x1b[0m\x1b[r\x1b[?6l\x1b[?7h\x1b[4l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[?25l\x1b[H\x1b[2J"...)
+	b = append(b, "\x1b[?2026h\x1b[?2027l\x1b[?1049l\x1b[?5l\x1b[?69l\x1b[0\"q\x1b[0m\x1b[r\x1b[?6l\x1b[?7h\x1b[4l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[?25l\x1b[H\x1b[2J"...)
 	sbOpen := false
 	if withScrollback {
 		lines := t.sb[t.sbStart:]
@@ -483,6 +487,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.sync {
 		b = appendMode(b, 2026, true)
 	}
+	if t.grapheme {
+		b = appendMode(b, 2027, true)
+	}
 	return t.appendContinuation(b)
 }
 
@@ -622,7 +629,7 @@ func (t *Terminal) rowText(row []cell) string {
 		case r == 0, r == spacerHead:
 			sb.WriteByte(' ')
 		case r >= clusterBase:
-			sb.WriteString(t.x.clusters[r-clusterBase])
+			sb.WriteString(t.x.clusters[r-clusterBase].text)
 		default:
 			sb.WriteRune(r)
 		}

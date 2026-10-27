@@ -52,8 +52,9 @@ type confCase struct {
 // supported lists gap reasons the translators used for features that are
 // now modeled: those cases are checked like any other.
 var supported = map[string]bool{
-	"DECLRMM left/right margins":                  true,
-	"protected cells (DECSCA/SPA, DECSED/DECSEL)": true,
+	"DECLRMM left/right margins":                               true,
+	"grapheme clustering (mode 2027, VS15/VS16 width changes)": true,
+	"protected cells (DECSCA/SPA, DECSED/DECSEL)":              true,
 }
 
 type confSuite struct {
