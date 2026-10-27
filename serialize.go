@@ -236,9 +236,11 @@ func appendCharsets(b []byte, c cursor) []byte {
 // also meant for real terminals, so a client can attach to a running
 // program, and a checkpoint can be restored by replaying it.
 //
-// Not included: colors set by the program (OSC 4, 10, 11, 12), which would
-// change the receiving terminal's own colors, and transient state (a
-// synchronized update in progress, a sequence cut in the middle).
+// Unfinished escape sequences and UTF-8 characters are restored after the
+// repaint, so the next output continues them instead of printing their
+// remaining bytes. A synchronized update in progress stays in progress.
+// Colors set by the program (OSC 4, 10, 11, 12) are not included, since
+// replaying those would change the receiving terminal's own colors.
 //
 // The output is wrapped in a synchronized update (mode 2026) and hides the
 // cursor while painting.
@@ -473,7 +475,83 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if !t.cursorHidden {
 		b = append(b, "\x1b[?25h"...)
 	}
-	return append(b, "\x1b[?2026l"...)
+	b = append(b, "\x1b[?2026l"...)
+	if t.sync {
+		b = appendMode(b, 2026, true)
+	}
+	return t.appendContinuation(b)
+}
+
+// appendContinuation reconstructs the unfinished parser prefix from its
+// bounded state. Replaying the original input would repeat controls which
+// already moved the cursor or rang the bell. Keeping no separate raw log
+// also leaves Write's fast path and an idle terminal's size unchanged.
+func (t *Terminal) appendContinuation(b []byte) []byte {
+	switch t.state {
+	case stGround:
+		return append(b, t.utf8buf[:t.utf8n]...)
+	case stEsc:
+		return append(b, 0x1b)
+	case stEscInter:
+		return append(b, 0x1b, t.inter)
+	case stCSI:
+		b = append(b, '\x1b', '[')
+		if t.marker != 0 {
+			b = append(b, t.marker)
+		}
+		if t.paramSet {
+			for i := 0; i <= min(t.nparams, maxParams-1); i++ {
+				if i > 0 {
+					separator := byte(';')
+					if t.sub[i] {
+						separator = ':'
+					}
+					b = append(b, separator)
+				}
+				b = strconv.AppendInt(b, int64(t.params[i]), 10)
+			}
+			if t.nparams == maxParams {
+				// Further parameter bytes are ignored once the array fills.
+				b = append(b, ';')
+			}
+		}
+		if t.inter != 0 {
+			b = append(b, t.inter)
+		}
+		return b
+	case stCSIIgnore:
+		// A second private marker enters the ignore state without effects.
+		return append(b, "\x1b[??"...)
+	case stOSC, stOSCEsc:
+		b = append(b, '\x1b', ']')
+		b = append(b, t.osc...)
+		if t.oscOver {
+			// The retained payload is capped; one more byte restores the
+			// overflow flag, so its eventual terminator cannot dispatch it.
+			b = append(b, ' ')
+		}
+		if t.state == stOSCEsc {
+			b = append(b, '\x1b')
+		}
+		return b
+	case stDCS, stDCSEsc:
+		b = append(b, '\x1b', 'P')
+		b = append(b, t.osc...)
+		if t.state == stDCSEsc {
+			b = append(b, '\x1b')
+		}
+		return b
+	case stStr, stStrEsc:
+		// Ignored strings have no retained payload. SOS recreates the
+		// same wait for ST without enabling a graphics protocol.
+		b = append(b, '\x1b', 'X')
+		if t.state == stStrEsc {
+			b = append(b, '\x1b')
+		}
+		return b
+	default:
+		panic("invalid terminal parser state")
+	}
 }
 
 // appendScreen paints rows from the top-left corner, recreating soft

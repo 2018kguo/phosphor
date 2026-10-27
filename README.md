@@ -143,6 +143,11 @@ one), reproduce this one: scrollback, both screens with their soft wraps,
 tab stops, saved cursors and modes, margins, the cursor with its pending
 wrap, pen, character sets and shape, input modes, and the title. It is
 wrapped in a synchronized update and hides the cursor while painting.
+An unfinished escape sequence or UTF-8 character is restored after the
+painting, so later output continues it correctly. Controls which already
+took effect inside a sequence are not repeated, and a synchronized update
+in progress stays in progress. The continuation is reconstructed from the
+parser's bounded state; normal output needs no additional tracking buffer.
 Colors the program set with OSC 4/10/11/12 are left out, since replaying
 them would change the receiving terminal's own colors.
 `AppendRepaint` reuses a buffer.
@@ -233,7 +238,8 @@ Besides the suites:
 
 - Fuzzers: `FuzzTokens` (an alphabet of the sequences programs use, plus
   resizes, with invariants after every step and an exact `Repaint` round
-  trip), `FuzzStream` (raw bytes and resizes), `FuzzChunking` (how output
+  trip), `FuzzRepaintContinuation` (prefix, repaint and continued output),
+  `FuzzStream` (raw bytes and resizes), `FuzzChunking` (how output
   is split into writes does not matter), `FuzzWrite`, `FuzzDamage` (every
   row whose cells changed is dirty), `FuzzReplies` (answering queries
   never changes the state), and, in the `oracle` module, `FuzzOracle`, a
@@ -244,6 +250,10 @@ Besides the suites:
   regression input).
 - Recordings of nvim, vim, less, nano and man, cut at 40 points: the
   invariants, the `Repaint` round trip and resizes at each.
+- Every byte boundary in those recordings: repaint and continue the next
+  32 bytes before a later redraw can hide parser corruption. Focused cases
+  also check styles, modes, replies, bells, oversized sequences and every
+  parser state.
 - `TestRedrawDoesNotAllocate` pins zero allocations per redraw frame,
   `TestDamageDoesNotAllocate` the same with damage tracking on, and
   `TestCellDoesNotAllocate` reading every cell.
