@@ -450,7 +450,7 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		}
 		b = append(b, "\x1b[?6l\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[H\x1b[2J"...)
 		b = t.appendScreen(b, t.alt, t.altWrap, false, true, &usedSave)
-	} else if t.alt != nil {
+	} else if t.alt != nil || t.saved != nil && t.saved.screen[1].valid {
 		// An alternate screen left with mode 47 keeps its contents.
 		b = append(b, "\x1b[?47h\x1b[H\x1b[2J"...)
 		altUsedSave := false
@@ -547,6 +547,22 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			// recreated in that combination, so land on the last column.
 			b = appendCUP(b, y-t.top, x-t.left)
 		}
+	} else if t.canStageOriginCursor() {
+		// ED22 on a scratch alternate screen can reach physical positions
+		// above/left of origin margins. Mode 47 copies that cursor back
+		// without touching the painted main screen or either DECSC slot.
+		b = append(b, "\x1b[?47h\x1b[?6h\x1b[0m.\x1b[22J"...)
+		if y > 0 {
+			b = append(b, "\x1b["...)
+			b = strconv.AppendInt(b, int64(y), 10)
+			b = append(b, 'B')
+		}
+		if x > 0 {
+			b = append(b, "\x1b["...)
+			b = strconv.AppendInt(b, int64(x), 10)
+			b = append(b, 'C')
+		}
+		b = append(b, "\x1b[?47l"...)
 	} else if t.cur.origin {
 		b = append(b, "\x1b[?6h"...)
 		b = appendCUP(b, y-t.top, x-t.left)
@@ -631,6 +647,11 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = appendMode(b, 2027, true)
 	}
 	return t.appendContinuation(b)
+}
+
+func (t *Terminal) canStageOriginCursor() bool {
+	return t.cur.origin && !t.cur.wrapPending && !t.altActive && t.altBlank() &&
+		(t.cur.x < t.left || t.cur.y < t.top) && t.cur.x <= t.right && t.cur.y <= t.bot
 }
 
 // appendContinuation reconstructs the unfinished parser prefix from its
