@@ -2270,12 +2270,12 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 			end--
 		}
 		if row == nil {
-			t.scratch = t.appendWrapped(t.scratch[:0], nil, nil)
+			t.scratch = t.appendRowHistory(t.scratch[:0], nil, false, true)
 		} else {
-			t.scratch = t.appendRow(t.scratch[:0], row[:end], false)
+			t.scratch = t.appendRowHistory(t.scratch[:0], row[:end], false, true)
 		}
 	} else {
-		t.scratch = t.appendRow(t.scratch[:0], row, true)
+		t.scratch = t.appendRowHistory(t.scratch[:0], row, true, true)
 	}
 	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
 	putBack := join && t.sbSpacer && !startsWide(row)
@@ -2284,7 +2284,7 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		// printed, and the wrap may scroll in a row painted in the current
 		// background: clear the rest of it.
 		if len(t.scratch) == 0 {
-			t.scratch = append(t.scratch, ' ')
+			t.scratch = append(t.scratch, 0, 1, ' ')
 		}
 		t.scratch = append(t.scratch, "\x1b[K"...)
 	}

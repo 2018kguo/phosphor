@@ -79,7 +79,7 @@ func (t *Terminal) Resize(cols, rows int) {
 	t.cols, t.rows = cols, rows
 	switch {
 	case cols != oldCols && t.autowrap:
-		scr, wrap = t.rewrap(scr, wrap, oldCols, cols, pts)
+		scr, wrap = t.rewrap(scr, wrap, oldCols, cols, pts, 0)
 	case cols != oldCols:
 		// Without autowrap nothing wraps, so rows are cut instead.
 		for y, row := range scr {
@@ -221,7 +221,7 @@ func (t *Terminal) resizeRow(row []cell, oldCols int) []cell {
 // rewrap reflows scr (oldCols wide, wrap flags as in t.mainWrap) to cols
 // columns, returning the new rows and their wrap flags (one per row).
 // Points on the screen are moved with the characters they were on.
-func (t *Terminal) rewrap(scr [][]cell, wrap []bool, oldCols, cols int, pts []point) ([][]cell, []bool) {
+func (t *Terminal) rewrap(scr [][]cell, wrap []bool, oldCols, cols int, pts []point, extent int) ([][]cell, []bool) {
 	var out [][]cell
 	var outWrap []bool
 	var cells []cell
@@ -249,9 +249,12 @@ func (t *Terminal) rewrap(scr [][]cell, wrap []bool, oldCols, cols int, pts []po
 			cells = append(cells, row[:n]...)
 		}
 		length := len(cells)
-		for length > 0 && isZero(cells[length-1]) {
+		// History's explicitly serialized trailing holes remain part of the
+		// line. Screen reflow passes zero and trims its implicit padding.
+		for length > extent && isZero(cells[length-1]) {
 			length--
 		}
+		extent = 0
 		// Offsets of the points on this line.
 		type pref struct {
 			i   int
@@ -455,7 +458,8 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 // lexer and excludes CSI/OSC payloads: a large URL cannot allocate a wide row.
 func replayLine(line []byte, cols int) *Terminal {
 	cells := 0
-	walkHistoryText(line, func(text []byte) {
+	sparse := false
+	walkHistory(line, func(text []byte) {
 		for len(text) > 0 {
 			r, n := utf8.DecodeRune(text)
 			text = text[n:]
@@ -463,18 +467,33 @@ func replayLine(line []byte, cols int) *Terminal {
 			// counting one for each mark is a safe bound for mixed modes.
 			cells += max(1, CodepointWidth(r))
 		}
-	})
-	if !bytes.Contains(line, []byte("\x1b[?2027h")) {
+	}, func(start, spaces, end int) { sparse = true })
+	if !sparse && !bytes.Contains(line, []byte("\x1b[?2027h")) {
 		tmp := newTerminal(cols, cells/cols+2, 0, 0)
 		tmp.Write(line)
 		return tmp
 	}
 	wide := cells + 1
 	tmp := newTerminal(wide, 1, 0, 0)
-	tmp.Write(line)
-	tmp.main, tmp.mainWrap = tmp.rewrap(tmp.main, nil, wide, cols, nil)
+	if !sparse {
+		tmp.Write(line)
+	} else {
+		start := 0
+		walkHistory(line, nil, func(tag, spaces, end int) {
+			tmp.Write(line[start:tag])
+			x := tmp.cur.x
+			tmp.Write(line[spaces:end])
+			for i := x; i < x+end-spaces; i++ {
+				tmp.main[0][i].R = 0
+			}
+			start = end
+		})
+		tmp.Write(line[start:])
+	}
+	position := []point{{x: tmp.cur.x}}
+	tmp.main, tmp.mainWrap = tmp.rewrap(tmp.main, nil, wide, cols, position, tmp.cur.x)
 	tmp.cols, tmp.rows, tmp.right = cols, len(tmp.main), cols-1
-	tmp.cur.y = len(tmp.main) - 1
+	tmp.cur.x, tmp.cur.y, tmp.cur.wrapPending = position[0].x, position[0].y, position[0].pending
 	return tmp
 }
 
