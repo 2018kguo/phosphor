@@ -1,0 +1,89 @@
+=== RUN   TestConformance
+suite esctest    pass  410  fail    0  known-fail   12  out-of-scope  215
+      11  8-bit C1 controls
+       6  DECCOLM 132-column mode
+      82  device reports / replies
+       1  hyperlinks / semantic prompts / OSC state
+      47  palette and dynamic colors
+      36  rectangular area ops (DECCRA/DECERA/DECFRA/...)
+      32  window ops
+suite ghostty    pass  459  fail    0  known-fail    6  out-of-scope   84
+       5  DECCOLM 132-column mode
+       6  device reports / replies
+      42  grapheme clustering (mode 2027, VS15/VS16 width changes)
+      12  hyperlinks / semantic prompts / OSC state
+       2  images (sixel/kitty)
+       2  national/other charsets
+      15  palette and dynamic colors
+suite wezterm    pass  128  fail    0  known-fail    6  out-of-scope    4
+       1  8-bit C1 controls
+       1  double-width/height lines
+       2  hyperlinks / semantic prompts / OSC state
+--- PASS: TestConformance (0.00s)
+=== RUN   TestScrollClear
+=== RUN   TestScrollClear/partial
+=== RUN   TestScrollClear/below-content
+=== RUN   TestScrollClear/empty
+=== RUN   TestScrollClear/spaces
+=== RUN   TestScrollClear/soft-wrap
+=== RUN   TestScrollClear/wide-wrap
+=== RUN   TestScrollClear/colored-blanks
+=== RUN   TestScrollClear/protected
+--- PASS: TestScrollClear (0.00s)
+    --- PASS: TestScrollClear/partial (0.00s)
+    --- PASS: TestScrollClear/below-content (0.00s)
+    --- PASS: TestScrollClear/empty (0.00s)
+    --- PASS: TestScrollClear/spaces (0.00s)
+    --- PASS: TestScrollClear/soft-wrap (0.00s)
+    --- PASS: TestScrollClear/wide-wrap (0.00s)
+    --- PASS: TestScrollClear/colored-blanks (0.00s)
+    --- PASS: TestScrollClear/protected (0.00s)
+=== RUN   TestScrollClearMarginsAlternateAndBounds
+=== RUN   TestScrollClearMarginsAlternateAndBounds/margins
+=== RUN   TestScrollClearMarginsAlternateAndBounds/alternate
+=== RUN   TestScrollClearMarginsAlternateAndBounds/bounded
+=== RUN   TestScrollClearMarginsAlternateAndBounds/no-history
+=== RUN   TestScrollClearMarginsAlternateAndBounds/selective
+=== RUN   TestScrollClearMarginsAlternateAndBounds/saved-cursor
+=== RUN   TestScrollClearMarginsAlternateAndBounds/full-history-wrap-and-background
+--- PASS: TestScrollClearMarginsAlternateAndBounds (0.00s)
+    --- PASS: TestScrollClearMarginsAlternateAndBounds/margins (0.00s)
+    --- PASS: TestScrollClearMarginsAlternateAndBounds/alternate (0.00s)
+    --- PASS: TestScrollClearMarginsAlternateAndBounds/bounded (0.00s)
+    --- PASS: TestScrollClearMarginsAlternateAndBounds/no-history (0.00s)
+    --- PASS: TestScrollClearMarginsAlternateAndBounds/selective (0.00s)
+    --- PASS: TestScrollClearMarginsAlternateAndBounds/saved-cursor (0.00s)
+    --- PASS: TestScrollClearMarginsAlternateAndBounds/full-history-wrap-and-background (0.00s)
+=== RUN   TestScrollClearOutsideOriginReplayLimit
+--- PASS: TestScrollClearOutsideOriginReplayLimit (0.00s)
+=== RUN   TestScrollClearContinuation
+=== RUN   TestScrollClearContinuation/1x1
+=== RUN   TestScrollClearContinuation/1x2
+=== RUN   TestScrollClearContinuation/1x4
+=== RUN   TestScrollClearContinuation/2x1
+=== RUN   TestScrollClearContinuation/2x2
+=== RUN   TestScrollClearContinuation/2x4
+=== RUN   TestScrollClearContinuation/3x1
+=== RUN   TestScrollClearContinuation/3x2
+=== RUN   TestScrollClearContinuation/3x4
+=== RUN   TestScrollClearContinuation/8x1
+=== RUN   TestScrollClearContinuation/8x2
+=== RUN   TestScrollClearContinuation/8x4
+--- PASS: TestScrollClearContinuation (0.02s)
+    --- PASS: TestScrollClearContinuation/1x1 (0.00s)
+    --- PASS: TestScrollClearContinuation/1x2 (0.00s)
+    --- PASS: TestScrollClearContinuation/1x4 (0.00s)
+    --- PASS: TestScrollClearContinuation/2x1 (0.00s)
+    --- PASS: TestScrollClearContinuation/2x2 (0.00s)
+    --- PASS: TestScrollClearContinuation/2x4 (0.00s)
+    --- PASS: TestScrollClearContinuation/3x1 (0.00s)
+    --- PASS: TestScrollClearContinuation/3x2 (0.00s)
+    --- PASS: TestScrollClearContinuation/3x4 (0.00s)
+    --- PASS: TestScrollClearContinuation/8x1 (0.00s)
+    --- PASS: TestScrollClearContinuation/8x2 (0.00s)
+    --- PASS: TestScrollClearContinuation/8x4 (0.00s)
+=== RUN   TestScrollClearPreservesREP
+--- PASS: TestScrollClearPreservesREP (0.00s)
+PASS
+ok  	github.com/2018kguo/phosphor	0.161s
+?   	github.com/2018kguo/phosphor/internal/benchdata	[no test files]

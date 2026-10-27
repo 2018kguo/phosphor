@@ -1,0 +1,17 @@
+go version go1.26.10 linux/arm64
+go: downloading github.com/mattn/go-runewidth v0.0.31
+go: downloading github.com/clipperhouse/uax29/v2 v2.2.0
+ok  	github.com/2018kguo/phosphor	5.333s
+ok  	github.com/2018kguo/phosphor	8.798s
+?   	github.com/2018kguo/phosphor/internal/benchdata	[no test files]
+go: downloading golang.org/x/term v0.47.0
+go: downloading github.com/creack/pty v1.1.24
+go: downloading github.com/clipperhouse/uax29/v2 v2.7.0
+go: downloading golang.org/x/sys v0.49.0
+ok  	github.com/2018kguo/ptyd/cmd/ptyd	2.700s
+ok  	github.com/2018kguo/ptyd/internal/api	3.041s
+?   	github.com/2018kguo/ptyd/internal/benchdata	[no test files]
+ok  	github.com/2018kguo/ptyd/internal/client	2.843s
+ok  	github.com/2018kguo/ptyd/internal/terminal	16.784s
+PASS
+PASS

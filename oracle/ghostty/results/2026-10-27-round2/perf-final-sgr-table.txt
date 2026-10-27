@@ -1,0 +1,90 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteStream/vim-18         	   10810	     22621 ns/op	 303.78 MB/s	       7 B/op	       0 allocs/op
+BenchmarkWriteStream/less-18        	    9115	     26380 ns/op	 196.17 MB/s	       9 B/op	       0 allocs/op
+BenchmarkWriteStream/claude-18      	      74	   3293051 ns/op	 318.72 MB/s	   23088 B/op	     101 allocs/op
+BenchmarkWriteStream/logs-18        	      80	   2753915 ns/op	 380.77 MB/s	    8278 B/op	      25 allocs/op
+BenchmarkWriteStream/progress-18    	     220	   1097853 ns/op	 955.32 MB/s	    3002 B/op	       9 allocs/op
+BenchmarkSerialize/RepaintScreen-18 	   18783	     12568 ns/op	   14336 B/op	       2 allocs/op
+BenchmarkSerialize/RepaintScrollback-18         	    9645	     25198 ns/op	3906.12 MB/s	  114688 B/op	       1 allocs/op
+BenchmarkSerialize/Lines-18                     	   27792	      8388 ns/op	    5328 B/op	      47 allocs/op
+BenchmarkSerialize/ScrollbackLines-18           	    2221	    112392 ns/op	  105936 B/op	     628 allocs/op
+BenchmarkReplay-18                              	     405	    609858 ns/op	 161.39 MB/s	  211827 B/op	     685 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteStream/vim-18         	   11360	     21202 ns/op	 324.12 MB/s	       6 B/op	       0 allocs/op
+BenchmarkWriteStream/less-18        	   10000	     22044 ns/op	 234.76 MB/s	       8 B/op	       0 allocs/op
+BenchmarkWriteStream/claude-18      	      79	   2904886 ns/op	 361.30 MB/s	   22662 B/op	     100 allocs/op
+BenchmarkWriteStream/logs-18        	      93	   2519495 ns/op	 416.20 MB/s	    7120 B/op	      22 allocs/op
+BenchmarkWriteStream/progress-18    	     241	    983064 ns/op	1066.87 MB/s	    2740 B/op	       8 allocs/op
+BenchmarkSerialize/RepaintScreen-18 	   22730	     10806 ns/op	   14336 B/op	       2 allocs/op
+BenchmarkSerialize/RepaintScrollback-18         	   10000	     31375 ns/op	3137.09 MB/s	  114689 B/op	       1 allocs/op
+BenchmarkSerialize/Lines-18                     	   29302	      8425 ns/op	    5328 B/op	      47 allocs/op
+BenchmarkSerialize/ScrollbackLines-18           	    2258	    101830 ns/op	  105936 B/op	     628 allocs/op
+BenchmarkReplay-18                              	     452	    538786 ns/op	 182.68 MB/s	  211824 B/op	     685 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteStream/vim-18         	   12628	     19187 ns/op	 358.17 MB/s	       6 B/op	       0 allocs/op
+BenchmarkWriteStream/less-18        	   10000	     21288 ns/op	 243.09 MB/s	       8 B/op	       0 allocs/op
+BenchmarkWriteStream/claude-18      	      88	   2727992 ns/op	 384.73 MB/s	   22029 B/op	      99 allocs/op
+BenchmarkWriteStream/logs-18        	     111	   2113222 ns/op	 496.21 MB/s	    5966 B/op	      18 allocs/op
+BenchmarkWriteStream/progress-18    	     286	    847197 ns/op	1237.97 MB/s	    2309 B/op	       7 allocs/op
+BenchmarkSerialize/RepaintScreen-18 	   26466	      9132 ns/op	   14336 B/op	       2 allocs/op
+BenchmarkSerialize/RepaintScrollback-18         	   13147	     18065 ns/op	5448.54 MB/s	  114688 B/op	       1 allocs/op
+BenchmarkSerialize/Lines-18                     	   38203	      6469 ns/op	    5328 B/op	      47 allocs/op
+BenchmarkSerialize/ScrollbackLines-18           	    2778	     85221 ns/op	  105936 B/op	     628 allocs/op
+BenchmarkReplay-18                              	     529	    444235 ns/op	 221.57 MB/s	  211824 B/op	     685 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteStream/vim-18         	   12450	     19036 ns/op	 361.01 MB/s	       6 B/op	       0 allocs/op
+BenchmarkWriteStream/less-18        	   12398	     19325 ns/op	 267.78 MB/s	       6 B/op	       0 allocs/op
+BenchmarkWriteStream/claude-18      	      97	   2635510 ns/op	 398.23 MB/s	   21503 B/op	      98 allocs/op
+BenchmarkWriteStream/logs-18        	     100	   2032885 ns/op	 515.82 MB/s	    6622 B/op	      20 allocs/op
+BenchmarkWriteStream/progress-18    	     306	    847740 ns/op	1237.17 MB/s	    2158 B/op	       6 allocs/op
+BenchmarkSerialize/RepaintScreen-18 	   23427	     10744 ns/op	   14336 B/op	       2 allocs/op
+BenchmarkSerialize/RepaintScrollback-18         	   12472	     18915 ns/op	5203.74 MB/s	  114688 B/op	       1 allocs/op
+BenchmarkSerialize/Lines-18                     	   36207	      6771 ns/op	    5328 B/op	      47 allocs/op
+BenchmarkSerialize/ScrollbackLines-18           	    2721	     85905 ns/op	  105936 B/op	     628 allocs/op
+BenchmarkReplay-18                              	     531	    459907 ns/op	 214.02 MB/s	  211825 B/op	     685 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteStream/vim-18         	   13478	     17659 ns/op	 389.15 MB/s	       5 B/op	       0 allocs/op
+BenchmarkWriteStream/less-18        	   12739	     18998 ns/op	 272.40 MB/s	       6 B/op	       0 allocs/op
+BenchmarkWriteStream/claude-18      	      88	   2512928 ns/op	 417.66 MB/s	   22029 B/op	      99 allocs/op
+BenchmarkWriteStream/logs-18        	     100	   2038146 ns/op	 514.49 MB/s	    6622 B/op	      20 allocs/op
+BenchmarkWriteStream/progress-18    	     296	    801570 ns/op	1308.43 MB/s	    2231 B/op	       6 allocs/op
+BenchmarkSerialize/RepaintScreen-18 	   27259	      8783 ns/op	   14336 B/op	       2 allocs/op
+BenchmarkSerialize/RepaintScrollback-18         	   14708	     16138 ns/op	6098.94 MB/s	  114688 B/op	       1 allocs/op
+BenchmarkSerialize/Lines-18                     	   32160	      7093 ns/op	    5328 B/op	      47 allocs/op
+BenchmarkSerialize/ScrollbackLines-18           	    2670	     86431 ns/op	  105936 B/op	     628 allocs/op
+BenchmarkReplay-18                              	     560	    415230 ns/op	 237.04 MB/s	  211825 B/op	     685 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteStream/vim-18         	   13587	     17401 ns/op	 394.93 MB/s	       5 B/op	       0 allocs/op
+BenchmarkWriteStream/less-18        	   12403	     19121 ns/op	 270.64 MB/s	       6 B/op	       0 allocs/op
+BenchmarkWriteStream/claude-18      	     100	   2419966 ns/op	 433.70 MB/s	   21344 B/op	      98 allocs/op
+BenchmarkWriteStream/logs-18        	     122	   1941762 ns/op	 540.03 MB/s	    5442 B/op	      17 allocs/op
+BenchmarkWriteStream/progress-18    	     316	    758841 ns/op	1382.11 MB/s	    2090 B/op	       6 allocs/op
+BenchmarkSerialize/RepaintScreen-18 	   27364	      8358 ns/op	   14336 B/op	       2 allocs/op
+BenchmarkSerialize/RepaintScrollback-18         	   16282	     14786 ns/op	6656.64 MB/s	  114688 B/op	       1 allocs/op
+BenchmarkSerialize/Lines-18                     	   41794	      5748 ns/op	    5328 B/op	      47 allocs/op
+BenchmarkSerialize/ScrollbackLines-18           	    3072	     91201 ns/op	  105937 B/op	     628 allocs/op
+BenchmarkReplay-18                              	     470	    496024 ns/op	 198.43 MB/s	  211828 B/op	     685 allocs/op
+PASS

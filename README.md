@@ -275,10 +275,12 @@ Besides the suites:
 
 ## Performance
 
-The [October 2026 head-to-head comparison](oracle/ghostty/results/2026-10-27/README.md)
-measures the current code against phosphor v0.1.0 and libghostty-vt,
-including native RSS, idle compaction and replay. The table below records
-the original v0.1.0 comparison with other Go emulators.
+The [October 2026 follow-up comparison](oracle/ghostty/results/2026-10-27-round2/README.md)
+measures idle metadata reclamation, parsing, replay and compatibility against
+libghostty-vt. The [first round](oracle/ghostty/results/2026-10-27/README.md)
+also compares with phosphor v0.1.0. Cross-engine memory figures include
+native RSS. The table below records the original v0.1.0 comparison with
+other Go emulators.
 
 Apple M5 Pro, Go 1.26, one core. `oracle/compare_test.go` feeds the same
 streams, in 8 KiB writes as a PTY reader would, to each library at

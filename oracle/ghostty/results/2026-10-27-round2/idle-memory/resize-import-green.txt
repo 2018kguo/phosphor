@@ -1,0 +1,2 @@
+PASS
+ok  	github.com/2018kguo/phosphor	0.524s
