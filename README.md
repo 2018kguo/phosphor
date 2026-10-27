@@ -158,6 +158,10 @@ Colors the program set with OSC 4/10/11/12 are left out, since replaying
 them would change the receiving terminal's own colors.
 `AppendRepaint` reuses a buffer.
 
+The preceding character used by REP (`CSI b`) is not serialized. Resuming
+a pending REP after a repaint can therefore differ from uninterrupted
+output; preserving unfinished parser input does not remove that limit.
+
 `Restart()` is for running a new program in the same terminal: it resets
 everything as RIS does but keeps the scrollback and the old screen in
 view above the cursor, as a terminal that relaunches its command does.
