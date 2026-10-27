@@ -2,6 +2,7 @@ package phosphor
 
 import (
 	"bytes"
+	"encoding/binary"
 	"slices"
 	"strconv"
 	"strings"
@@ -645,31 +646,71 @@ func stripSGR(line []byte) string {
 // walkHistoryText scans the bounded grammar produced by appendRow: text,
 // CSI styles/modes/EL and OSC 8 links terminated by ST. Sharing this lexer
 // keeps text extraction and history allocation sizing independent of URLs.
-func walkHistoryText(line []byte, text func([]byte)) {
-	start := 0
-	for i := 0; i < len(line); i++ {
-		c := line[i]
-		if c != 0x1b {
-			continue
+func walkHistoryText(line []byte, text func([]byte)) bool {
+	for i := 0; i < len(line); {
+		start := i
+		for i < len(line) && line[i] != 0x1b {
+			if i+8 <= len(line) && printable8(binary.LittleEndian.Uint64(line[i:])) {
+				i += 8
+				continue
+			}
+			if c := line[i]; c >= 0x20 && c < 0x7f {
+				i++
+				continue
+			}
+			r, n := utf8.DecodeRune(line[i:])
+			if n == 1 || r < 0xa0 {
+				return false
+			}
+			i += n
 		}
-		if start < i {
+		if text != nil && start < i {
 			text(line[start:i])
 		}
-		if i+1 < len(line) && line[i+1] == ']' { // OSC 8, ended by ST
-			end := bytes.Index(line[i:], []byte("\x1b\\"))
-			if end < 0 {
-				return
+		if i == len(line) {
+			return true
+		}
+		if i+2 > len(line) {
+			return false
+		}
+		switch line[i+1] {
+		case '[':
+			body := line[i+2:]
+			switch {
+			case len(body) >= 6 && bytes.Equal(body[:5], []byte("?2027")) && (body[5] == 'h' || body[5] == 'l'):
+				i += 8
+			case len(body) >= 1 && body[0] == 'K':
+				i += 3
+			case len(body) >= 3 && (body[0] == '0' || body[0] == '1') && body[1] == '"' && body[2] == 'q':
+				i += 5
+			default:
+				j := i + 2
+				for j < len(line) && (line[j] >= '0' && line[j] <= '9' || line[j] == ';' || line[j] == ':') {
+					j++
+				}
+				if j == len(line) || line[j] != 'm' {
+					return false
+				}
+				i = j + 1
 			}
-			i += end + 1
-			start = i + 1
-			continue
+		case ']':
+			if !bytes.HasPrefix(line[i+2:], []byte("8;")) {
+				return false
+			}
+			payload := line[i+4:]
+			end := bytes.IndexByte(payload, 0x1b)
+			if end < 0 || end+1 >= len(payload) || payload[end+1] != '\\' {
+				return false
+			}
+			payload = payload[:end]
+			if bytes.IndexByte(payload, ';') < 0 || bytes.IndexByte(payload, 0x07) >= 0 ||
+				bytes.IndexByte(payload, 0x18) >= 0 || bytes.IndexByte(payload, 0x1a) >= 0 {
+				return false
+			}
+			i += end + 6
+		default:
+			return false
 		}
-		// CSI: skip to the final byte.
-		for i += 2; i < len(line) && (line[i] < 0x40 || line[i] > 0x7e); i++ {
-		}
-		start = min(i+1, len(line))
 	}
-	if start < len(line) {
-		text(line[start:])
-	}
+	return true
 }

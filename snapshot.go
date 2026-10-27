@@ -38,7 +38,52 @@ var snapshotCRC = crc32.MakeTable(crc32.Castagnoli)
 // not contain reply writers or bell callbacks.
 //
 // Like Write and Resize, snapshot methods require exclusive access.
-func (t *Terminal) Snapshot() []byte { return t.AppendSnapshot(nil) }
+func (t *Terminal) Snapshot() []byte {
+	// Estimate from owned history and drawn row prefixes. Sparse terminals
+	// need no capacity proportional to their full cell geometry.
+	n := 128 + 2*t.rows + t.sbBytes + len(t.title) + 3*len(t.kitty)
+	for _, screen := range [][][]cell{t.main, t.alt} {
+		for _, row := range screen {
+			end := len(row)
+			for end > 0 && row[end-1] == (cell{}) {
+				end--
+			}
+			if end > 0 {
+				n += 2*end + 16
+			}
+		}
+	}
+	if t.alt != nil {
+		n += 2 * t.rows
+	}
+	if t.saved != nil {
+		n += 128
+	}
+	if x := t.x; x != nil {
+		for _, c := range x.clusters {
+			n += len(c.text) + 8
+		}
+		for _, s := range x.links {
+			n += len(s) + 4
+		}
+		n += 10*len(x.tabs) + 5*len(x.savedModes)
+	}
+	if c := t.cfg; c != nil {
+		if c.palette != nil {
+			n += 259 * 3
+		}
+		n += 6 * len(c.colors)
+	}
+	if t.dirty != nil {
+		n += 10 * len(t.dirty.bits)
+	}
+	if t.state >= stOSC {
+		n += len(t.osc) + 4
+	} else if t.state == stCSI {
+		n += 7*int(t.nparams) + 4
+	}
+	return t.AppendSnapshot(make([]byte, 0, n))
+}
 
 // AppendSnapshot appends an exact checkpoint to dst, reusing its storage.
 func (t *Terminal) AppendSnapshot(dst []byte) []byte {
@@ -199,8 +244,18 @@ func (e *snapshotEncoder) screen(screen [][]cell, wraps []bool) {
 			}
 			e.u(uint64(end - i))
 			e.style(style)
-			for _, c := range row[i:end] {
-				e.u(uint64(int64(c.R) + 2))
+			for j := i; j < end; {
+				e.u(uint64(int64(row[j].R) + 2))
+				if row[j].R == 0 {
+					last := j + 1
+					for last < end && row[last].R == 0 {
+						last++
+					}
+					e.u(uint64(last - j))
+					j = last
+				} else {
+					j++
+				}
 			}
 			i = end
 		}
@@ -213,7 +268,8 @@ func (e *snapshotEncoder) screen(screen [][]cell, wraps []bool) {
 //
 // No callbacks run, no input storage is retained, and an error leaves the
 // receiver unchanged. Negative limits are invalid. The decoded-storage bound
-// excludes a bounded parser-validation scratch buffer of at most maxOSC+4 bytes.
+// excludes fixed parser-validation scratch state and a buffer of at most
+// maxOSC+4 bytes.
 func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if limits.MaxBytes < 0 || limits.MaxCells < 0 {
 		return fmt.Errorf("%w: negative restore limit", ErrSnapshotLimit)
@@ -335,9 +391,10 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 	}
 	if x.clusters != nil || x.links != nil || x.tabs != nil || x.savedModes != nil {
-		d.charge(1, int(unsafe.Sizeof(extra{})))
-		next.x = new(extra)
-		*next.x = x
+		if d.charge(1, int(unsafe.Sizeof(extra{}))) {
+			next.x = new(extra)
+			*next.x = x
+		}
 	}
 	d.section = "cursors"
 	next.cur = d.cursor(&next)
@@ -364,6 +421,12 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		next.sb = make([][]byte, n)
 		for i := range next.sb {
 			b := d.blob(int(^uint(0) >> 1))
+			if d.err == nil && !walkHistoryText(b, nil) {
+				d.fail(ErrSnapshotMalformed, "history formatter syntax")
+			}
+			if d.err != nil {
+				break
+			}
 			next.sb[i] = bytes.Clone(b)
 			next.sbBytes += len(b) + 24
 		}
@@ -557,6 +620,7 @@ func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []bool) {
 		}
 		row := make([]cell, t.cols)
 		screen[y] = row
+		wantTail := false
 		for i := 0; i < n && d.err == nil; {
 			run := d.integer()
 			if run < 1 || run > n-i {
@@ -564,9 +628,23 @@ func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []bool) {
 				break
 			}
 			style := d.style(t)
-			for end := i + run; i < end; i++ {
+			for end := i + run; i < end; {
 				c := style
 				c.R = rune(int64(d.number(uint64(^uint32(0)>>1)+2)) - 2)
+				if c.R == 0 {
+					zeros := d.integer()
+					if zeros < 1 || zeros > end-i || wantTail {
+						d.fail(ErrSnapshotMalformed, "blank cell run")
+						break
+					}
+					if style != (cell{}) {
+						for j := i; j < i+zeros; j++ {
+							row[j] = style
+						}
+					}
+					i += zeros
+					continue
+				}
 				if c.R >= clusterBase {
 					if t.x == nil || int(c.R-clusterBase) >= len(t.x.clusters) {
 						d.fail(ErrSnapshotMalformed, "cluster reference")
@@ -574,23 +652,28 @@ func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []bool) {
 				} else if c.R != 0 && c.R != wideTail && c.R != spacerHead && !snapshotScalar(c.R) {
 					d.fail(ErrSnapshotMalformed, "cell character")
 				}
+				if d.err == nil {
+					if (c.R == wideTail) != wantTail {
+						d.fail(ErrSnapshotMalformed, "wide cell geometry")
+					}
+					wantTail = c.R >= utf8.RuneSelf && t.runeWidth(c.R) == 2
+				}
 				row[i] = c
+				i++
 			}
 		}
-		if d.err == nil {
-			for i, c := range row {
-				if c.R == wideTail && (i == 0 || row[i-1].R <= 0 || t.runeWidth(row[i-1].R) != 2) ||
-					c.R > 0 && t.runeWidth(c.R) == 2 && (i+1 == len(row) || row[i+1].R != wideTail) {
-					d.fail(ErrSnapshotMalformed, "wide cell geometry")
-				}
-			}
+		if wantTail {
+			d.fail(ErrSnapshotMalformed, "wide cell geometry")
 		}
 	}
 	return screen, wraps
 }
 
 func snapshotScalar(r rune) bool {
-	return utf8.ValidRune(r) && r >= 0x20 && r != 0x7f && (r < 0x80 || r >= 0xa0) && scalarWidth(r) > 0
+	if r >= 0x20 && r < 0x7f {
+		return true
+	}
+	return utf8.ValidRune(r) && r >= 0x20 && r != 0x7f && (r < 0x80 || r >= 0xa0) && CodepointWidth(r) > 0
 }
 func snapshotCluster(c cluster) bool {
 	if len(c.text) == 0 || !utf8.ValidString(c.text) || c.width < 1 || c.width > 2 || !snapshotScalar(firstRune(c.text)) {
@@ -609,7 +692,7 @@ func snapshotCluster(c cluster) bool {
 }
 
 func snapshotOSCText(s string) bool {
-	for i := range s {
+	for i := 0; i < len(s); i++ {
 		switch s[i] {
 		case 0x07, 0x18, 0x1a, 0x1b:
 			return false

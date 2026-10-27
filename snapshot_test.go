@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -247,6 +249,9 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 		"palette-duplicate": func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 1}, {i: 1}}} },
 		"title-command":     func(t *Terminal) { t.title = "title\x1b[c" },
 		"link-command":      func(t *Terminal) { t.ext().links = []string{";https://example.com\a"} },
+		"history-query":     func(t *Terminal) { t.sb = [][]byte{[]byte("\x1b[cX")}; t.sbBytes = 28 },
+		"history-bell":      func(t *Terminal) { t.sb = [][]byte{[]byte("hello\a")}; t.sbBytes = 30 },
+		"history-OSC":       func(t *Terminal) { t.sb = [][]byte{[]byte("\x1b]52;;clipboard\x1b\\")}; t.sbBytes = 42 },
 	} {
 		bad := New(4, 2)
 		mutate(bad)
@@ -257,6 +262,53 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 		bad = binary.AppendUvarint(bad, uint64(len(prefix)))
 		bad = append(bad, prefix...)
 		check("completed-prefix", sealSnapshot(bad), SnapshotLimits{}, ErrSnapshotMalformed)
+	}
+}
+
+func TestHistoryFormatterGrammar(t *testing.T) {
+	for _, line := range []string{
+		"plain 漢 é",
+		"\x1b[0;1;38;2;1;2;3;4:3mstyled\x1b[0m",
+		"\x1b[1\"qprotected\x1b[0\"q\x1b[K",
+		"\x1b[?2027h❤️\x1b[?2027l",
+		"\x1b]8;id=a;https://example.com/\xff\x1b\\linked\x1b]8;;\x1b\\",
+	} {
+		var plain bytes.Buffer
+		if !walkHistoryText([]byte(line), func(text []byte) { plain.Write(text) }) || !walkHistoryText([]byte(line), nil) {
+			t.Fatalf("valid formatter output rejected: %q", line)
+		}
+		if bytes.ContainsAny(plain.Bytes(), "\x1b") {
+			t.Fatalf("formatting leaked into text: %q", plain.Bytes())
+		}
+	}
+	for _, line := range []string{
+		"\a", "\r", "\n", "\x7f", "\u009b", "\xff", "\xe6\xbc", "\x1b", "\x1b[", "\x1b[0",
+		"\x1b[c", "\x1b[6n", "\x1b[2J", "\x1b[?69h", "\x1b[2\"q", "\x1b[0K", "\x1bP$qm\x1b\\",
+		"\x1b]52;;clipboard\x1b\\", "\x1b]8;;uri\a", "\x1b]8;;uri\x18", "\x1b]8;uri\x1b\\", "\x1b]8;;uri\x1b[c",
+	} {
+		if walkHistoryText([]byte(line), nil) {
+			t.Fatalf("non-formatter command accepted: %q", line)
+		}
+	}
+}
+
+func TestSnapshotRecordings(t *testing.T) {
+	paths, err := filepath.Glob("testdata/*.raw")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("recordings: %v", err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := New(100, 30)
+		a.Write(data)
+		var b Terminal
+		if err := b.RestoreSnapshot(a.Snapshot(), SnapshotLimits{}); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		assertSnapshotState(t, a, &b)
 	}
 }
 
@@ -319,6 +371,54 @@ func FuzzRestoreSnapshot(f *testing.F) {
 	})
 }
 
+func FuzzSnapshotContinuation(f *testing.F) {
+	for _, in := range []string{
+		"hello", "\x1b[38:2::10:20:30m漢\xf0\x9f", "\x1b[?2027h😀︎❤️👩‍👩‍👧‍👦",
+		"\x1b[?2027h\x1b[?7lA❤️", "abc\x1b7\x1b[?7l\x1b[HX\x1b8",
+		"\x1b]8;id=a;https://example.com\x1b\\á\x1b7\x1b[?1049hALT\x1b7",
+		snapshotScene(),
+	} {
+		f.Add([]byte(in), uint8(12), uint8(5), uint16(len(in)/2))
+	}
+	f.Fuzz(func(t *testing.T, input []byte, width, height uint8, split uint16) {
+		if len(input) > 4096 {
+			t.Skip()
+		}
+		cut := int(split) % (len(input) + 1)
+		var aReply, bReply bytes.Buffer
+		aBells, bBells := 0, 0
+		a := New(1+int(width%24), 1+int(height%8), WithScrollback(16), WithScrollbackBytes(8192), WithReply(&aReply), WithBell(func() { aBells++ }))
+		a.Write(input[:cut])
+		a.Resize(1+int(height%24), 1+int(width%8))
+		if width&1 != 0 {
+			a.Compact()
+		}
+		b := New(1, 1, WithReply(&bReply), WithBell(func() { bBells++ }))
+		if err := b.RestoreSnapshot(a.Snapshot(), SnapshotLimits{}); err != nil {
+			t.Fatalf("legitimate state rejected: %v", err)
+		}
+		assertSnapshotState(t, a, b)
+		if bReply.Len() != 0 || bBells != 0 {
+			t.Fatal("restore invoked callbacks")
+		}
+		aReply.Reset()
+		aBells = 0
+		for _, suffix := range [][]byte{input[cut:], []byte("\x1b[6n\x1b[?12$p\x1b]10;?\a\x1b8\x1b[2b\r\nnext\a")} {
+			a.Write(suffix)
+			b.Write(suffix)
+			assertSnapshotState(t, a, b)
+			if !bytes.Equal(aReply.Bytes(), bReply.Bytes()) || aBells != bBells {
+				t.Fatal("future callbacks changed")
+			}
+		}
+		a.Resize(1+int(width%16), 1+int(height%6))
+		b.Resize(1+int(width%16), 1+int(height%6))
+		a.Write([]byte("\x1b[?1049hALT\x1b[?1049l\x1b[2b"))
+		b.Write([]byte("\x1b[?1049hALT\x1b[?1049l\x1b[2b"))
+		assertSnapshotState(t, a, b)
+	})
+}
+
 func BenchmarkSnapshot(b *testing.B) {
 	for _, workload := range []struct {
 		name     string
@@ -340,10 +440,10 @@ func BenchmarkSnapshot(b *testing.B) {
 			snapshot, repaint := t.Snapshot(), t.Repaint(true)
 			b.Run("encode", func(b *testing.B) {
 				b.ReportAllocs()
-				b.ReportMetric(float64(len(snapshot)), "snapshot-B")
 				for b.Loop() {
 					t.Snapshot()
 				}
+				b.ReportMetric(float64(len(snapshot)), "snapshot-B")
 			})
 			b.Run("append", func(b *testing.B) {
 				buffer := make([]byte, 0, len(snapshot))
@@ -363,9 +463,16 @@ func BenchmarkSnapshot(b *testing.B) {
 			})
 			b.Run("repaint", func(b *testing.B) {
 				b.ReportAllocs()
-				b.ReportMetric(float64(len(repaint)), "repaint-B")
 				for b.Loop() {
 					t.Repaint(true)
+				}
+				b.ReportMetric(float64(len(repaint)), "repaint-B")
+			})
+			b.Run("repaint-append", func(b *testing.B) {
+				buffer := make([]byte, 0, len(repaint))
+				b.ReportAllocs()
+				for b.Loop() {
+					buffer = t.AppendRepaint(buffer[:0], true)
 				}
 			})
 			b.Run("replay", func(b *testing.B) {
