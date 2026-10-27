@@ -236,14 +236,72 @@ func (t *Terminal) appendWrapped(b []byte, row, next []cell, saved *bool) []byte
 // makes literal spaces. DECSC/DECRC preserve the pending wrap while ECH
 // repairs the row before the next print can move it into history.
 func (t *Terminal) appendRepaintRow(b []byte, row []cell, trim bool, saved *bool) []byte {
-	b = t.appendRow(b, row, trim)
 	end := len(row)
 	if row == nil && !trim {
 		end = t.cols
 	} else if trim {
 		end = contentEnd(row)
 	}
+	if end == t.cols && t.canStageNarrowEdge(row) {
+		// Build a completed narrow cluster where its wide base fits, then
+		// shift it into the final column. Saving a temporary edge print
+		// keeps this row's pending wrap available to the next painted row.
+		b = t.appendRow(b, row[:end-1], false)
+		b = append(b, ' ', 0x1b, '7')
+		*saved = true
+		b = appendHPA(b, end-2)
+		b = t.appendRow(b, row[end-1:], false)
+		b = appendHPA(b, end-2)
+		b = append(b, "\x1b[@"...)
+		x := end - 2
+		if row[x].R == wideTail {
+			x--
+		}
+		b = appendHPA(b, x)
+		b = t.appendRow(b, row[x:end-1], false)
+		b = append(b, "\x1b8"...)
+	} else {
+		b = t.appendRow(b, row, trim)
+	}
 	return t.appendRepaintHoles(b, row, end, 0, saved)
+}
+
+func appendHPA(b []byte, x int) []byte {
+	b = append(b, "\x1b["...)
+	b = strconv.AppendInt(b, int64(x+1), 10)
+	return append(b, 'G')
+}
+
+func (t *Terminal) canStageNarrowEdge(row []cell) bool {
+	if t.cols < 2 || len(row) != t.cols || row[t.cols-1].R < clusterBase {
+		return false
+	}
+	last := t.x.clusters[row[t.cols-1].R-clusterBase]
+	if last.width != 1 || clusterReplayWidth(last) < 2 {
+		return false
+	}
+	if previous := row[t.cols-2].R; previous >= clusterBase {
+		c := t.x.clusters[previous-clusterBase]
+		if c.width == 1 && clusterReplayWidth(c) > 1 {
+			return false // restoring it would overwrite the staged last cell
+		}
+	}
+	return true
+}
+
+func clusterReplayWidth(c cluster) int {
+	width, peak, index := 0, 0, 0
+	var previous rune
+	for _, cp := range c.text {
+		if index == 0 {
+			width = CodepointWidth(cp)
+		} else if c.joinModes.has(index) {
+			width, _ = graphemeWidthEffect(width, previous, cp)
+		}
+		peak = max(peak, width)
+		previous, index = cp, index+1
+	}
+	return peak
 }
 
 func (t *Terminal) appendRepaintHoles(b []byte, row []cell, end, offset int, saved *bool) []byte {
@@ -266,9 +324,8 @@ func (t *Terminal) appendRepaintHoles(b []byte, row []cell, end, offset int, sav
 			started, *saved = true, true
 		}
 		b = t.appendSGR(b, cell{Bg: bg})
+		b = appendHPA(b, offset+x)
 		b = append(b, "\x1b["...)
-		b = strconv.AppendInt(b, int64(offset+x+1), 10)
-		b = append(b, 'G', 0x1b, '[')
 		b = strconv.AppendInt(b, int64(to-x), 10)
 		b = append(b, 'X')
 		x = to
@@ -383,10 +440,20 @@ func appendHistoryRepaint(b, line []byte, cols int, open bool, saved *bool) []by
 	if bytes.IndexByte(line, 0) >= 0 {
 		walkHistory(line, nil, func(start, spaces, end int) { sparse = true })
 	}
-	if !sparse {
+	clustered := bytes.Contains(line, []byte("\xef\xb8\x8e")) && bytes.Contains(line, []byte("\x1b[?2027h"))
+	if !sparse && !clustered {
 		return append(b, line...)
 	}
 	tmp := replayLine(line, cols)
+	if !sparse {
+		stage := false
+		for _, row := range tmp.main[:tmp.cur.y+1] {
+			stage = stage || tmp.canStageNarrowEdge(row)
+		}
+		if !stage {
+			return append(b, line...)
+		}
+	}
 	for y, row := range tmp.main[:tmp.cur.y+1] {
 		if y < tmp.cur.y {
 			end := cols
