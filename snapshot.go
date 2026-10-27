@@ -125,7 +125,8 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 	for _, c := range x.clusters {
 		e.blob([]byte(c.text))
 		e.u(uint64(c.width))
-		e.u(uint64(c.joinModes))
+		e.u(c.joinModes[0])
+		e.u(c.joinModes[1])
 	}
 	e.u(uint64(len(x.rare)))
 	for _, s := range x.rare {
@@ -347,7 +348,29 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if n > 0 {
 		x.clusters = make([]cluster, n)
 		for i := range x.clusters {
-			c := cluster{text: d.text(maxCluster), width: uint8(d.number(2)), joinModes: uint32(d.number(0xffffffff))}
+			bound := maxCluster
+			if version == 1 {
+				bound = 32
+			}
+			c := cluster{text: d.text(bound), width: uint8(d.number(2))}
+			if version == 1 {
+				// Released v1 indexed mode bits by UTF-8 byte offset. Reject
+				// non-boundaries before converting to codepoint indices.
+				old := uint32(d.number(0xffffffff))
+				index := 0
+				for offset := range c.text {
+					if offset != 0 && old&(1<<uint(offset)) != 0 {
+						c.joinModes.set(index)
+						old &^= 1 << uint(offset)
+					}
+					index++
+				}
+				if old != 0 {
+					d.fail(ErrSnapshotMalformed, "cluster byte boundary")
+				}
+			} else {
+				c.joinModes = clusterModes{d.u(), d.number(1)}
+			}
 			if !snapshotCluster(c) {
 				d.fail(ErrSnapshotMalformed, "cluster")
 			}
@@ -690,16 +713,21 @@ func snapshotCluster(c cluster) bool {
 	if len(c.text) == 0 || !utf8.ValidString(c.text) || c.width < 1 || c.width > 2 || !snapshotScalar(firstRune(c.text)) {
 		return false
 	}
-	var starts uint32
-	for i, r := range c.text {
+	var starts clusterModes
+	index := 0
+	for _, r := range c.text {
+		if index >= maxClusterRunes {
+			return false
+		}
 		if r < 0x20 || r >= 0x7f && r < 0xa0 {
 			return false
 		}
-		if i != 0 {
-			starts |= 1 << uint(i)
+		if index != 0 {
+			starts.set(index)
 		}
+		index++
 	}
-	return c.joinModes & ^starts == 0
+	return c.joinModes[0] & ^starts[0] == 0 && c.joinModes[1] & ^starts[1] == 0
 }
 
 func snapshotOSCText(s string) bool {

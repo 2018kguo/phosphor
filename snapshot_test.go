@@ -270,7 +270,9 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 		"cluster-control":   func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\x1b[cXY", width: 1}} },
 		"cluster-C1":        func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\u009b", width: 1}} },
 		"cluster-width":     func(t *Terminal) { t.ext().clusters = []cluster{{text: "á", width: 0}} },
-		"cluster-join":      func(t *Terminal) { t.ext().clusters = []cluster{{text: "á", width: 1, joinModes: 1 << 2}} },
+		"cluster-join": func(t *Terminal) {
+			t.ext().clusters = []cluster{{text: "á", width: 1, joinModes: clusterModes{1 << 2}}}
+		},
 		"wrap":              func(t *Terminal) { t.mainWrap = []bool{false, true} },
 		"palette-slot":      func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 259}}} },
 		"palette-duplicate": func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 1}, {i: 1}}} },

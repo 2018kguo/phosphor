@@ -10,13 +10,20 @@ import (
 
 // A cluster stores its physical width independently of its first scalar:
 // selectors can narrow a wide emoji or widen a text character. joinModes
-// records which appended scalars were clustered under mode 2027, by UTF-8
-// byte offset, so history can replay mixed-mode cells without joining neighbors.
+// records which appended codepoints were clustered under mode 2027, so
+// history can replay mixed-mode cells without joining neighboring cells.
 type cluster struct {
 	text      string
-	joinModes uint32
+	joinModes clusterModes
 	width     uint8
 }
+
+// The second word holds the final codepoint of a full native-sized cluster.
+// This metadata is allocated only for cells containing multiple codepoints.
+type clusterModes [2]uint64
+
+func (m clusterModes) has(i int) bool { return m[i/64]&(1<<uint(i%64)) != 0 }
+func (m *clusterModes) set(i int)     { m[i/64] |= 1 << uint(i%64) }
 
 // CodepointWidth returns the Unicode 17 terminal width of a single scalar:
 // zero for combining or ignored scalars, two for wide scalars, otherwise one.
@@ -78,7 +85,8 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	if !graphemeContinues(s, r) {
 		return false
 	}
-	if len(s)+utf8.RuneLen(r) > maxCluster {
+	count := utf8.RuneCountInString(s)
+	if count >= maxClusterRunes {
 		return true
 	}
 	width := 1
@@ -97,11 +105,11 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	if newWidth == 2 && width == 1 && x == edge && !t.autowrap {
 		return true
 	}
-	var modes uint32
+	var modes clusterModes
 	if base.R >= clusterBase {
 		modes = t.x.clusters[base.R-clusterBase].joinModes
 	}
-	modes |= 1 << uint(len(s))
+	modes.set(count)
 	base.R = t.intern(cluster{text: s + string(r), width: uint8(newWidth), joinModes: modes})
 	if newWidth == width {
 		row[x] = base
@@ -214,16 +222,16 @@ func runeInRanges(r rune, ranges [][2]rune) bool {
 // mode each following codepoint was joined under. This also separates a
 // new cell from a prior cell ending in ZWJ.
 func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
-	if c.joinModes == 0 {
+	if c.joinModes == (clusterModes{}) {
 		return append(b, c.text...)
 	}
 	mode := false
 	style := head
 	width := 0
 	var prev rune
-	for i := 0; i < len(c.text); {
+	for i, index := 0, 0; i < len(c.text); index++ {
 		cp, n := utf8.DecodeRuneInString(c.text[i:])
-		next := c.joinModes&(1<<uint(i)) != 0 || i == 0 && CodepointWidth(cp) > t.cols
+		next := c.joinModes.has(index) || i == 0 && CodepointWidth(cp) > t.cols
 		if next != mode {
 			b = appendMode(b, 2027, next)
 			mode = next

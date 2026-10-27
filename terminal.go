@@ -34,7 +34,8 @@ const (
 	DefaultScrollbackBytes = 256 << 10
 	maxOSC                 = 4096
 	maxParams              = 32
-	maxCluster             = 32 // bytes of a character with its combining marks
+	maxClusterRunes        = 65 // base plus 64 suffix codepoints, matching libghostty-vt
+	maxCluster             = maxClusterRunes * utf8.UTFMax
 	maxLogicalLine         = 32 << 10
 )
 
@@ -1310,7 +1311,7 @@ func (t *Terminal) combine(r rune) {
 		}
 	}
 	s := t.cellString(*c)
-	if len(s)+utf8.RuneLen(r) > maxCluster {
+	if utf8.RuneCountInString(s) >= maxClusterRunes {
 		return
 	}
 	if r == 0xfe0e || r == 0xfe0f {
@@ -1321,7 +1322,7 @@ func (t *Terminal) combine(r rune) {
 			return
 		}
 	}
-	var modes uint32
+	var modes clusterModes
 	if c.R >= clusterBase {
 		modes = t.x.clusters[c.R-clusterBase].joinModes
 	}

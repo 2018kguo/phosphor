@@ -293,11 +293,12 @@ func assertGraphemeInvariants(t *testing.T, term *Terminal) {
 		return
 	}
 	for _, c := range term.x.clusters {
-		if len(c.text) > maxCluster || !utf8.ValidString(c.text) || c.width < 1 || c.width > 2 {
+		count := utf8.RuneCountInString(c.text)
+		if count > maxClusterRunes || !utf8.ValidString(c.text) || c.width < 1 || c.width > 2 {
 			t.Fatalf("invalid cluster:%+v", c)
 		}
-		for i := range 32 {
-			if c.joinModes&(1<<uint(i)) != 0 && (i >= len(c.text) || !utf8.RuneStart(c.text[i])) {
+		for i := range 128 {
+			if c.joinModes.has(i) && (i == 0 || i >= count) {
 				t.Fatalf("join mode outside scalar boundary:%+v", c)
 			}
 		}
