@@ -45,7 +45,7 @@ var knownFailures = map[string]string{
 	"libvterm/16state_resize.test:36":   "divergent: libvterm's state layer does not reflow; this emulator always reflows the main screen",
 	"libvterm/30state_pen.test:111":     "divergent: libvterm turns bold+ANSI color into the bright color in the pen; xterm keeps the color and leaves brightening to rendering",
 	"libvterm/30state_pen.test:114":     "divergent: as above",
-	"libvterm/61screen_unicode.test:35": "divergent: libvterm keeps at most 6 code points per cell; this emulator keeps up to 32 bytes",
+	"libvterm/61screen_unicode.test:35": "divergent: libvterm keeps at most 6 code points per cell; this emulator keeps up to 65 codepoints",
 	"libvterm/61screen_unicode.test:41": "divergent: as above",
 	"libvterm/63screen_resize.test:103": "divergent: the libvterm harness invents scrollback lines (ABCDE) to pop; this terminal has none",
 	"libvterm/63screen_resize.test:104": "divergent: as above",
