@@ -20,7 +20,6 @@ import (
 	"unsafe"
 
 	"github.com/2018kguo/phosphor"
-	"github.com/mattn/go-runewidth"
 )
 
 // This is a closed projection of the headless text model. Differences are
@@ -453,8 +452,6 @@ func traceChecks(path string, chunk int) bool {
 func scalarWidths(table bool) {
 	widths := make([]byte, 0x110000)
 	C.exp_widths((*C.uint8_t)(unsafe.Pointer(&widths[0])), C.size_t(len(widths)))
-	c := runewidth.NewCondition()
-	c.EastAsianWidth = false
 	start := -1
 	var pw, nw int
 	flush := func(end int) {
@@ -463,7 +460,7 @@ func scalarWidths(table bool) {
 			if table {
 				kind = "native_scalar_width_range"
 			}
-			emit(map[string]any{"kind": kind, "first": start, "last": end, "phosphor_dependency_width": pw, "ghostty_width": nw})
+			emit(map[string]any{"kind": kind, "first": start, "last": end, "phosphor_width": pw, "ghostty_width": nw})
 			start = -1
 		}
 	}
@@ -473,7 +470,7 @@ func scalarWidths(table bool) {
 			flush(r - 1)
 			continue
 		}
-		p, n := c.RuneWidth(rune(r)), int(widths[r])
+		p, n := phosphor.CodepointWidth(rune(r)), int(widths[r])
 		if table {
 			p = 1
 		}
@@ -511,7 +508,7 @@ func scalarWidths(table bool) {
 		}
 		emit(map[string]any{"kind": "native_scalar_width_summary", "native_build": build, "ghostty_commit": pinnedGhosttyCommit, "unicode_version": "17.0.0", "unicode_scalars": 0x110000 - 0x800, "non_default_scalars": count, "default_width": 1, "first": 0, "last": 0x10ffff, "excluded_first": 0xd800, "excluded_last": 0xdfff, "mode": "native-codepoint-width", "basis": "batched ghostty_unicode_codepoint_width; no grapheme folding"})
 	} else {
-		emit(map[string]any{"kind": "scalar_width_summary", "unicode_scalars": 0x110000 - 0x800, "different": count, "basis": "phosphor baseline mattn/go-runewidth condition vs native Ghostty scalar API; excludes surrogates; does not test terminal grapheme behavior"})
+		emit(map[string]any{"kind": "scalar_width_summary", "unicode_scalars": 0x110000 - 0x800, "different": count, "basis": "phosphor.CodepointWidth vs native Ghostty scalar API; excludes surrogates; does not test terminal grapheme behavior"})
 	}
 }
 
