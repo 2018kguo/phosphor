@@ -395,6 +395,34 @@ func (t *Terminal) parseLine(line []byte) ([][]cell, []bool) {
 	tmp := newTerminal(t.cols, 2*n/t.cols+2, 0, 0)
 	tmp.Write(line)
 	k := tmp.cur.y + 1
+	if tmp.x != nil {
+		clusterRefs, linkRefs := 0, 0
+		for _, row := range tmp.main[:k] {
+			for _, c := range row {
+				if c.R >= clusterBase {
+					clusterRefs++
+				}
+				if c.L != 0 {
+					linkRefs++
+				}
+			}
+		}
+		if clusterRefs > 0 || linkRefs > 0 {
+			x := t.ext()
+			clusterCap, linkCap := x.clusterCap, x.linkCap
+			// Imported cells, earlier history batches and rewrapped rows
+			// are detached until Resize installs the finished screen. No
+			// receiver collection may run while any of them are detached.
+			// Bound by references, since recent-only interning may append
+			// a repeated entry more than once during this batch.
+			x.clusterCap = max(clusterCap, len(x.clusters)+clusterRefs)
+			x.linkCap = max(linkCap, len(x.links)+linkRefs)
+			defer func() {
+				// A later write can collect after all rows are attached.
+				x.clusterCap, x.linkCap = clusterCap, linkCap
+			}()
+		}
+	}
 	rows := make([][]cell, k)
 	wraps := make([]bool, k)
 	for y := range k {
