@@ -141,7 +141,13 @@ func (t *Terminal) appendRowHistory(b []byte, row []cell, trim, history bool) []
 		switch {
 		case r == wideTail: // printed with its left half (same style)
 		case r == 0, r == spacerHead:
-			b = append(b, ' ')
+			if r == 0 && t.cols == 1 && !history {
+				// A wide glyph cannot fit in one column: native writes an
+				// empty cell with the current pen and sets pending wrap.
+				b = utf8.AppendRune(b, '界')
+			} else {
+				b = append(b, ' ')
+			}
 		case r >= clusterBase:
 			var tail cell
 			if i < len(cells) && cells[i].R == wideTail {
@@ -523,23 +529,51 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = append(b, "\x1b[?6l"...)
 	}
 	if !t.autowrap && t.cur.wrapPending {
-		// Disable wrapping before the final edge print: it sets pending
-		// wrap even with DECAWM off, while disabling it afterwards clears it.
+		// Disable wrapping before the final edge print so restoring a
+		// one-column empty cell does not advance to another row.
 		b = appendMode(b, 7, false)
 	}
 	if t.cur.wrapPending {
-		// Reprint the last cell to recreate the pending wrap.
+		// A tab can move the cursor while leaving wrap pending. Recreate
+		// the wrap at the edge, then use CBT to return without clearing it.
 		row := t.screen()[y]
-		cx, end := x, x+1
+		edge := t.cols - 1
+		if x <= t.right {
+			edge = t.right
+		}
+		temporaryTab := x > 0 && x < edge && !t.isTab(x)
+		if temporaryTab {
+			b = appendCUP(b, y, x)
+			b = append(b, "\x1bH"...)
+		}
+		cx, end := edge, edge+1
 		if row != nil && cx > 0 && row[cx].R == wideTail {
 			cx--
 		}
 		b = appendCUP(b, y, cx)
 		b = append(b, "\x1b[0m"...)
 		if row == nil {
-			b = append(b, ' ')
+			if t.cols == 1 {
+				b = utf8.AppendRune(b, '界')
+			} else {
+				b = append(b, ' ')
+			}
 		} else {
 			b = t.appendRow(b, row[cx:end], false)
+		}
+		if x < edge {
+			count := 1
+			for stop := x + 1; stop < edge; stop++ {
+				if t.isTab(stop) {
+					count++
+				}
+			}
+			b = append(b, "\x1b["...)
+			b = strconv.AppendInt(b, int64(count), 10)
+			b = append(b, 'Z')
+			if temporaryTab {
+				b = append(b, "\x1b[g"...)
+			}
 		}
 		if t.cur.origin {
 			b = append(b, "\x1b[?6h"...)

@@ -550,7 +550,6 @@ func (t *Terminal) execute(c byte) {
 	case '\b':
 		t.cursorLeft(1)
 	case '\t':
-		t.cur.wrapPending = false
 		t.cur.x = t.nextTab(t.cur.x)
 	case '\n', '\v', '\f':
 		t.cur.wrapPending = false
@@ -837,12 +836,10 @@ func (t *Terminal) csiDispatch(c byte) {
 	case 'k':
 		t.cursorUp(t.param(0, 1))
 	case 'I':
-		t.cur.wrapPending = false
 		for range min(t.param(0, 1), t.cols) {
 			t.cur.x = t.nextTab(t.cur.x)
 		}
 	case 'Z':
-		t.cur.wrapPending = false
 		lim := 0
 		if t.cur.origin {
 			lim = t.left
@@ -1039,9 +1036,6 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.moveTo(0, 0)
 	case 7:
 		t.autowrap = on
-		if !on {
-			t.cur.wrapPending = false
-		}
 	case 12:
 		t.cursorStyle.blink = on
 	case 45:
@@ -1252,6 +1246,12 @@ func (t *Terminal) print(r rune, w int) {
 	}
 	t.cur.wrapPending = false
 	if w > t.cols {
+		// A one-column terminal cannot print a wide glyph. Native keeps
+		// an empty cell with the pen and a pending wrap for the next print.
+		blank := t.cur.pen
+		blank.R = 0
+		t.row(t.cur.y)[t.cur.x] = blank
+		t.cur.wrapPending = true
 		return
 	}
 	// Text runs up to the right margin, unless the cursor is already
@@ -1262,7 +1262,7 @@ func (t *Terminal) print(r rune, w int) {
 	}
 	if t.cur.x+w > edge+1 {
 		if !t.autowrap {
-			t.cur.x = max(edge+1-w, 0)
+			return
 		} else {
 			t.fillCells(t.cur.y, t.cur.x, edge+1)
 			if w == 2 {
