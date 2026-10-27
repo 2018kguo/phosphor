@@ -18,7 +18,11 @@ type cluster struct {
 	width     uint8
 }
 
-func scalarWidth(r rune) int {
+// CodepointWidth returns the Unicode 17 terminal width of a single scalar:
+// zero for combining or ignored scalars, two for wide scalars, otherwise one.
+// Invalid scalars have width one. A complete grapheme can have a different
+// width under mode 2027, so summing scalar widths measures mode-off layout.
+func CodepointWidth(r rune) int {
 	lo, hi := 0, len(scalarWidthRanges)
 	for lo < hi {
 		mid := int(uint(lo+hi) >> 1)
@@ -78,7 +82,7 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 			if runeInRanges(cp, emojiModifierBases[:]) {
 				break
 			}
-			if scalarWidth(cp) != 0 {
+			if CodepointWidth(cp) != 0 {
 				return false
 			}
 			base = base[:len(base)-n]
@@ -167,7 +171,7 @@ func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
 	}
 	// A second spacing scalar widens a cluster. Emoji modifiers contribute
 	// no width within a valid cluster, despite their standalone width of two.
-	if scalarWidth(r) > 0 && !emojiModifier(r) && !runeInRanges(r, graphemePrepends[:]) {
+	if CodepointWidth(r) > 0 && !emojiModifier(r) && !runeInRanges(r, graphemePrepends[:]) {
 		return 2, true
 	}
 	return width, true
@@ -235,13 +239,13 @@ func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
 	var prev rune
 	for i := 0; i < len(c.text); {
 		cp, n := utf8.DecodeRuneInString(c.text[i:])
-		next := c.joinModes&(1<<uint(i)) != 0 || i == 0 && scalarWidth(cp) > t.cols
+		next := c.joinModes&(1<<uint(i)) != 0 || i == 0 && CodepointWidth(cp) > t.cols
 		if next != mode {
 			b = appendMode(b, 2027, next)
 			mode = next
 		}
 		if i == 0 {
-			width = scalarWidth(cp)
+			width = CodepointWidth(cp)
 		} else if next {
 			newWidth, _ := graphemeWidthEffect(width, prev, cp)
 			if newWidth == 2 && width == 1 && tail.R == wideTail {

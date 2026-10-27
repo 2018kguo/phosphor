@@ -381,7 +381,7 @@ func (t *Terminal) printRune(r rune) {
 	if t.grapheme && r > 255 && t.extendGrapheme(r) {
 		return
 	}
-	w := scalarWidth(r)
+	w := CodepointWidth(r)
 	if w == 0 {
 		if !t.grapheme {
 			t.combine(r)
@@ -696,15 +696,13 @@ func (t *Terminal) restoreCursor() {
 	t.setCursor(t.saved.screen[i].cursor)
 }
 
-// setCursor installs a saved cursor, keeping it valid for the current
-// size, region and modes.
+// setCursor installs a saved cursor, clamping it to the current size.
+// Pending wrap belongs to the saved cursor, even if margins or DECAWM
+// changed since DECSC. The next print consumes it according to the mode.
 func (t *Terminal) setCursor(c cursor) {
 	t.cur = c
 	t.cur.x = min(t.cur.x, t.cols-1)
 	t.cur.y = min(t.cur.y, t.rows-1)
-	// Pending wrap belongs to the saved cursor, even if margins changed
-	// since DECSC. Grapheme lookup must still select the cell under it.
-	t.cur.wrapPending = t.cur.wrapPending && t.autowrap
 }
 
 // param returns parameter i (ignoring sub-parameters), or def if it is
@@ -1215,6 +1213,9 @@ func (t *Terminal) graphics() bool {
 }
 
 func (t *Terminal) print(r rune, w int) {
+	// REP reprints the input scalar with the charset in effect when REP
+	// runs. Saving the mapped box character would ignore later SI/SO or SCS.
+	t.lastChar = r
 	if t.graphics() && r >= 0x5f && r <= 0x7e {
 		if r == 0x5f {
 			r = ' '
@@ -1222,7 +1223,6 @@ func (t *Terminal) print(r rune, w int) {
 			r = decGraphics[r-0x60]
 		}
 	}
-	t.lastChar = r
 	if t.cur.wrapPending && t.autowrap {
 		t.wrapLine()
 		t.cur.x = t.left
@@ -2169,7 +2169,7 @@ func (t *Terminal) runeWidth(r rune) int {
 	if r >= clusterBase {
 		return int(t.x.clusters[r-clusterBase].width)
 	}
-	return scalarWidth(r)
+	return CodepointWidth(r)
 }
 
 // intern returns the cell rune for a character with combining marks.

@@ -126,6 +126,8 @@ func TestREPRemembersIndependentScalar(t *testing.T) {
 		{"\x1b[?2027h👨‍👩‍👧\x1b[2b", "👨‍👩‍👧👨👨"},
 		{"\x1b[?2027h❤️\x1b[2b", "❤️❤❤"},
 		{"\x1b[?2027h☔︎\x1b[2b", "☔︎☔☔"},
+		{"\x1b(0q\x1b(B\x1b[2b", "─qq"},
+		{"q\x1b(0\x1b[2b", "q──"},
 	} {
 		term := New(20, 3)
 		term.Write([]byte(c.input))
@@ -143,6 +145,42 @@ func TestREPRemembersIndependentScalar(t *testing.T) {
 	term.Write([]byte("\x1b[2b"))
 	if term.Line(0) != " aa" {
 		t.Fatalf("REP after Compact:%q", term.Line(0))
+	}
+}
+
+func TestPendingWrapIsIndependentOfDECAWM(t *testing.T) {
+	for _, input := range []string{
+		"\x1b[?2027h\x1b[?7lA❤️",
+		"abc\x1b7\x1b[?7l\x1b[HX\x1b8",
+		"\x1b[?2027h\x1b[?7lA❤️\x1b7\x1b[HX\x1b8",
+	} {
+		term := New(3, 3)
+		term.Write([]byte(input))
+		if term.cur.x != 2 || !term.cur.wrapPending || term.autowrap {
+			t.Fatalf("%q cursor%+v autowrap%v", input, term.cur, term.autowrap)
+		}
+		assertGraphemeInvariants(t, term)
+		term.Write([]byte("X"))
+		if term.cur.wrapPending || term.cur.y != 0 || term.Cell(2, 0).Rune != 'X' {
+			t.Fatalf("pending wrap did not consume without wrapping: cursor%+v screen%q", term.cur, term.Lines())
+		}
+		assertGraphemeInvariants(t, term)
+	}
+}
+
+func TestCodepointWidthExamples(t *testing.T) {
+	for _, c := range []struct {
+		r     rune
+		width int
+	}{
+		{'A', 1}, {'界', 2}, {0x1f1fa, 2}, {0x00ad, 1}, {0x070f, 1},
+		{0x1160, 0}, {0x11ff, 0}, {0x3164, 0}, {0xe0fff, 0},
+		{0x2e3b, 2}, {0x1faea, 2}, {0x0301, 0}, {0xfe0f, 0},
+		{-1, 1}, {0xd800, 1}, {0x110000, 1},
+	} {
+		if got := CodepointWidth(c.r); got != c.width {
+			t.Fatalf("%U width%d want%d", c.r, got, c.width)
+		}
 	}
 }
 
