@@ -237,9 +237,6 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	if t.saved != nil {
 		s = t.saved.screen[slot]
 	}
-	if s.valid {
-		s.wrapPending = false
-	}
 	extra := t.extraAt(s.pen.E)
 	s.pen.E = 0
 	fmt.Fprintf(&b, "saved %+v extra %+v\n", s, extra)

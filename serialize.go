@@ -243,6 +243,10 @@ func (t *Terminal) appendRepaintRow(b []byte, row []cell, trim bool, saved *bool
 	} else if trim {
 		end = contentEnd(row)
 	}
+	return t.appendRepaintHoles(b, row, end, 0, saved)
+}
+
+func (t *Terminal) appendRepaintHoles(b []byte, row []cell, end, offset int, saved *bool) []byte {
 	started := false
 	for x := 0; x < end; {
 		if row != nil && !repaintHole(row[x]) {
@@ -263,7 +267,7 @@ func (t *Terminal) appendRepaintRow(b []byte, row []cell, trim bool, saved *bool
 		}
 		b = t.appendSGR(b, cell{Bg: bg})
 		b = append(b, "\x1b["...)
-		b = strconv.AppendInt(b, int64(x+1), 10)
+		b = strconv.AppendInt(b, int64(offset+x+1), 10)
 		b = append(b, 'G', 0x1b, '[')
 		b = strconv.AppendInt(b, int64(to-x), 10)
 		b = append(b, 'X')
@@ -271,6 +275,54 @@ func (t *Terminal) appendRepaintRow(b []byte, row []cell, trim bool, saved *bool
 	}
 	if started {
 		b = append(b, "\x1b8"...)
+	}
+	return b
+}
+
+// appendPendingCursor recreates wrap at the physical edge, then uses CBT
+// to return to a saved column without clearing it. Tabs are restored before
+// saved cursors are built, so the temporary stop can be removed immediately.
+func (t *Terminal) appendPendingCursor(b []byte, scr [][]cell, c cursor) []byte {
+	edge := t.cols - 1
+	temporaryTab := c.x > 0 && c.x < edge && !t.isTab(c.x)
+	if temporaryTab {
+		b = appendCUP(b, c.y, c.x)
+		b = append(b, "\x1bH"...)
+	}
+	row := rowAt(scr, c.y)
+	x, end := edge, edge+1
+	if row != nil && x > 0 && row[x].R == wideTail {
+		x--
+	}
+	b = appendCUP(b, c.y, x)
+	b = append(b, "\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f"...)
+	if row == nil {
+		if t.cols == 1 {
+			b = utf8.AppendRune(b, '界')
+		} else {
+			b = append(b, ' ')
+		}
+	} else {
+		row = row[x:end]
+		b = t.appendRow(b, row, false)
+	}
+	if t.cols > 1 {
+		usedSave := false
+		b = t.appendRepaintHoles(b, row, end-x, x, &usedSave)
+	}
+	if c.x < edge {
+		count := 1
+		for stop := c.x + 1; stop < edge; stop++ {
+			if t.isTab(stop) {
+				count++
+			}
+		}
+		b = append(b, "\x1b["...)
+		b = strconv.AppendInt(b, int64(count), 10)
+		b = append(b, 'Z')
+		if temporaryTab {
+			b = append(b, "\x1b[g"...)
+		}
 	}
 	return b
 }
@@ -300,7 +352,15 @@ func (t *Terminal) appendSavedCursor(b []byte, slot int, originOn bool) []byte {
 	case originOn:
 		b = append(b, "\x1b[?6l"...)
 	}
-	b = appendCUP(b, s.y, s.x)
+	if s.wrapPending {
+		scr := t.main
+		if slot == 1 {
+			scr = t.alt
+		}
+		b = t.appendPendingCursor(b, scr, s.cursor)
+	} else {
+		b = appendCUP(b, s.y, s.x)
+	}
 	b = t.appendSGR(b, s.pen)
 	b = appendProtect(b, s.pen.A&AttrProtected != 0)
 	if t.link(s.pen.E) != "" {
@@ -433,6 +493,15 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = append(b, ' ')
 	}
 	b = t.appendScreen(b, t.main, t.mainWrap, sbOpen, false, &usedSave)
+	if t.tabs() != nil {
+		b = append(b, "\x1b[3g"...)
+		for x := range t.cols {
+			if t.isTab(x) {
+				b = appendCUP(b, 0, x)
+				b = append(b, "\x1bH"...)
+			}
+		}
+	}
 	if t.altActive {
 		if usedSave || t.saved != nil && t.saved.screen[0].valid {
 			b = t.appendSavedCursor(b, 0, false)
@@ -443,7 +512,11 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		if t.saved != nil && t.saved.alternate.valid {
 			s := t.saved.alternate.cursor
 			b = appendMode(b, 6, s.origin)
-			b = appendCUP(b, s.y, s.x)
+			if s.wrapPending {
+				b = t.appendPendingCursor(b, t.main, s)
+			} else {
+				b = appendCUP(b, s.y, s.x)
+			}
 			b = t.appendSGR(b, s.pen)
 			b = appendProtect(b, s.pen.A&AttrProtected != 0)
 			if t.link(s.pen.E) != "" {
@@ -466,15 +539,7 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		}
 		b = append(b, "\x1b[?47l"...)
 	}
-	if t.tabs() != nil {
-		b = append(b, "\x1b[3g"...)
-		for x := range t.cols {
-			if t.isTab(x) {
-				b = appendCUP(b, 0, x)
-				b = append(b, "\x1bH"...)
-			}
-		}
-	}
+
 	for _, m := range savedModes {
 		if m.mode == 3 || m.mode == 40 {
 			continue
