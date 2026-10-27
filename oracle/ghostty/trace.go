@@ -294,12 +294,16 @@ func (t *tracedEngine) replace(data []byte, cols, rows int, snapshot bool) {
 	}
 	var engine Engine
 	if name == "phosphor" {
-		// The base revision's snapshot is ANSI. The exact snapshot API replaces
-		// this branch when it lands; failures remain visible in trace output.
 		p := phosphor.New(cols, rows, phosphor.WithReply(&t.replies))
 		engine = &phos{p}
 		t.replies.Reset()
-		engine.Write(data)
+		if snapshot {
+			if err := p.RestoreSnapshot(data, phosphor.SnapshotLimits{}); err != nil {
+				panic(err)
+			}
+		} else {
+			engine.Write(data)
+		}
 		t.replies.Reset()
 	} else {
 		if snapshot {

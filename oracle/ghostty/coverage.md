@@ -23,8 +23,8 @@ terminal compatibility or equality to every terminal's policy.
 | Charsets and private cursor state | Designation/shift and saved-cursor effects in written suffixes | No claim to inspect every private native struct field. Control branches expose lost state after restore. |
 | History | Styled physical cells at the current width plus continuation flags, independent of logical/physical storage counters | Tests stay below both history retention budgets. Capacity pruning differences need separate bounded tests. Alternate screen history is omitted in both public projections. |
 | Queries | Raw PTY bytes, including DSR/CPR, DECRQM, DECRQSS, keyboard queries | Identity answers and default host colors have separate scopes. No string replacement or cursor-coordinate normalization. |
-| Continuation | Per-engine untouched control after Write, Resize, Compact, snapshot restore and ANSI replay | Snapshot effects include subsequent writes/resizes, not only the first restored picture. Snapshot/repaint failures name the affected engine. |
-| Unicode capacity | Native per-scalar width audit plus split cluster traces | Phosphor's 32-byte cluster limit is explicit. Long-cluster differences use `limit` scope and retain both strings. Full Unicode grapheme-break conformance is a separate test corpus. |
+| Continuation | Per-engine untouched control after Write, Resize, Compact, snapshot restore and ANSI replay | Both engines use their exact binary snapshot APIs. ANSI replay is measured separately. Snapshot effects include subsequent writes/resizes, not only the first restored picture. Snapshot/repaint failures name the affected engine. |
+| Unicode capacity | Native per-scalar width audit plus split cluster traces | The public CodepointWidth matches every one of 1,112,064 valid scalars. Phosphor's 32-byte cluster limit is explicit. Long-cluster differences use `limit` scope and retain both strings. The segmentation helper checks all 766 Unicode 17 corpus cases separately, with 25 explicit control-tailoring differences; it does not prove terminal dispatch for every possible sequence. |
 
 The mode array order is: application cursor, application keypad,
 bracketed paste, focus events, autowrap, insert, newline, origin,
@@ -56,6 +56,10 @@ charset cases. A translation often checks only selected fields; it is
 not a native paired run. The newer pinned source has 460 tests in
 `Terminal.zig` and 148 in `stream_terminal.zig`; other Zig modules add
 further tests. Those counts are not interchangeable denominators.
+
+The current Go translation passes 502 cases, keeps five documented
+differences and excludes 42 cases. The expanded native fixture corpus
+continues to expose differences beyond those translated assertions.
 
 The native traces are independently written input sequences using the
 public C ABI and public phosphor API. They do not copy a third-party

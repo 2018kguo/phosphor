@@ -58,19 +58,23 @@ func TestNativeCapturePendingWrapAndExactCursor(t *testing.T) {
 		})
 	}
 }
-func TestNativeSnapshotReplyBinding(t *testing.T) {
-	e := newTracedEngine("ghostty", 8, 3)
-	defer e.Close()
-	e.Write([]byte("AB\x1b[6n"))
-	before := traceState(t, e)
-	e.replace(e.Snapshot(), 8, 3, true)
-	if diff := differences(before, traceState(t, e)); len(diff) > 0 {
-		t.Fatal(diff)
-	}
-	e.Write([]byte("\x1b[6n"))
-	after := traceState(t, e)
-	if after.Replies != before.Replies+before.Replies {
-		t.Fatalf("reply binding lost/duplicated: %q", after.Replies)
+func TestSnapshotReplyBinding(t *testing.T) {
+	for _, name := range []string{"phosphor", "ghostty"} {
+		t.Run(name, func(t *testing.T) {
+			e := newTracedEngine(name, 8, 3)
+			defer e.Close()
+			e.Write([]byte("AB\x1b[6n"))
+			before := traceState(t, e)
+			e.replace(e.Snapshot(), 8, 3, true)
+			if diff := differences(before, traceState(t, e)); len(diff) > 0 {
+				t.Fatal(diff)
+			}
+			e.Write([]byte("\x1b[6n"))
+			after := traceState(t, e)
+			if after.Replies != before.Replies+before.Replies {
+				t.Fatalf("reply binding lost/duplicated: %q", after.Replies)
+			}
+		})
 	}
 }
 

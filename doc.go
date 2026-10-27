@@ -6,9 +6,9 @@
 // cursor, colors and attributes, hyperlinks, the scroll region and
 // margins, tab stops, character sets, the title, and the modes a program
 // switched on, following xterm closely (see the README for the conformance
-// suites it passes). Resize reflows the main screen. Repaint serializes the
-// whole state as bytes that reproduce it on a fresh terminal, for attaching
-// clients and for checkpoints.
+// suites it passes). Resize reflows the main screen. Repaint exports ANSI
+// output for attaching clients; Snapshot preserves exact emulator state
+// for checkpoints, including unfinished input and saved cursors.
 //
 // It is built to be cheap when there are many terminals: a cell is 16
 // bytes, rows are allocated only once drawn on, the alternate screen only
@@ -24,7 +24,8 @@
 //	t.Cell(x, y)             // one cell: Rune, Width, Style, Link
 //	t.Cursor(); t.Modes(); t.Title()
 //	t.Resize(100, 30)
-//	t.Repaint(true)          // bytes that recreate the state, scrollback included
+//	t.Repaint(true)          // ANSI output for an attached terminal
+//	t.Snapshot()             // exact checkpoint, scrollback included
 //
 // # Queries
 //
@@ -49,8 +50,7 @@
 // # Not modeled
 //
 // Double-width and double-height lines, rectangular area operations
-// (DECCRA, DECFRA...), 132-column mode, sixel and kitty graphics, grapheme
-// clustering (mode 2027: widths are per code point, as in xterm), the
+// (DECCRA, DECFRA...), 132-column mode, sixel and kitty graphics, the
 // underline color (SGR 58), OSC 52 clipboard, OSC 7 and 133 (shell
 // integration), and 8-bit C1 controls outside UTF-8. The alternate screen
 // is cut or padded on resize rather than reflowed.

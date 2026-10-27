@@ -57,7 +57,7 @@ func (p *phos) Write(b []byte)        { p.t.Write(b) }
 func (p *phos) Resize(c, r int)       { p.t.Resize(c, r) }
 func (p *phos) Close()                { p.t = nil }
 func (p *phos) Repaint(h bool) []byte { return p.t.Repaint(h) }
-func (p *phos) Snapshot() []byte      { return p.t.Repaint(true) }
+func (p *phos) Snapshot() []byte      { return p.t.Snapshot() }
 func (p *phos) View() View {
 	c, r := p.t.Size()
 	cur := p.t.Cursor()
@@ -154,9 +154,11 @@ func newEngine(name string, c, r int) Engine {
 }
 func restore(name string, b []byte, c, r int) Engine {
 	if name == "phosphor" {
-		t := newEngine(name, c, r)
-		t.Write(b)
-		return t
+		var t phosphor.Terminal
+		if err := t.RestoreSnapshot(b, phosphor.SnapshotLimits{}); err != nil {
+			panic(err)
+		}
+		return &phos{&t}
 	}
 	var t C.GhosttyTerminal
 	must(C.exp_restore((*C.uint8_t)(unsafe.Pointer(&b[0])), C.size_t(len(b)), &t))
