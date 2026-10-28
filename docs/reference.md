@@ -143,11 +143,19 @@ Use Snapshot for exact persistence. ANSI cannot express every retained state:
 - Some cursors outside enabled origin margins need an unused alternate
   screen as scratch space; other combinations can move the resumed cursor.
 - Very narrow screens with VS15-narrowed graphemes have replay limits.
+- Empty cells with foreground, protection or rich attributes can replay as
+  literal spaces with the same style. Exact snapshots preserve the distinction.
 - A forced 1047 exit can erase mixed old/new alternate-screen backgrounds
   after a resize. Preserving the stored screen-mode bits can require that
   exit, which paints unprotected cells with one background. ISO-protected
   text can survive while blank resize padding changes color. Exact snapshots
   retain every original cell; ANSI cannot reproduce this combination.
+- A wrapped, ISO-protected alternate-screen row can retain its wrap through a
+  narrow-width erase and later host resize. Rebuilding it at the final width
+  with the required 1047 reset erases the new unprotected padding and clears
+  that wrap. This can change later reverse-wrap cursor movement. The source
+  guard and future-behavior witness are in `repaint_test.go`; snapshots and
+  framed views retain the original state.
 - An unmarked prompt cursor may be reproduced with explicit input state.
   Headless text effects match, while per-cell GUI semantic classification
   can differ. Binary snapshots preserve the original enum.

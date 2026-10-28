@@ -327,7 +327,7 @@ func assertRectangleGrowthRepaintState(t *testing.T, expected, replay *Terminal)
 		}
 		for x := range expected.cols {
 			if replay.publicCell(replay.alt[y], x) != expected.publicCell(expected.alt[y], x) {
-				t.Fatalf("projected repaint changed ALT cell %d,%d beyond expected background", x, y)
+				t.Fatalf("projected repaint changed ALT cell %d,%d: got%+v want%+v", x, y, replay.publicCell(replay.alt[y], x), expected.publicCell(expected.alt[y], x))
 			}
 		}
 	}
@@ -789,5 +789,113 @@ func TestRepaintImplicitAlternateContinuation(t *testing.T) {
 			replay.Write([]byte("\x1b[?47h\x1b8A\x1b[?47l\x1b8B"))
 			check()
 		})
+	}
+}
+
+// A protected row can keep its wrap when an erase at the old width touches no
+// cells. Width growth adds unprotected padding. The mandatory 1047 exit at the
+// final host width erases that suffix and clears the wrap. Classify this from
+// source state only; no exporter result is used to decide the allowed loss.
+func repaintProtectedWrapPadding(src *Terminal) bool {
+	if src.altActive || !src.protISO || src.cols < 2 || src.cols == 80 || src.cols == 132 || len(src.alt) != src.rows || src.privateModes()&(privateMode47|privateMode1047|privateMode1049) != privateMode47|privateMode1049 {
+		return false
+	}
+	found := false
+	for y, row := range src.alt {
+		wrapped := rowFlagsAt(src.altWrap, y)&rowWrap != 0
+		protected, padding := 0, false
+		for x := 0; x < src.cols; x++ {
+			c := rowCell(row, x)
+			if c.A&AttrProtected != 0 {
+				if wrapped && padding {
+					return false
+				}
+				protected++
+				continue
+			}
+			if c != (cell{}) {
+				return false
+			}
+			padding = true
+		}
+		if wrapped {
+			if protected == 0 || !padding {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
+}
+func repaintProtectedWrapExpectation(t *testing.T, src *Terminal) *Terminal {
+	t.Helper()
+	expected := New(1, 1)
+	if err := expected.RestoreSnapshot(src.Snapshot(), SnapshotLimits{}); err != nil {
+		t.Fatal(err)
+	}
+	for y := range expected.altWrap {
+		expected.altWrap[y] &^= rowWrap
+	}
+	// Styled empty cells already use the ANSI formatter's literal-space
+	// fallback (TestRepaintNarrowedStyledTailBoundary); keep their styles exact.
+	for y, row := range expected.alt {
+		for x, c := range row {
+			if c.R == 0 && c.A&AttrProtected != 0 {
+				expected.alt[y][x].R = ' '
+			}
+		}
+	}
+	return expected
+}
+func protectedWrapResizeFixture() *Terminal {
+	src := New(1, 12, WithScrollback(20))
+	for i, b := range []byte("\x830]<$:?\xf4") {
+		if b >= 0xf0 {
+			src.Resize(1+int(b-0xf0)*3+i%3, 1+(int(b)+i)%12)
+		} else {
+			src.Write([]byte(tokens[int(b)%len(tokens)]))
+		}
+	}
+	return src
+}
+func TestRepaintProtectedWrapResizeLimit(t *testing.T) {
+	src := protectedWrapResizeFixture()
+	if !repaintProtectedWrapPadding(src) {
+		t.Fatal("fixture does not reach the source-classified export limit")
+	}
+	checkRepaint(t, src)
+	// Exact persistence retains the original wrap and future reverse-wrap behavior.
+	exact := New(1, 1)
+	if err := exact.RestoreSnapshot(src.Snapshot(), SnapshotLimits{}); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(exact.Snapshot(), src.Snapshot()) {
+		t.Fatal("snapshot lost protected wrap")
+	}
+	exported := New(src.cols, src.rows)
+	exported.Write(src.Repaint(false))
+	if rowFlagsAt(src.altWrap, 2)&rowWrap == 0 || rowFlagsAt(exported.altWrap, 2)&rowWrap != 0 {
+		t.Fatal("expected specific lost wrap not witnessed")
+	}
+	future := []byte("\x1b[?47h\x1b[?45h\x1b[4;1H\bX")
+	src.Write(future)
+	exact.Write(future)
+	exported.Write(future)
+	if !bytes.Equal(src.Snapshot(), exact.Snapshot()) {
+		t.Fatal("exact snapshot continuation differs")
+	}
+	if state(src) == state(exported) {
+		t.Fatal("declared ANSI loss has no future-behavior witness")
+	}
+	for _, change := range []func(*Terminal){
+		func(s *Terminal) { s.altActive = true }, func(s *Terminal) { s.protISO = false },
+		func(s *Terminal) { s.alt[2] = append(s.alt[2], cell{R: 'X'}) },
+		func(s *Terminal) { s.altWrap[2] &^= rowWrap },
+	} {
+		other := protectedWrapResizeFixture()
+		change(other)
+		if repaintProtectedWrapPadding(other) {
+			t.Fatal("guard accepted unrelated state")
+		}
 	}
 }

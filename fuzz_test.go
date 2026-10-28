@@ -202,6 +202,10 @@ func checkRepaint(t *testing.T, src *Terminal) {
 		checkRectangleGrowthSnapshot(t, src)
 		expected = repaintRectangleGrowthExpectation(t, src, bg)
 	}
+	if repaintProtectedWrapPadding(src) {
+		checkRectangleGrowthSnapshot(t, src)
+		expected = repaintProtectedWrapExpectation(t, src)
+	}
 	cols, rows := src.Size()
 	{
 		for _, sb := range []bool{false, true} {
