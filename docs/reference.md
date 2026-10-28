@@ -144,7 +144,8 @@ Use Snapshot for exact persistence. ANSI cannot express every retained state:
   screen as scratch space; other combinations can move the resumed cursor.
 - Very narrow screens with VS15-narrowed graphemes have replay limits.
 - Empty cells with foreground, protection or rich attributes can replay as
-  literal spaces with the same style. Exact snapshots preserve the distinction.
+  literal spaces with the same style, including protected wide-character
+  padding. Exact snapshots preserve the distinction.
 - A forced 1047 exit can erase mixed old/new alternate-screen backgrounds
   after a resize. Preserving the stored screen-mode bits can require that
   exit, which paints unprotected cells with one background. ISO-protected

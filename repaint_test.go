@@ -796,6 +796,8 @@ func TestRepaintImplicitAlternateContinuation(t *testing.T) {
 // cells. Width growth adds unprotected padding. The mandatory 1047 exit at the
 // final host width erases that suffix and clears the wrap. Classify this from
 // source state only; no exporter result is used to decide the allowed loss.
+// Leading zero cells and gaps do not touch the old right edge; only padding
+// after the final protected cell makes the host-width erase clear the wrap.
 func repaintProtectedWrapPadding(src *Terminal) bool {
 	if src.altActive || !src.protISO || src.cols < 2 || src.cols == 80 || src.cols == 132 || len(src.alt) != src.rows || src.privateModes()&(privateMode47|privateMode1047|privateMode1049) != privateMode47|privateMode1049 {
 		return false
@@ -803,23 +805,20 @@ func repaintProtectedWrapPadding(src *Terminal) bool {
 	found := false
 	for y, row := range src.alt {
 		wrapped := rowFlagsAt(src.altWrap, y)&rowWrap != 0
-		protected, padding := 0, false
+		protected, lastProtected := 0, -1
 		for x := 0; x < src.cols; x++ {
 			c := rowCell(row, x)
 			if c.A&AttrProtected != 0 {
-				if wrapped && padding {
-					return false
-				}
 				protected++
+				lastProtected = x
 				continue
 			}
 			if c != (cell{}) {
 				return false
 			}
-			padding = true
 		}
 		if wrapped {
-			if protected == 0 || !padding {
+			if protected == 0 || lastProtected == src.cols-1 {
 				return false
 			}
 			found = true
@@ -837,10 +836,11 @@ func repaintProtectedWrapExpectation(t *testing.T, src *Terminal) *Terminal {
 		expected.altWrap[y] &^= rowWrap
 	}
 	// Styled empty cells already use the ANSI formatter's literal-space
-	// fallback (TestRepaintNarrowedStyledTailBoundary); keep their styles exact.
+	// fallback (TestRepaintNarrowedStyledTailBoundary), including wide-character
+	// padding. Keep their styles exact.
 	for y, row := range expected.alt {
 		for x, c := range row {
-			if c.R == 0 && c.A&AttrProtected != 0 {
+			if (c.R == 0 || c.R == spacerHead) && c.A&AttrProtected != 0 {
 				expected.alt[y][x].R = ' '
 			}
 		}
@@ -891,6 +891,10 @@ func TestRepaintProtectedWrapResizeLimit(t *testing.T) {
 		func(s *Terminal) { s.altActive = true }, func(s *Terminal) { s.protISO = false },
 		func(s *Terminal) { s.alt[2] = append(s.alt[2], cell{R: 'X'}) },
 		func(s *Terminal) { s.altWrap[2] &^= rowWrap },
+		func(s *Terminal) {
+			s.alt[2] = append(s.alt[2], make([]cell, s.cols-len(s.alt[2]))...)
+			s.alt[2][s.cols-1].A = AttrProtected
+		},
 	} {
 		other := protectedWrapResizeFixture()
 		change(other)

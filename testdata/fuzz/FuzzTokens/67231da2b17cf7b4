@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\x83]<$:?\xf7")
+byte('\x04')
+byte('E')
