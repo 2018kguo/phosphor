@@ -1613,29 +1613,40 @@ func (t *Terminal) rotate(top, bot, n int) {
 	scr := t.screen()
 	up := n > 0
 	n = max(n, -n)
-	// The rows leaving, kept to be reused (a small batch suffices for
-	// the common one-line case without allocating).
-	var spare [8][]cell
-	recycled := spare[:0]
-	if n <= len(spare) {
+	if n == 1 {
 		if up {
-			recycled = append(recycled, scr[top:top+n]...)
+			row := scr[top]
+			copy(scr[top:bot], scr[top+1:bot+1])
+			scr[bot] = t.blank(row)
 		} else {
-			recycled = append(recycled, scr[bot-n+1:bot+1]...)
+			row := scr[bot]
+			copy(scr[top+1:bot+1], scr[top:bot])
+			scr[top] = t.blank(row)
 		}
-	}
-	in := scr[top : top+n] // where blank rows come in
-	if up {
-		copy(scr[top:], scr[top+n:bot+1])
-		in = scr[bot-n+1 : bot+1]
 	} else {
-		copy(scr[top+n:bot+1], scr[top:bot+1-n])
-	}
-	for i := range in {
-		if i < len(recycled) && recycled[i] != nil {
-			in[i] = t.blank(recycled[i])
+		// Keep the outgoing rows for reuse when the batch is small.
+		var spare [8][]cell
+		recycled := spare[:0]
+		if n <= len(spare) {
+			if up {
+				recycled = append(recycled, scr[top:top+n]...)
+			} else {
+				recycled = append(recycled, scr[bot-n+1:bot+1]...)
+			}
+		}
+		in := scr[top : top+n] // where blank rows come in
+		if up {
+			copy(scr[top:], scr[top+n:bot+1])
+			in = scr[bot-n+1 : bot+1]
 		} else {
-			in[i] = t.blankRow()
+			copy(scr[top+n:bot+1], scr[top:bot+1-n])
+		}
+		for i := range in {
+			if i < len(recycled) && recycled[i] != nil {
+				in[i] = t.blank(recycled[i])
+			} else {
+				in[i] = t.blankRow()
+			}
 		}
 	}
 	// Soft wraps move with their rows; a row whose next row changed no
