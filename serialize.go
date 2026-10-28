@@ -205,6 +205,20 @@ func copyASCIICells(dst []byte, src []cell) int {
 	dst = dst[:len(src)]
 	fg := src[0].Fg
 	rest := *(*uint64)(unsafe.Pointer(&src[0].Bg))
+	if binary.NativeEndian.Uint16([]byte{1, 0}) == 1 {
+		// On little-endian hosts the first word holds R then Fg. This
+		// range checks both ASCII 1..127 and exact foreground equality.
+		first := uint64(fg)<<32 | 1
+		for i := range src {
+			c := &src[i]
+			head := *(*uint64)(unsafe.Pointer(c))
+			if head-first >= utf8.RuneSelf-1 || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
+				return i
+			}
+			dst[i] = byte(head)
+		}
+		return len(src)
+	}
 	for i := range src {
 		c := &src[i]
 		if uint32(c.R-1) >= utf8.RuneSelf-1 || c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
