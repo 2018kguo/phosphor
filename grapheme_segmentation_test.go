@@ -9,7 +9,7 @@ import (
 	"github.com/clipperhouse/uax29/v2/graphemes"
 )
 
-func TestGraphemeStringSegmentationKeepsByteBoundaries(t *testing.T) {
+func TestGraphemeSegmentationKeepsByteBoundaries(t *testing.T) {
 	prefixes := []string{
 		"", "A", "中", "\x00", "\u200b", "A\u200b\u0301", "👩\u200d", "🇺🇸🇨",
 		"가", "\u0600A\u0301", "e\u0301X\u200d", "\xff\xfe",

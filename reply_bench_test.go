@@ -63,3 +63,30 @@ func BenchmarkWriteUnicodeAndLinks(b *testing.B) {
 		}
 	}
 }
+
+// Distinct clusters exercise cache misses as well as repeated display text.
+func BenchmarkWriteGraphemeVariety(b *testing.B) {
+	for _, count := range []int{16, 1024} {
+		var text strings.Builder
+		for i := range count {
+			fmt.Fprintf(&text, "%c\u0301 ", rune(0x4e00+i))
+			if i%16 == 15 {
+				text.WriteString("\r\n")
+			}
+		}
+		line := text.String()
+		data := []byte("\x1b[?2027h" + strings.Repeat(line, (1<<20)/len(line)+1))
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			term := New(120, 40, WithReply(io.Discard))
+			b.SetBytes(int64(len(data)))
+			b.ReportAllocs()
+			for b.Loop() {
+				for p := data; len(p) > 0; {
+					n := min(len(p), 1024)
+					term.Write(p[:n])
+					p = p[n:]
+				}
+			}
+		})
+	}
+}

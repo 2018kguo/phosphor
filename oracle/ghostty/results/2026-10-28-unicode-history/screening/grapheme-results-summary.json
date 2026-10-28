@@ -1,0 +1,2001 @@
+{
+  "metadata": {
+    "base": "9627fddfa3cd53863e428ddbb691d1af62faf979",
+    "source_commits": [
+      "1233bf38ee43d81e73c55e600e0789f0d2ca12d2",
+      "c1bb55f0155791d102f96088325302433a1058ba",
+      "147b4587aa0cc3aaf464787e348dead6bff1b749"
+    ],
+    "go_version": "go version go1.26.3 darwin/arm64",
+    "benchmark_source_sha256": "d3e82cc433fc386c1fc4fd80fbf70e40c5cf4c8a764de229d64357a010be428d",
+    "gomaxprocs": 1,
+    "benchtime": "100ms",
+    "rounds": 2,
+    "history_policies": [
+      "budgeted",
+      "none"
+    ],
+    "chunk": 1024,
+    "limits": [
+      "Exploratory short screening, not final native comparison.",
+      "Initial A/B binaries differed in linked tests/helpers; same-layout screen uses one binary with only an environment-controlled experimental overlay.",
+      "No experimental switch or discarded variant remains in the committed source.",
+      "Retained terminal fields and checkpoint representation unchanged; Compact releases reused temporary bytes."
+    ],
+    "binaries": {
+      "from-string.test": "219c006e68587e4bc48fc4024611d696ca68c4b200169f0b97e3b631b55d48df",
+      "baseline.test": "c3b3f64a917e709b87a516ba32f931070fc8aa9dd08a39732b797bcf3abee1a2",
+      "no-controls.test": "d27f5495c45ff68e2f7540ffdfecb8afc0f9c1f2961909090dad659f4347aac3",
+      "scratch-winner.test": "64a16c4613a3d63fd58f3546b5f7c48786ea7aa69e1456edd28af76327de1df2",
+      "reuse-scratch.test": "b9adb997d3bd569cc59d2809c9b2b4848993eb5614593ca23f626985af20cbbc",
+      "intern-append.test": "e18b7113efa1ef2df1a6fadbae0d3908ce745513382a2652e8c9bfb8943f77dc",
+      "from-string-no-base-escape.test": "064527880d17525e699f86d3b96dc4b143a7a28c30680e428df566058f1dbe20",
+      "bounded.test": "e5684bcbddcdcf75d7496f1a137221efa9df180f40f2f140297f4bd1a807abec",
+      "intern-append-same-layout.test": "2fd01ff847eed9e57b0b2f6c1bd7bc78e5c50dd8c6835de31af12649f1e893a6"
+    }
+  },
+  "reports": {
+    "from-string-screen": {
+      "samples": [
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 58358834,
+          "MB_per_s": 17.97,
+          "B_per_op": 152718972,
+          "allocs_per_op": 730415
+        },
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 57134396,
+          "MB_per_s": 18.35,
+          "B_per_op": 152477208,
+          "allocs_per_op": 729559
+        },
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 57016021,
+          "MB_per_s": 18.39,
+          "B_per_op": 156636476,
+          "allocs_per_op": 540389
+        },
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 55388812,
+          "MB_per_s": 18.93,
+          "B_per_op": 156411304,
+          "allocs_per_op": 539380
+        },
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1558849,
+          "MB_per_s": 672.67,
+          "B_per_op": 6474,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 956345,
+          "MB_per_s": 1096.46,
+          "B_per_op": 232,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4261131,
+          "MB_per_s": 246.1,
+          "B_per_op": 1339226,
+          "allocs_per_op": 27653
+        },
+        {
+          "repeat": 0,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3638703,
+          "MB_per_s": 288.19,
+          "B_per_op": 1324876,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 31672104,
+          "MB_per_s": 33.11,
+          "B_per_op": 7425758,
+          "allocs_per_op": 729935
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 23764333,
+          "MB_per_s": 44.12,
+          "B_per_op": 7302806,
+          "allocs_per_op": 729497
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20884000,
+          "MB_per_s": 50.21,
+          "B_per_op": 3453534,
+          "allocs_per_op": 539723
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 17419264,
+          "MB_per_s": 60.2,
+          "B_per_op": 3362133,
+          "allocs_per_op": 539313
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1500070,
+          "MB_per_s": 699.03,
+          "B_per_op": 6387,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 937173,
+          "MB_per_s": 1118.9,
+          "B_per_op": 226,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4233622,
+          "MB_per_s": 247.7,
+          "B_per_op": 1341053,
+          "allocs_per_op": 27660
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3664893,
+          "MB_per_s": 286.13,
+          "B_per_op": 1324876,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 27474885,
+          "MB_per_s": 38.17,
+          "B_per_op": 7425762,
+          "allocs_per_op": 729935
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 23907917,
+          "MB_per_s": 43.86,
+          "B_per_op": 7302816,
+          "allocs_per_op": 729497
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20892467,
+          "MB_per_s": 50.19,
+          "B_per_op": 3453534,
+          "allocs_per_op": 539723
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 17807826,
+          "MB_per_s": 58.88,
+          "B_per_op": 3362133,
+          "allocs_per_op": 539313
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1538520,
+          "MB_per_s": 681.56,
+          "B_per_op": 6562,
+          "allocs_per_op": 28
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 933331,
+          "MB_per_s": 1123.5,
+          "B_per_op": 224,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4470980,
+          "MB_per_s": 234.55,
+          "B_per_op": 1338456,
+          "allocs_per_op": 27650
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3843606,
+          "MB_per_s": 272.83,
+          "B_per_op": 1324910,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 57962666,
+          "MB_per_s": 18.09,
+          "B_per_op": 152718940,
+          "allocs_per_op": 730415
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 62329750,
+          "MB_per_s": 16.82,
+          "B_per_op": 152477216,
+          "allocs_per_op": 729559
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 53048458,
+          "MB_per_s": 19.77,
+          "B_per_op": 156636540,
+          "allocs_per_op": 540389
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 41396611,
+          "MB_per_s": 25.33,
+          "B_per_op": 156404773,
+          "allocs_per_op": 539346
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1510037,
+          "MB_per_s": 694.42,
+          "B_per_op": 6303,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 941834,
+          "MB_per_s": 1113.36,
+          "B_per_op": 228,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4174574,
+          "MB_per_s": 251.2,
+          "B_per_op": 1338831,
+          "allocs_per_op": 27651
+        },
+        {
+          "repeat": 1,
+          "candidate": "baseline",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3618428,
+          "MB_per_s": 289.81,
+          "B_per_op": 1324864,
+          "allocs_per_op": 27597
+        }
+      ],
+      "medians": {
+        "baseline|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 18.03,
+          "B_per_op": 152718956.0,
+          "allocs_per_op": 730415.0
+        },
+        "baseline|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 17.585,
+          "B_per_op": 152477212.0,
+          "allocs_per_op": 729559.0
+        },
+        "baseline|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 19.08,
+          "B_per_op": 156636508.0,
+          "allocs_per_op": 540389.0
+        },
+        "baseline|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 22.13,
+          "B_per_op": 156408038.5,
+          "allocs_per_op": 539363.0
+        },
+        "baseline|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 683.545,
+          "B_per_op": 6388.5,
+          "allocs_per_op": 27.0
+        },
+        "baseline|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1104.9099999999999,
+          "B_per_op": 230.0,
+          "allocs_per_op": 0.0
+        },
+        "baseline|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 248.64999999999998,
+          "B_per_op": 1339028.5,
+          "allocs_per_op": 27652.0
+        },
+        "baseline|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 289.0,
+          "B_per_op": 1324870.0,
+          "allocs_per_op": 27597.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 35.64,
+          "B_per_op": 7425760.0,
+          "allocs_per_op": 729935.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 43.989999999999995,
+          "B_per_op": 7302811.0,
+          "allocs_per_op": 729497.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 50.2,
+          "B_per_op": 3453534.0,
+          "allocs_per_op": 539723.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 59.540000000000006,
+          "B_per_op": 3362133.0,
+          "allocs_per_op": 539313.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 690.295,
+          "B_per_op": 6474.5,
+          "allocs_per_op": 27.5
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1121.2,
+          "B_per_op": 225.0,
+          "allocs_per_op": 0.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 241.125,
+          "B_per_op": 1339754.5,
+          "allocs_per_op": 27655.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 279.48,
+          "B_per_op": 1324893.0,
+          "allocs_per_op": 27597.0
+        }
+      }
+    },
+    "base-text-screen": {
+      "samples": [
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 29396438,
+          "MB_per_s": 35.67,
+          "B_per_op": 7425766,
+          "allocs_per_op": 729935
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 25245302,
+          "MB_per_s": 41.54,
+          "B_per_op": 7304856,
+          "allocs_per_op": 729507
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20872808,
+          "MB_per_s": 50.24,
+          "B_per_op": 3453534,
+          "allocs_per_op": 539723
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 18229938,
+          "MB_per_s": 57.52,
+          "B_per_op": 3362133,
+          "allocs_per_op": 539313
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 30030469,
+          "MB_per_s": 34.92,
+          "B_per_op": 5723678,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 23096633,
+          "MB_per_s": 45.4,
+          "B_per_op": 5600726,
+          "allocs_per_op": 410360
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20316070,
+          "MB_per_s": 51.61,
+          "B_per_op": 1999121,
+          "allocs_per_op": 270009
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 16981429,
+          "MB_per_s": 61.75,
+          "B_per_op": 1923108,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 0,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 30134448,
+          "MB_per_s": 34.8,
+          "B_per_op": 5723682,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 0,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 22977867,
+          "MB_per_s": 45.64,
+          "B_per_op": 5600723,
+          "allocs_per_op": 410360
+        },
+        {
+          "repeat": 0,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 18684639,
+          "MB_per_s": 56.12,
+          "B_per_op": 1999124,
+          "allocs_per_op": 270009
+        },
+        {
+          "repeat": 0,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 17231054,
+          "MB_per_s": 60.86,
+          "B_per_op": 1923110,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 1,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 28610698,
+          "MB_per_s": 36.65,
+          "B_per_op": 5723682,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 1,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 25120604,
+          "MB_per_s": 41.74,
+          "B_per_op": 5602780,
+          "allocs_per_op": 410370
+        },
+        {
+          "repeat": 1,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20997383,
+          "MB_per_s": 49.94,
+          "B_per_op": 2015457,
+          "allocs_per_op": 270083
+        },
+        {
+          "repeat": 1,
+          "candidate": "bounded",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 18609559,
+          "MB_per_s": 56.35,
+          "B_per_op": 1923113,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 27701583,
+          "MB_per_s": 37.85,
+          "B_per_op": 5723682,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 23316542,
+          "MB_per_s": 44.97,
+          "B_per_op": 5600723,
+          "allocs_per_op": 410360
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 19799299,
+          "MB_per_s": 52.96,
+          "B_per_op": 1999124,
+          "allocs_per_op": 270009
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 18490970,
+          "MB_per_s": 56.71,
+          "B_per_op": 1923110,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 28272281,
+          "MB_per_s": 37.09,
+          "B_per_op": 7425766,
+          "allocs_per_op": 729935
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 24921900,
+          "MB_per_s": 42.08,
+          "B_per_op": 7302793,
+          "allocs_per_op": 729497
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20745592,
+          "MB_per_s": 50.55,
+          "B_per_op": 3453534,
+          "allocs_per_op": 539723
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 17936479,
+          "MB_per_s": 58.46,
+          "B_per_op": 3362133,
+          "allocs_per_op": 539313
+        }
+      ],
+      "medians": {
+        "from-string|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 36.38,
+          "B_per_op": 7425766.0,
+          "allocs_per_op": 729935.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 41.81,
+          "B_per_op": 7303824.5,
+          "allocs_per_op": 729502.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 50.394999999999996,
+          "B_per_op": 3453534.0,
+          "allocs_per_op": 539723.0
+        },
+        "from-string|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 57.99,
+          "B_per_op": 3362133.0,
+          "allocs_per_op": 539313.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 36.385000000000005,
+          "B_per_op": 5723680.0,
+          "allocs_per_op": 410798.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 45.185,
+          "B_per_op": 5600724.5,
+          "allocs_per_op": 410360.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 52.285,
+          "B_per_op": 1999122.5,
+          "allocs_per_op": 270009.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 59.230000000000004,
+          "B_per_op": 1923109.0,
+          "allocs_per_op": 269668.0
+        },
+        "bounded|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 35.724999999999994,
+          "B_per_op": 5723682.0,
+          "allocs_per_op": 410798.0
+        },
+        "bounded|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 43.69,
+          "B_per_op": 5601751.5,
+          "allocs_per_op": 410365.0
+        },
+        "bounded|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 53.03,
+          "B_per_op": 2007290.5,
+          "allocs_per_op": 270046.0
+        },
+        "bounded|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 58.605000000000004,
+          "B_per_op": 1923111.5,
+          "allocs_per_op": 269668.0
+        }
+      }
+    },
+    "scratch-screen": {
+      "samples": [
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 27156333,
+          "MB_per_s": 38.61,
+          "B_per_op": 5723682,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 23355842,
+          "MB_per_s": 44.9,
+          "B_per_op": 5600723,
+          "allocs_per_op": 410360
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 19917389,
+          "MB_per_s": 52.65,
+          "B_per_op": 1999124,
+          "allocs_per_op": 270009
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 17380042,
+          "MB_per_s": 60.33,
+          "B_per_op": 1923110,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1507013,
+          "MB_per_s": 695.81,
+          "B_per_op": 6474,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 917836,
+          "MB_per_s": 1142.47,
+          "B_per_op": 221,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4199622,
+          "MB_per_s": 249.7,
+          "B_per_op": 1338101,
+          "allocs_per_op": 27648
+        },
+        {
+          "repeat": 0,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3633889,
+          "MB_per_s": 288.57,
+          "B_per_op": 1324876,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 30738219,
+          "MB_per_s": 34.11,
+          "B_per_op": 5723682,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 22520550,
+          "MB_per_s": 46.56,
+          "B_per_op": 5600723,
+          "allocs_per_op": 410360
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20286050,
+          "MB_per_s": 51.69,
+          "B_per_op": 2015460,
+          "allocs_per_op": 270083
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 17644696,
+          "MB_per_s": 59.43,
+          "B_per_op": 1923110,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1474167,
+          "MB_per_s": 711.32,
+          "B_per_op": 6303,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 923224,
+          "MB_per_s": 1135.8,
+          "B_per_op": 223,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4156159,
+          "MB_per_s": 252.31,
+          "B_per_op": 1338456,
+          "allocs_per_op": 27650
+        },
+        {
+          "repeat": 0,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3579866,
+          "MB_per_s": 292.93,
+          "B_per_op": 1324870,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 25444115,
+          "MB_per_s": 41.21,
+          "B_per_op": 2562706,
+          "allocs_per_op": 152449
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 19196340,
+          "MB_per_s": 54.63,
+          "B_per_op": 2438389,
+          "allocs_per_op": 152005
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14520792,
+          "MB_per_s": 72.21,
+          "B_per_op": 70012,
+          "allocs_per_op": 317
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 13057406,
+          "MB_per_s": 80.31,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1569064,
+          "MB_per_s": 668.3,
+          "B_per_op": 6562,
+          "allocs_per_op": 28
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 956371,
+          "MB_per_s": 1096.43,
+          "B_per_op": 232,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4177319,
+          "MB_per_s": 251.03,
+          "B_per_op": 1338831,
+          "allocs_per_op": 27651
+        },
+        {
+          "repeat": 0,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3645972,
+          "MB_per_s": 287.62,
+          "B_per_op": 1324876,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 22530708,
+          "MB_per_s": 46.54,
+          "B_per_op": 2536468,
+          "allocs_per_op": 152353
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 18804931,
+          "MB_per_s": 55.76,
+          "B_per_op": 2438389,
+          "allocs_per_op": 152005
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14332119,
+          "MB_per_s": 73.16,
+          "B_per_op": 70012,
+          "allocs_per_op": 317
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 12815448,
+          "MB_per_s": 81.82,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1596729,
+          "MB_per_s": 656.72,
+          "B_per_op": 6654,
+          "allocs_per_op": 28
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 930337,
+          "MB_per_s": 1127.12,
+          "B_per_op": 224,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4255212,
+          "MB_per_s": 246.44,
+          "B_per_op": 1338831,
+          "allocs_per_op": 27651
+        },
+        {
+          "repeat": 1,
+          "candidate": "reuse-scratch",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3671795,
+          "MB_per_s": 285.6,
+          "B_per_op": 1324876,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 26420990,
+          "MB_per_s": 39.69,
+          "B_per_op": 5723678,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 22965067,
+          "MB_per_s": 45.66,
+          "B_per_op": 5600726,
+          "allocs_per_op": 410360
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20857017,
+          "MB_per_s": 50.28,
+          "B_per_op": 2015457,
+          "allocs_per_op": 270083
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 18049583,
+          "MB_per_s": 58.1,
+          "B_per_op": 1923110,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1502974,
+          "MB_per_s": 697.68,
+          "B_per_op": 6064,
+          "allocs_per_op": 26
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 930711,
+          "MB_per_s": 1126.66,
+          "B_per_op": 224,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4400028,
+          "MB_per_s": 238.33,
+          "B_per_op": 1338831,
+          "allocs_per_op": 27651
+        },
+        {
+          "repeat": 1,
+          "candidate": "no-controls",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3881531,
+          "MB_per_s": 270.16,
+          "B_per_op": 1324889,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 27897646,
+          "MB_per_s": 37.59,
+          "B_per_op": 5723682,
+          "allocs_per_op": 410798
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 23525442,
+          "MB_per_s": 44.57,
+          "B_per_op": 5600723,
+          "allocs_per_op": 410360
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 20461092,
+          "MB_per_s": 51.25,
+          "B_per_op": 2015460,
+          "allocs_per_op": 270083
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 17767500,
+          "MB_per_s": 59.02,
+          "B_per_op": 1923113,
+          "allocs_per_op": 269668
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1525641,
+          "MB_per_s": 687.32,
+          "B_per_op": 6387,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 932536,
+          "MB_per_s": 1124.46,
+          "B_per_op": 224,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4186264,
+          "MB_per_s": 250.5,
+          "B_per_op": 1338101,
+          "allocs_per_op": 27648
+        },
+        {
+          "repeat": 1,
+          "candidate": "from-string-no-base-escape",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3599694,
+          "MB_per_s": 291.32,
+          "B_per_op": 1324876,
+          "allocs_per_op": 27597
+        }
+      ],
+      "medians": {
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 38.1,
+          "B_per_op": 5723682.0,
+          "allocs_per_op": 410798.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 44.735,
+          "B_per_op": 5600723.0,
+          "allocs_per_op": 410360.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 51.95,
+          "B_per_op": 2007292.0,
+          "allocs_per_op": 270046.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 59.675,
+          "B_per_op": 1923111.5,
+          "allocs_per_op": 269668.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 691.565,
+          "B_per_op": 6430.5,
+          "allocs_per_op": 27.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1133.4650000000001,
+          "B_per_op": 222.5,
+          "allocs_per_op": 0.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 250.1,
+          "B_per_op": 1338101.0,
+          "allocs_per_op": 27648.0
+        },
+        "from-string-no-base-escape|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 289.945,
+          "B_per_op": 1324876.0,
+          "allocs_per_op": 27597.0
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 36.9,
+          "B_per_op": 5723680.0,
+          "allocs_per_op": 410798.0
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 46.11,
+          "B_per_op": 5600724.5,
+          "allocs_per_op": 410360.0
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 50.985,
+          "B_per_op": 2015458.5,
+          "allocs_per_op": 270083.0
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 58.765,
+          "B_per_op": 1923110.0,
+          "allocs_per_op": 269668.0
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 704.5,
+          "B_per_op": 6183.5,
+          "allocs_per_op": 26.5
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1131.23,
+          "B_per_op": 223.5,
+          "allocs_per_op": 0.0
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 245.32,
+          "B_per_op": 1338643.5,
+          "allocs_per_op": 27650.5
+        },
+        "no-controls|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 281.545,
+          "B_per_op": 1324879.5,
+          "allocs_per_op": 27597.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 43.875,
+          "B_per_op": 2549587.0,
+          "allocs_per_op": 152401.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 55.195,
+          "B_per_op": 2438389.0,
+          "allocs_per_op": 152005.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 72.685,
+          "B_per_op": 70012.0,
+          "allocs_per_op": 317.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 81.065,
+          "B_per_op": 4962.0,
+          "allocs_per_op": 25.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 662.51,
+          "B_per_op": 6608.0,
+          "allocs_per_op": 28.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1111.775,
+          "B_per_op": 228.0,
+          "allocs_per_op": 0.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 248.735,
+          "B_per_op": 1338831.0,
+          "allocs_per_op": 27651.0
+        },
+        "reuse-scratch|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 286.61,
+          "B_per_op": 1324876.0,
+          "allocs_per_op": 27597.0
+        }
+      }
+    },
+    "intern-append-screen": {
+      "samples": [
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 23172258,
+          "MB_per_s": 45.25,
+          "B_per_op": 2536472,
+          "allocs_per_op": 152353
+        },
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 20406188,
+          "MB_per_s": 51.39,
+          "B_per_op": 2438386,
+          "allocs_per_op": 152004
+        },
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14423536,
+          "MB_per_s": 72.7,
+          "B_per_op": 70012,
+          "allocs_per_op": 317
+        },
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 12799906,
+          "MB_per_s": 81.92,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1544481,
+          "MB_per_s": 678.93,
+          "B_per_op": 6654,
+          "allocs_per_op": 28
+        },
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 956591,
+          "MB_per_s": 1096.18,
+          "B_per_op": 232,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4510025,
+          "MB_per_s": 232.51,
+          "B_per_op": 1339226,
+          "allocs_per_op": 27653
+        },
+        {
+          "repeat": 0,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3743935,
+          "MB_per_s": 280.09,
+          "B_per_op": 1324882,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 19274910,
+          "MB_per_s": 54.4,
+          "B_per_op": 87484,
+          "allocs_per_op": 321
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 15895036,
+          "MB_per_s": 65.97,
+          "B_per_op": 5910,
+          "allocs_per_op": 31
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14518482,
+          "MB_per_s": 72.23,
+          "B_per_op": 70012,
+          "allocs_per_op": 317
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 13929109,
+          "MB_per_s": 75.28,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1597588,
+          "MB_per_s": 656.36,
+          "B_per_op": 6387,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 984276,
+          "MB_per_s": 1065.35,
+          "B_per_op": 237,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4218558,
+          "MB_per_s": 248.58,
+          "B_per_op": 1339226,
+          "allocs_per_op": 27653
+        },
+        {
+          "repeat": 0,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3972595,
+          "MB_per_s": 263.97,
+          "B_per_op": 1324889,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 21000292,
+          "MB_per_s": 49.93,
+          "B_per_op": 104980,
+          "allocs_per_op": 385
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 17395694,
+          "MB_per_s": 60.28,
+          "B_per_op": 6896,
+          "allocs_per_op": 36
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 15151292,
+          "MB_per_s": 69.21,
+          "B_per_op": 70012,
+          "allocs_per_op": 317
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 14241818,
+          "MB_per_s": 73.63,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1650688,
+          "MB_per_s": 635.25,
+          "B_per_op": 7150,
+          "allocs_per_op": 30
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 1004791,
+          "MB_per_s": 1043.6,
+          "B_per_op": 287,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4326811,
+          "MB_per_s": 242.36,
+          "B_per_op": 1339226,
+          "allocs_per_op": 27653
+        },
+        {
+          "repeat": 1,
+          "candidate": "intern-append",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3815375,
+          "MB_per_s": 274.85,
+          "B_per_op": 1324882,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 23027608,
+          "MB_per_s": 45.54,
+          "B_per_op": 2536468,
+          "allocs_per_op": 152353
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 20218438,
+          "MB_per_s": 51.86,
+          "B_per_op": 2438386,
+          "allocs_per_op": 152004
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14076932,
+          "MB_per_s": 74.49,
+          "B_per_op": 61261,
+          "allocs_per_op": 277
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 12600109,
+          "MB_per_s": 83.22,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1543202,
+          "MB_per_s": 679.5,
+          "B_per_op": 6387,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 954857,
+          "MB_per_s": 1098.17,
+          "B_per_op": 232,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4268069,
+          "MB_per_s": 245.7,
+          "B_per_op": 1338831,
+          "allocs_per_op": 27651
+        },
+        {
+          "repeat": 1,
+          "candidate": "scratch-winner",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3877382,
+          "MB_per_s": 270.45,
+          "B_per_op": 1324882,
+          "allocs_per_op": 27597
+        }
+      ],
+      "medians": {
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 45.394999999999996,
+          "B_per_op": 2536470.0,
+          "allocs_per_op": 152353.0
+        },
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 51.625,
+          "B_per_op": 2438386.0,
+          "allocs_per_op": 152004.0
+        },
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 73.595,
+          "B_per_op": 65636.5,
+          "allocs_per_op": 297.0
+        },
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 82.57,
+          "B_per_op": 4962.0,
+          "allocs_per_op": 25.0
+        },
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 679.2149999999999,
+          "B_per_op": 6520.5,
+          "allocs_per_op": 27.5
+        },
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1097.1750000000002,
+          "B_per_op": 232.0,
+          "allocs_per_op": 0.0
+        },
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 239.105,
+          "B_per_op": 1339028.5,
+          "allocs_per_op": 27652.0
+        },
+        "scratch-winner|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 275.27,
+          "B_per_op": 1324882.0,
+          "allocs_per_op": 27597.0
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 52.165,
+          "B_per_op": 96232.0,
+          "allocs_per_op": 353.0
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 63.125,
+          "B_per_op": 6403.0,
+          "allocs_per_op": 33.5
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 70.72,
+          "B_per_op": 70012.0,
+          "allocs_per_op": 317.0
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 74.455,
+          "B_per_op": 4962.0,
+          "allocs_per_op": 25.0
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 645.8050000000001,
+          "B_per_op": 6768.5,
+          "allocs_per_op": 28.5
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1054.475,
+          "B_per_op": 262.0,
+          "allocs_per_op": 0.0
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 245.47000000000003,
+          "B_per_op": 1339226.0,
+          "allocs_per_op": 27653.0
+        },
+        "intern-append|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 269.41,
+          "B_per_op": 1324885.5,
+          "allocs_per_op": 27597.0
+        }
+      }
+    },
+    "intern-append-same-layout-screen": {
+      "samples": [
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 24290100,
+          "MB_per_s": 43.17,
+          "B_per_op": 2536468,
+          "allocs_per_op": 152353
+        },
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 20198742,
+          "MB_per_s": 51.91,
+          "B_per_op": 2439763,
+          "allocs_per_op": 152012
+        },
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14280771,
+          "MB_per_s": 73.43,
+          "B_per_op": 61261,
+          "allocs_per_op": 277
+        },
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 12812828,
+          "MB_per_s": 81.84,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1574599,
+          "MB_per_s": 665.95,
+          "B_per_op": 6844,
+          "allocs_per_op": 29
+        },
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 972359,
+          "MB_per_s": 1078.41,
+          "B_per_op": 235,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4383453,
+          "MB_per_s": 239.23,
+          "B_per_op": 1338831,
+          "allocs_per_op": 27651
+        },
+        {
+          "repeat": 0,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3952436,
+          "MB_per_s": 265.32,
+          "B_per_op": 1324876,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 19876264,
+          "MB_per_s": 52.76,
+          "B_per_op": 87484,
+          "allocs_per_op": 321
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 16520714,
+          "MB_per_s": 63.47,
+          "B_per_op": 5910,
+          "allocs_per_op": 31
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14514184,
+          "MB_per_s": 72.25,
+          "B_per_op": 70012,
+          "allocs_per_op": 317
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 13006229,
+          "MB_per_s": 80.62,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1541193,
+          "MB_per_s": 680.38,
+          "B_per_op": 6474,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 1026578,
+          "MB_per_s": 1021.45,
+          "B_per_op": 287,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4896399,
+          "MB_per_s": 214.17,
+          "B_per_op": 1339226,
+          "allocs_per_op": 27653
+        },
+        {
+          "repeat": 0,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 4254344,
+          "MB_per_s": 246.49,
+          "B_per_op": 1324918,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 20643158,
+          "MB_per_s": 50.8,
+          "B_per_op": 104980,
+          "allocs_per_op": 385
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 16526929,
+          "MB_per_s": 63.45,
+          "B_per_op": 5910,
+          "allocs_per_op": 31
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14334036,
+          "MB_per_s": 73.16,
+          "B_per_op": 61261,
+          "allocs_per_op": 277
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 12986875,
+          "MB_per_s": 80.74,
+          "B_per_op": 4962,
+          "allocs_per_op": 25
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1532232,
+          "MB_per_s": 684.36,
+          "B_per_op": 6303,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 968760,
+          "MB_per_s": 1082.41,
+          "B_per_op": 235,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4252615,
+          "MB_per_s": 246.59,
+          "B_per_op": 1338456,
+          "allocs_per_op": 27650
+        },
+        {
+          "repeat": 1,
+          "candidate": "candidate",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3782737,
+          "MB_per_s": 277.22,
+          "B_per_op": 1324870,
+          "allocs_per_op": 27597
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+          "ns_per_op": 23097308,
+          "MB_per_s": 45.4,
+          "B_per_op": 2536472,
+          "allocs_per_op": 152353
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+          "ns_per_op": 19846847,
+          "MB_per_s": 52.83,
+          "B_per_op": 2438386,
+          "allocs_per_op": 152004
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+          "ns_per_op": 14121203,
+          "MB_per_s": 74.26,
+          "B_per_op": 61261,
+          "allocs_per_op": 277
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+          "ns_per_op": 12383644,
+          "MB_per_s": 84.68,
+          "B_per_op": 4410,
+          "allocs_per_op": 22
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+          "ns_per_op": 1508666,
+          "MB_per_s": 695.05,
+          "B_per_op": 6303,
+          "allocs_per_op": 27
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+          "ns_per_op": 964865,
+          "MB_per_s": 1086.78,
+          "B_per_op": 232,
+          "allocs_per_op": 0
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+          "ns_per_op": 4363900,
+          "MB_per_s": 240.3,
+          "B_per_op": 1342149,
+          "allocs_per_op": 27664
+        },
+        {
+          "repeat": 1,
+          "candidate": "control",
+          "benchmark": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+          "ns_per_op": 3713578,
+          "MB_per_s": 282.38,
+          "B_per_op": 1324882,
+          "allocs_per_op": 27597
+        }
+      ],
+      "medians": {
+        "control|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 44.285,
+          "B_per_op": 2536470.0,
+          "allocs_per_op": 152353.0
+        },
+        "control|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 52.37,
+          "B_per_op": 2439074.5,
+          "allocs_per_op": 152008.0
+        },
+        "control|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 73.845,
+          "B_per_op": 61261.0,
+          "allocs_per_op": 277.0
+        },
+        "control|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 83.26,
+          "B_per_op": 4686.0,
+          "allocs_per_op": 23.5
+        },
+        "control|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 680.5,
+          "B_per_op": 6573.5,
+          "allocs_per_op": 28.0
+        },
+        "control|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1082.595,
+          "B_per_op": 233.5,
+          "allocs_per_op": 0.0
+        },
+        "control|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 239.765,
+          "B_per_op": 1340490.0,
+          "allocs_per_op": 27657.5
+        },
+        "control|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 273.85,
+          "B_per_op": 1324879.0,
+          "allocs_per_op": 27597.0
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+          "MB_per_s": 51.78,
+          "B_per_op": 96232.0,
+          "allocs_per_op": 353.0
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+          "MB_per_s": 63.46,
+          "B_per_op": 5910.0,
+          "allocs_per_op": 31.0
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+          "MB_per_s": 72.705,
+          "B_per_op": 65636.5,
+          "allocs_per_op": 297.0
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+          "MB_per_s": 80.68,
+          "B_per_op": 4962.0,
+          "allocs_per_op": 25.0
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024": {
+          "MB_per_s": 682.37,
+          "B_per_op": 6388.5,
+          "allocs_per_op": 27.0
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024": {
+          "MB_per_s": 1051.93,
+          "B_per_op": 261.0,
+          "allocs_per_op": 0.0
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024": {
+          "MB_per_s": 230.38,
+          "B_per_op": 1338841.0,
+          "allocs_per_op": 27651.5
+        },
+        "candidate|BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024": {
+          "MB_per_s": 261.855,
+          "B_per_op": 1324894.0,
+          "allocs_per_op": 27597.0
+        }
+      }
+    }
+  }
+}
