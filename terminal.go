@@ -319,6 +319,16 @@ func (t *Terminal) Write(p []byte) (int, error) {
 				i += t.printUTF8(p[i:]) - 1
 				continue
 			}
+			if c == 0x1b && i+1 < len(p) && p[i+1] == '[' {
+				// A complete CSI introducer has no intermediate effects.
+				// Enter its parameter state once; split introducers still
+				// take the byte-wise path below.
+				t.nparams, t.paramSet, t.marker, t.inter = 0, false, 0, 0
+				t.params[0], t.sub = 0, 0
+				t.state = stCSI
+				i++
+				continue
+			}
 		}
 		t.step(c)
 	}
