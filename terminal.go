@@ -1544,7 +1544,7 @@ func (t *Terminal) combine(r rune) {
 	if c.R >= clusterBase {
 		modes = t.x.clusters[c.R-clusterBase].joinModes
 	}
-	c.R = t.intern(cluster{text: s + string(r), width: uint8(t.runeWidth(c.R)), joinModes: modes})
+	c.R = t.internAppend(s, r, uint8(t.runeWidth(c.R)), modes)
 	t.touch(y)
 }
 
@@ -2471,6 +2471,26 @@ func (t *Terminal) intern(s cluster) rune {
 			return clusterBase + rune(i)
 		}
 	}
+	return t.storeCluster(s)
+}
+
+// internAppend checks recent clusters before allocating the appended text.
+func (t *Terminal) internAppend(prefix string, r rune, width uint8, modes clusterModes) rune {
+	x := t.ext()
+	var storage [utf8.UTFMax]byte
+	suffix := utf8.AppendRune(storage[:0], r)
+	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
+		old := &x.clusters[i]
+		if old.width == width && old.joinModes == modes && len(old.text) == len(prefix)+len(suffix) &&
+			old.text[:len(prefix)] == prefix && old.text[len(prefix):] == string(suffix) {
+			return clusterBase + rune(i)
+		}
+	}
+	return t.storeCluster(cluster{text: prefix + string(r), width: width, joinModes: modes})
+}
+
+func (t *Terminal) storeCluster(s cluster) rune {
+	x := t.ext()
 	if len(x.clusters) >= x.clusterCap {
 		t.compactClusters()
 	}

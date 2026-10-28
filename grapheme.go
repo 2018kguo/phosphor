@@ -116,13 +116,15 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	}
 	if count < maxClusterRunes {
 		modes.set(count)
-		text = s + string(r)
-	} else if newWidth == width {
-		return true
+		base.R = t.internAppend(s, r, uint8(newWidth), modes)
+	} else {
+		if newWidth == width {
+			return true
+		}
+		// Native applies geometry before its bounded suffix storage drops r.
+		// Keep that width change even when the cell text is already full.
+		base.R = t.intern(cluster{text: text, width: uint8(newWidth), joinModes: modes})
 	}
-	// Native applies geometry before its bounded suffix storage drops r.
-	// Keep that width change even when the cell text is already full.
-	base.R = t.intern(cluster{text: text, width: uint8(newWidth), joinModes: modes})
 	if newWidth == width {
 		row[x] = base
 		t.touch(y)
