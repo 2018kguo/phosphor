@@ -212,7 +212,10 @@ func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
 		return append(b, c.text...)
 	}
 	if c.joinModes[1] == 0 && c.joinModes[0] >= 2 {
-		count := utf8.RuneCountInString(c.text)
+		count := int(c.tail.count)
+		if count == 0 {
+			count = utf8.RuneCountInString(c.text)
+		}
 		if count >= 2 && count < 64 && c.joinModes[0] == (uint64(1)<<uint(count))-2 {
 			first, n := utf8.DecodeRuneInString(c.text)
 			if CodepointWidth(first) <= t.cols && (tail.R != wideTail || styleOf(tail) == styleOf(head)) {

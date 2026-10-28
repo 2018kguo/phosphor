@@ -99,6 +99,12 @@ func TestClusterFormattingMatchesCodepointLoop(t *testing.T) {
 							}
 							got := term.appendCluster([]byte("prefix"), c, head, tail)
 							want := appendClusterReference(term, []byte("prefix"), c, head, tail)
+							c.tail = graphemeTailOf(c.text)
+							cached := term.appendCluster([]byte("prefix"), c, head, tail)
+							c.tail = graphemeTail{}
+							if !bytes.Equal(cached, want) {
+								t.Fatalf("cached count changed cluster encoding: %q / %q", cached, want)
+							}
 							if !bytes.Equal(got, want) {
 								t.Fatalf("cols=%d text=%q width=%d modes=%v head=%+v tail=%+v:\n%q\n%q", cols, text, width, modes, head, tail, got, want)
 							}
