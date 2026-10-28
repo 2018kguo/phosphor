@@ -3,11 +3,13 @@ package phosphor
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/crc32"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -416,6 +418,73 @@ func FuzzRestoreSnapshot(f *testing.F) {
 	})
 }
 
+func TestSnapshotOpenHistoryRequiresRetainedLine(t *testing.T) {
+	cases := []struct {
+		name    string
+		present bool
+		line    string
+	}{
+		{"no-history", false, ""}, {"empty-line", true, ""}, {"text", true, "A"},
+		{"style-only", true, "\x1b[31m"}, {"mode-only", true, "\x1b[?2027h"},
+		{"sparse-hole", true, "\x00\x01 "}, {"unmarked-row", true, "\x00\x00P\x00"},
+		{"empty-prompt", true, "\x00\x00P\x01"}, {"zero-width", true, "\u200b"},
+	}
+	checked := 0
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for flags := range 16 {
+				source := New(4, 2)
+				source.Write([]byte("X"))
+				if flags&8 != 0 {
+					source.Write([]byte("\x1b[?1049h"))
+				}
+				source.sbOpen, source.sbSpacer, source.autowrap = flags&1 != 0, flags&2 != 0, flags&4 != 0
+				if tc.present {
+					source.sb = [][]byte{[]byte(tc.line)}
+					source.sbBytes = len(tc.line) + 24
+				}
+				var replies bytes.Buffer
+				bells := 0
+				receiver := New(3, 2, WithReply(&replies), WithBell(func() { bells++ }))
+				receiver.Write([]byte("KEEP"))
+				before := receiver.Snapshot()
+				err := receiver.RestoreSnapshot(source.Snapshot(), SnapshotLimits{})
+				if source.sbOpen && !tc.present {
+					if !errors.Is(err, ErrSnapshotMalformed) || !bytes.Equal(before, receiver.Snapshot()) {
+						t.Fatalf("flags%d: open empty history error %v or receiver changed", flags, err)
+					}
+				} else {
+					if err != nil {
+						t.Fatalf("flags%d: valid history rejected: %v", flags, err)
+					}
+					assertSnapshotState(t, source, receiver)
+					if tc.present && len(receiver.ScrollbackCells(0)) == 0 {
+						t.Fatalf("flags%d: a retained logical line decoded no rows", flags)
+					}
+					for _, size := range [][2]int{{1, 4}, {8, 3}, {4, 2}} {
+						source.Resize(size[0], size[1])
+						receiver.Resize(size[0], size[1])
+						assertSnapshotState(t, source, receiver)
+					}
+				}
+				if replies.Len() != 0 || bells != 0 {
+					t.Fatal("restoring history invoked callbacks")
+				}
+				if source.sbOpen && !tc.present {
+					receiver.Write([]byte("\a\x1b[5n"))
+					if bells != 1 || replies.String() != "\x1b[0n" {
+						t.Fatal("failed restore lost the receiver callbacks")
+					}
+				}
+				checked++
+			}
+		})
+	}
+	if checked != 144 {
+		t.Fatalf("history flag coverage changed: %d", checked)
+	}
+}
+
 func FuzzSnapshotContinuation(f *testing.F) {
 	for _, in := range []string{
 		"hello", "\x1b[38:2::10:20:30m漢\xf0\x9f", "\x1b[?2027h😀︎❤️👩‍👩‍👧‍👦",
@@ -528,6 +597,82 @@ func BenchmarkSnapshot(b *testing.B) {
 					New(t.cols, t.rows).Write(repaint)
 				}
 			})
+		})
+	}
+}
+
+// These files were emitted by released v0.3.0, before the v2 writer existed.
+// Expected observations were collected from that version after each suffix.
+func TestReleasedSnapshotV1(t *testing.T) {
+	type observation struct {
+		Cells   [][]Cell
+		History []string
+		Cursor  Cursor
+		Modes   Modes
+		Palette Palette
+		Title   []byte
+		Reply   string
+	}
+	files, err := filepath.Glob("testdata/snapshot-v1/*.bin")
+	if err != nil || len(files) != 6 {
+		t.Fatalf("released fixture inventory: %v, %v", files, err)
+	}
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			read := func(path string) []byte {
+				b, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return b
+			}
+			stem := strings.TrimSuffix(file, ".bin")
+			var want observation
+			if err := json.Unmarshal(read(stem+".json"), &want); err != nil {
+				t.Fatal(err)
+			}
+			if filepath.Base(stem) == "partial-csi" {
+				// The released writer retained only AnyEvent/URXVT. The
+				// suffix resets other modes: native behavior clears the
+				// effective selection while retaining these enabled bits.
+				want.Modes.Mouse = MouseNone
+				want.Modes.MouseEncoding = MouseEncodingDefault
+				want.Modes.MouseTrackingModes = MouseTrackingAnyEvent
+				want.Modes.MouseEncodingModes = MouseEncodingModeURXVT
+			}
+			if filepath.Base(stem) == "saved-state" {
+				// The suffix writes Z after DECRC and T after a tab. Neither
+				// restore nor returning from 1049 resurrects an old hyperlink.
+				// V1 did not retain the independent mode bits; active-alt
+				// snapshots conservatively infer mode47, which remains set.
+				want.Modes.AltScreenModes = AltScreenMode47
+				want.Cells[1][1].Link = Hyperlink{}
+				want.Cells[1][9].Link = Hyperlink{}
+			}
+			var replies bytes.Buffer
+			term := New(1, 1, WithReply(&replies))
+			if err := term.RestoreSnapshot(read(file), SnapshotLimits{}); err != nil {
+				t.Fatal(err)
+			}
+			term.Write(read(stem + ".suffix"))
+			got := observation{Cursor: term.Cursor(), Modes: term.Modes(), Palette: term.Palette(), Title: []byte(term.Title()), Reply: replies.String()}
+			cols, rows := term.Size()
+			for y := range rows {
+				row := make([]Cell, cols)
+				for x := range cols {
+					row[x] = term.Cell(x, y)
+				}
+				got.Cells = append(got.Cells, row)
+			}
+			for i := range term.ScrollbackLen() {
+				got.History = append(got.History, term.ScrollbackLine(i))
+			}
+			for i := range reflect.TypeOf(got).NumField() {
+				left, right := reflect.ValueOf(got).Field(i).Interface(), reflect.ValueOf(want).Field(i).Interface()
+				if !reflect.DeepEqual(left, right) {
+					t.Errorf("released v1 %s changed: got%+v want%+v", reflect.TypeOf(got).Field(i).Name, left, right)
+				}
+			}
 		})
 	}
 }

@@ -532,6 +532,10 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	}
 	d.section = "scrollback"
 	n = d.count(int(^uint(0)>>1), 24)
+	// Width changes pop the open line before reflowing the main screen.
+	if next.sbOpen && n == 0 {
+		d.fail(ErrSnapshotMalformed, "open history without a retained line")
+	}
 	if n > 0 {
 		next.sb = make([][]byte, n)
 		for i := range next.sb {

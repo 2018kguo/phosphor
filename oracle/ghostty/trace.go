@@ -285,7 +285,7 @@ func nativeBuildInfo() map[string]any {
 	var version, build C.GhosttyString
 	must(C.int(C.ghostty_build_info(C.GHOSTTY_BUILD_INFO_VERSION_STRING, unsafe.Pointer(&version))))
 	must(C.int(C.ghostty_build_info(C.GHOSTTY_BUILD_INFO_VERSION_BUILD, unsafe.Pointer(&build))))
-	return map[string]any{"source_commit": pinnedGhosttyCommit, "version": string(C.GoBytes(unsafe.Pointer(version.ptr), C.int(version.len))), "build": string(C.GoBytes(unsafe.Pointer(build.ptr), C.int(build.len)))}
+	return map[string]any{"expected_source_commit": pinnedGhosttyCommit, "version": string(C.GoBytes(unsafe.Pointer(version.ptr), C.int(version.len))), "build": string(C.GoBytes(unsafe.Pointer(build.ptr), C.int(build.len)))}
 }
 
 type modelDifference struct {
@@ -596,6 +596,7 @@ func scalarWidths(table bool) {
 		if err := exec.Command("git", "-C", source, "diff", "--quiet", "HEAD", "--", "src/terminal", "src/unicode", "src/build", "build.zig", "build.zig.zon").Run(); err != nil {
 			panic("width-table source has modified terminal/build code")
 		}
+		build["verified_checkout_commit"] = strings.TrimSpace(string(commit))
 		emit(map[string]any{"kind": "native_scalar_width_summary", "native_build": build, "ghostty_commit": pinnedGhosttyCommit, "unicode_version": "18.0.0", "unicode_scalars": 0x110000 - 0x800, "non_default_scalars": count, "default_width": 1, "first": 0, "last": 0x10ffff, "excluded_first": 0xd800, "excluded_last": 0xdfff, "mode": "native-codepoint-width", "basis": "batched ghostty_unicode_codepoint_width; no grapheme folding"})
 	} else {
 		emit(map[string]any{"kind": "scalar_width_summary", "unicode_scalars": 0x110000 - 0x800, "different": count, "basis": "phosphor.CodepointWidth vs native Ghostty scalar API; excludes surrogates; does not test terminal grapheme behavior"})
@@ -632,7 +633,7 @@ func nativeGraphemeProperties() {
 		}
 	}
 	flush(0x10ffff)
-	emit(map[string]any{"kind": "native_grapheme_property_summary", "ghostty_commit": pinnedGhosttyCommit, "native_build": nativeBuildInfo(), "unicode_version": "18.0.0", "prefix_scalar": 0x600, "unicode_scalars": 0x110000 - 0x800, "first": 0, "last": 0x10ffff, "excluded_first": 0xd800, "excluded_last": 0xdfff, "neutral_join_scalars": neutral, "mode": "native-grapheme-width-prepend-prefix", "basis": "batched ghostty_unicode_grapheme_width([U+0600, scalar]); ranges retain consumed count and folded width; controls unspecified per native API"})
+	emit(map[string]any{"kind": "native_grapheme_property_summary", "expected_source_commit": pinnedGhosttyCommit, "native_build": nativeBuildInfo(), "unicode_version": "18.0.0", "prefix_scalar": 0x600, "unicode_scalars": 0x110000 - 0x800, "first": 0, "last": 0x10ffff, "excluded_first": 0xd800, "excluded_last": 0xdfff, "neutral_join_scalars": neutral, "mode": "native-grapheme-width-prepend-prefix", "basis": "batched ghostty_unicode_grapheme_width([U+0600, scalar]); ranges retain consumed count and folded width; controls unspecified per native API"})
 }
 
 // Keep raw replies independently runnable while evolving the wider trace model.

@@ -1,6 +1,0 @@
-fuzz: elapsed: 0s, gathering baseline coverage: 0/48 completed
-fuzz: elapsed: 0s, gathering baseline coverage: 48/48 completed, now fuzzing with 2 workers
-fuzz: elapsed: 3s, execs: 263551 (87791/sec), new interesting: 8 (total: 56)
-fuzz: elapsed: 5s, execs: 430282 (81785/sec), new interesting: 10 (total: 58)
-PASS
-ok  	github.com/2018kguo/phosphor	5.218s

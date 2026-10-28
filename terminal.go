@@ -111,7 +111,7 @@ type Terminal struct {
 	bracketed    bool
 	focus        bool
 	sync         bool   // 2026: synchronized update in progress
-	mouse        uint16 // independent tracking bits and effective selection; see mouse_modes.go
+	mouse        uint16 // independent tracking bits and effective selection; see modes.go
 	mouseEnc     uint16 // independent encoding bits and effective selection
 	cursorStyle  cursorAppearance
 	kitty        []uint16

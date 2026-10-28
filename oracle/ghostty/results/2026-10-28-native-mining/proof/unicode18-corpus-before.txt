@@ -1,6 +1,0 @@
-=== RUN   TestOfficialUnicode18GraphemeCorpus
-    grapheme_unicode18_test.go:69: line 179: "्" + U+0915 joins false, Unicode joins true
---- FAIL: TestOfficialUnicode18GraphemeCorpus (0.00s)
-FAIL
-FAIL	github.com/2018kguo/phosphor	0.182s
-FAIL

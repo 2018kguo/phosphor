@@ -1,3 +1,0 @@
-cycles=1 clusters=0 history=1
-cycles=10 clusters=0 history=1
-cycles=100 clusters=0 history=1

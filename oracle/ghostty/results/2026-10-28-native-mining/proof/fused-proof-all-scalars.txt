@@ -1,5 +1,0 @@
-=== RUN   TestFusedAllScalarsAgainstFrozenTables
-    fused_reference_compare_test.go:4: All1,114,112 codepoints match frozen18 width/GCB/EP/InCB/modifier-base/Prepend/VS data
---- PASS: TestFusedAllScalarsAgainstFrozenTables (0.16s)
-PASS
-ok  	github.com/2018kguo/phosphor	0.349s
