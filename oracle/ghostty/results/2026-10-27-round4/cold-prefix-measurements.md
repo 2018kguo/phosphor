@@ -1,16 +1,12 @@
-# Cold-prefix allocation measurements
+# Cold prefixes: reduce real prompt memory
 
-Measured on Apple M5 Pro, macOS arm64, Go 1.26.3. The before core is `b4637e58a4145035f980116a3ba38d5c8927abb0`; the after core adds cold main-screen prefixes, geometric capacity growth, dense alternate-screen allocation and default-background erasure limited to owned cells. Both binaries use the same benchmark driver and recordings. The before checkout changes only driver selectors and adds the identical test-only recording benchmark.
+Could avoiding the initial full row lower RSS as well as Compact's retained heap? Yes: plain prompt RSS fell 2528→1056 B/terminal; colored 2544→1648. Shell-style default-background EL kept the saving. Active performance was approximately flat in longer checks, not universally faster.
 
-No production GC or scavenging policy changed. The existing measurement driver collects before and after in both builds. RSS below is incremental process RSS divided by 1024 terminals, not total process size. Every memory sample starts a fresh process; prompt cases assert the expected prompt and zero history.
+Before `b4637e58a4145035f980116a3ba38d5c8927abb0`; after adds cold MAIN prefixes, geometric capacity growth, dense ALT allocation and erasure within owned cells. Same driver/recordings; baseline overlay changes only selectors/test benchmark. Apple M5 Pro, macOS/arm64, Go 1.26.3. No production GC/scavenging policy changed.
 
-The generic copy/clear helper remains inlineable (cost 34), as does the prefix wrapper (75) and blank-row operation (76). Capacity policy stays in an outlined cold helper. Main-screen writes allocate only their used prefix; alternate-screen redraws allocate a full row once. The rec-man benchmark retains 41 allocations and about 83 KB per repeated recording, matching before.
+## Throughput
 
-Default-background erasure scans for actual changes only when a tracked row is clean. Already-dirty rows retain the fast clear path; clearing a wrap flag marks the row dirty. Damage therefore does not depend on whether a zero tail owns storage.
-
-## Default-runtime throughput
-
-Five 250 ms samples alternate before, after and pinned Ghostty with `oracle/ghostty/ab.sh`, 1024-byte reads. All samples remain in the raw file, including severe scheduling outliers. Arrays are MiB/s in sample order; deltas are ratios of medians. This run cannot establish a clean timing gate for less/nvim: their wall rates vary by more than tenfold. It is retained as evidence, not filtered into a flattering result.
+Five 250 ms rounds alternate before/after/pinned native,1024-byte reads: [raw](cold-prefix-throughput.jsonl). Severe less/nvim scheduling outliers remain; they cannot support a clean timing gate. Arrays are sample-order MiB/s; changes use medians:
 
 | Stream | Before, five samples | After, five samples | Wall median change | CPU median change |
 |---|---|---|---:|---:|
@@ -23,9 +19,7 @@ Five 250 ms samples alternate before, after and pinned Ghostty with `oracle/ghos
 | rec-nano-recording | 348.3, 403.0, 398.5, 393.6, 396.8 | 362.0, 393.3, 394.3, 394.8, 382.3 | -0.9% | -1.3% |
 | rec-man-recording | 380.6, 364.8, 350.9, 350.2, 354.1 | 360.0, 330.1, 352.5, 345.1, 313.6 | -2.5% | -10.0% |
 
-## Longer controlled checks
-
-The three questionable recordings were rerun as five alternating before/after pairs, one second each, with GOMAXPROCS=1 for both binaries and no native third process. This supplements rather than replaces the default-runtime run. All controlled wall/CPU medians differ by less than 2.2%; together with unchanged dense-recording allocations, the data supports approximately flat active performance. It does not establish a universal speedup.
+Five alternating 1 s pairs with GOMAXPROCS=1 and no third engine supplemented those cases: [raw](cold-prefix-targeted.jsonl). Wall/CPU medians differed by less than 2.2%:
 
 | Stream | Before, five samples | After, five samples | Wall median change | CPU median change |
 |---|---|---|---:|---:|
@@ -35,7 +29,7 @@ The three questionable recordings were rerun as five alternating before/after pa
 
 ## Idle memory
 
-Five fresh-process samples per workload, 1024 terminals per sample. RSS arrays and heap medians are bytes per terminal. `-erase` appends the default-background EL shells commonly issue. A `-compact` suffix additionally calls Compact; unsuffixed erase cases prove that erasing an already implicit tail does not allocate a full row.
+Five fresh processes per workload,1,024 live terminals each. RSS arrays and heap medians are B/terminal: [raw](cold-prefix-memory.jsonl). Existing GC procedure is identical before/after. `-erase` appends shell EL; prompts are asserted and history must stay empty.
 
 | Workload | Before RSS, five samples | After RSS, five samples | Before / after heap median |
 |---|---|---|---:|
@@ -46,23 +40,10 @@ Five fresh-process samples per workload, 1024 terminals per sample. RSS arrays a
 | prompt-erase | 2800, 2368, 2544, 2320, 2336 | 1056, 1136, 1296, 1088, 1072 | 2515 / 1443 |
 | colored-prompt-erase | 2480, 2256, 2288, 2272, 2208 | 1328, 1440, 1632, 1328, 1280 | 2510 / 1523 |
 
-## Reproduce
+The generic copy helper/prefix wrapper/blank operation remained inlineable (cost 34/75/76); cold capacity policy was outlined. ALT redraw kept 41 allocations/about 83 KB per repeated rec-man recording. Already-dirty erasures avoid clean-row scans, while damage remains independent of stored zero tails.
 
-Build the same `oracle/ghostty` driver against both cores using the pinned Ghostty source and flags in its README. Then run:
+Full tests/vet passed;20 s prefix fuzz completed 100,556 executions. Existing cases cover Unicode, byte growth, insert, colored scrolling, EL, half-wide styles, links/underline/protection, damage and native byte traces. Warm forty-row logs/TUI remain zero-allocation; codecs/fixed layouts were unchanged.
 
-```sh
-PHOSPHOR_DIR=/path/to/checkout COMPARE_DURATION=250ms bash oracle/ghostty/ab.sh BEFORE AFTER throughput.jsonl
-AFTER -mode memory -engine phosphor -workload prompt-erase-compact -n 1024
-GOMAXPROCS=1 PHOSPHOR_DIR=/path/to/checkout COMPARE_ENGINE=phosphor COMPARE_ROUNDS=1 COMPARE_STREAM=less-recording COMPARE_CHUNK=1024 AFTER -mode throughput -duration 1s
-```
+Reproduce via the [driver](../../README.md): `COMPARE_DURATION=250ms bash oracle/ghostty/ab.sh BEFORE AFTER OUTPUT`; memory `-workload prompt-erase-compact -n 1024`; controlled throughput `GOMAXPROCS=1 COMPARE_ROUNDS=1 COMPARE_ENGINE=phosphor COMPARE_STREAM=less-recording COMPARE_CHUNK=1024 AFTER -mode throughput -duration 1s`. Set PHOSPHOR_DIR, alternate order and repeat five times.
 
-Run memory and controlled timing commands as separate processes, alternate binary order, and repeat five times for each workload in the tables. The raw default-runtime throughput file also preserves native Ghostty samples.
-
-Measured binary SHA-256:
-
-- prefix_before: `de3b37c8eead44983536fc4e04b0d8a09d39073304f69ffcd0bfe2436af6798f`.
-- cold_after: `9683e9b4ee8259b7ebe3551bc3b34af41fab8f4bf85c6d84f20c9c8af8bb7b35`.
-
-## Correctness
-
-Full `go test ./...` and `go vet ./...` pass. The cold-prefix fuzzer compares real production code using compact prefixes against the same code with full-width storage; the 20-second run completed 100,556 executions. Targeted cases cover cold Unicode, byte-sized growth, insert mode, colored scrolling, default EL, half-wide erasure and linked/underline/protected styles. Exact damage regressions cover allocated zero tails versus snapshot-restored/compacted prefixes, with and without wrap state. Native byte-by-byte traces cover prompt erasure, wide styles, alternate-screen insertion and scrolling. Warm forty-row ASCII logs and TUI frames remain zero allocation. Snapshot codecs and fixed Terminal/cell layouts are unchanged.
+Binary SHA256: before `de3b37c8eead44983536fc4e04b0d8a09d39073304f69ffcd0bfe2436af6798f`; after `9683e9b4ee8259b7ebe3551bc3b34af41fab8f4bf85c6d84f20c9c8af8bb7b35`.

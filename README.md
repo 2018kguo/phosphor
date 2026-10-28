@@ -1,420 +1,145 @@
 # phosphor
 
-![bash and vim running inside phosphor, drawn back from its cells; the gutter lights up on the rows it reports changed](docs/demo.gif)
+**A small, headless terminal emulator for Go programs that keep lots of PTYs alive.**
 
-A headless VT/xterm terminal emulator for Go. Write a program's output to
-it, read back what a terminal would show: text, colors, attributes,
-hyperlinks, cursor, modes, title and scrollback. It answers the queries
-programs send, tells a renderer which rows changed, reflows on resize, and
-exports ANSI bytes for attaching clients and exact snapshots for checkpoints.
+Feed it a program's output and read what a terminal would show: cells, colors,
+hyperlinks, cursor, modes and scrollback. Save an exact checkpoint, or send ANSI
+to a client attaching later. You supply the PTY, input encoding and renderer.
 
-```go
-t := phosphor.New(80, 24)
-t.Write(output)       // io.Writer
-fmt.Println(t.Lines())
-```
+Phosphor is the screen model inside [ptyd](https://github.com/2018kguo/ptyd).
+It is built for sessions that spend much of their lives waiting at a prompt,
+with no client attached, but still need to resume an editor correctly.
 
-It is the emulator inside [ptyd](https://github.com/2018kguo/ptyd), a
-daemon that keeps thousands of terminals alive, attaches clients to them
-and checkpoints them to disk, which is why it is small and fast when idle
-and why it has a separate exact checkpoint format.
+![bash and vim running inside phosphor; the gutter lights up on changed rows](docs/demo.gif)
 
-## Why
+## Use it
 
-- **Small.** About 1.4 KB for an idle 80x24 terminal at a shell prompt: a
-  cell is 16 bytes, rows grow only as drawn on, the alternate
-  screen is allocated on first entry, and scrollback is kept serialized under a
-  byte budget (an 80x24 terminal with 2,000 lines of log scrollback holds
-  about 340 KB).
-- **Correct.** Five external conformance suites run as ordinary Go tests,
-  with no unexplained failures (table below). Every departure from a
-  suite is listed with its reason, and a listed case that starts passing
-  fails the build.
-- **Fast.** 260-410 MiB/s per core on real program output (vim, less,
-  an agent TUI, logs) and about 1 GiB/s on progress bars, 10-75x the
-  throughput of `charmbracelet/x/vt` and `hinshun/vt10x` on the same
-  streams, and redrawing a frame allocates nothing.
-- **Checkpoints.** `Snapshot` preserves both screens, saved cursors,
-  modes, colors, REP and unfinished input. `Repaint` draws a session
-  into another terminal, with the limits under Serialization below.
-
-The honest caveats: it does not encode input (keys, mouse, paste are the
-caller's job; `Modes` says what the program asked for), it has no
-graphics (sixel, kitty), and damage is per row with no scroll hints. If you
-need a full terminal UI stack, `charmbracelet/x/vt` integrates with the
-Charm ecosystem and does more around rendering and input; phosphor is the
-screen model.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/bench-dark.svg">
-  <img alt="Throughput on real program output and memory per idle terminal: phosphor vs charmbracelet/x/vt and hinshun/vt10x (numbers in the table under Performance)" src="docs/bench-light.svg">
-</picture>
-
-The demo above is [`examples/mirror`](examples/mirror/main.go), about 150
-lines: it runs a program in a PTY, writes its output to phosphor, and
-draws the screen back from `Terminal.Cell` alone, redrawing only the rows
-`RowDirty` reports. Try it with `cd examples && go run ./mirror vim`.
-
-## Install
+Add it to a Go 1.24+ project:
 
 ```sh
 go get github.com/2018kguo/phosphor
 ```
 
-Go 1.24 or later. Unicode 17 scalar widths are built in. Grapheme
-boundaries use [uax29](https://github.com/clipperhouse/uax29).
-
-## Use
-
 ```go
-t := phosphor.New(80, 24,
-	phosphor.WithScrollback(5000),     // lines (default 2000)
-	phosphor.WithScrollbackBytes(1<<20), // memory budget (default 256 KiB)
-	phosphor.WithReply(ptmx),          // answer queries to the program
+package main
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/2018kguo/phosphor"
 )
 
-t.Write(buf[:n])                      // as you read the PTY; sequences may be split
+func main() {
+	t := phosphor.New(80, 24)
+	io.WriteString(t, "\x1b[32mok\x1b[0m 12 tests\r\n")
 
-for y := range rows {
-	for x := range cols {
-		c := t.Cell(x, y)             // Rune, Combining, Width, Style, Link
-		_ = c.Style.Fg.Kind()         // ColorDefault, ColorIndexed, ColorRGB
-		_ = c.Style.Attrs&phosphor.AttrBold != 0
-	}
+	fmt.Println(t.Line(0)) // ok 12 tests
+	fmt.Println(t.Cell(0, 0).Style.Fg == phosphor.IndexedColor(2)) // true
 }
-t.Lines(); t.Line(y); t.Wrapped(y)    // text, soft wraps
-t.ScrollbackLines(); t.ScrollbackLine(i); t.ScrollbackCells(i)
-cur := t.Cursor()                     // X, Y, Visible, Shape, Blink, PendingWrap
-m := t.Modes()                        // AltScreen, BracketedPaste, Mouse, KittyKeyboard...
-t.Title()
-
-t.Resize(120, 40)                     // reflows; also resize the PTY
-snapshot := t.Snapshot()              // exact checkpoint, including geometry
-var restored phosphor.Terminal
-err := restored.RestoreSnapshot(snapshot, phosphor.SnapshotLimits{})
-_ = err
-attach := t.Repaint(true)             // ANSI for an attached terminal of the same size
-_ = attach
 ```
 
-`Style.UnderlineColor` stores the SGR 58 color; its default follows the
-foreground. Hyperlinks and underline colors share a table of up to 65535
-live pairs. Unused pairs are collected. If every entry is still live,
-setting a new pair keeps the current hyperlink and underline color until
-space becomes available.
+`Terminal` is an `io.Writer`; escape sequences and UTF-8 may be split across
+writes. For a live program, use `phosphor.WithReply(ptmx)` to send terminal
+query replies back through the PTY master. Some shells and editors wait for
+those answers. The [reference](docs/reference.md#connect-a-pty) shows the wiring.
 
-The [examples](https://pkg.go.dev/github.com/2018kguo/phosphor#pkg-examples)
-show basic use, a headless runner answering queries, a renderer driven by
-damage, attaching through `Repaint`, and `Restart`.
+To try a renderer, clone the repo and run:
 
-### Queries
-
-Programs ask their terminal things and some wait for the answer: shells
-and editors send DA1 and the kitty keyboard query at startup, prompts ask
-for the cursor position, editors ask for the background color. With
-`WithReply(w)` the terminal writes the answers to `w`, usually the PTY
-master, during `Write`. Without it queries are ignored, which is right
-when a real terminal downstream answers them.
-
-Answered: DA1 (`CSI ? 62 ; 22 c`, a VT220 with ANSI color), DA2, DA3,
-DSR 5 and 6 (CPR), DECXCPR, DSR ?15, ?26 and ?996 (dark or light, from the
-background), DECRQM for ANSI and DEC modes, DECRQSS (SGR, DECSTBM,
-DECSLRM, DECSCUSR, DECSCA, DECSCL), XTVERSION (`phosphor`), XTGETTCAP
-(`Co`, `colors`, `Smulx`), the kitty keyboard flags (`CSI ? u`), XTWINOPS 18 (text
-area size), and OSC 4, 10, 11, 12 and 21 color queries from the palette
-(`WithPalette`, `Palette`). Programs can also set and reset those colors
-(OSC 4, 10, 11, 12, 21, 104, 110-112).
-
-### Rendering
-
-```go
-for y := range rows {
-	if t.RowDirty(y) {
-		drawRow(y)
-	}
-}
-t.ClearDirty()
+```sh
+cd examples
+go run ./mirror vim
 ```
 
-A row is dirty when its cells may have changed since the last
-`ClearDirty`: output, scrolling, erasing, switching screens, resizing, or
-a palette or reverse-video change. Before the first `ClearDirty` every row
-is dirty, and until then tracking costs nothing. The cursor is not part of
-it; compare `Cursor()` with what you drew. `Modes().SyncUpdate` is set
-while a program draws a frame it wants shown at once (mode 2026).
-`Palette().Resolve(color, background)` turns a cell color into RGB.
+The [mirror example](examples/mirror/main.go) produces the demo above. Its
+characters and colors come from `Cell`; it redraws only changed rows.
 
-Applications hosting many sessions can call `Compact()` after output
-settles. It retains only the nonzero prefix of each row and frees unused
-Unicode and cell attributes, plus temporary buffers. Main-screen prints grow
-only the prefix they need. Alternate-screen prints keep full row capacity
-for dense redraws; Compact can trim either screen again at idle. Clusters
-visible on either screen and saved cursor attributes remain live; unchanged
-live tables stay in place. It does so
-without changing the screen, scrollback, input modes or unfinished parser
-state. Later output can allocate rows again. It is an explicit idle-time
-tradeoff; ordinary writes do not run it.
+## When it is useful
 
-### Serialization
+- **Hosting many sessions.** Keep a screen model for remote shells, coding
+  agents or background jobs, including sessions nobody is currently viewing.
+- **Inspecting terminal programs.** Read the current screen, attributes,
+  hyperlinks and shell prompt markers instead of trying to interpret logs as
+  an editor's display.
+- **Attaching and recovering.** Give a new client the current picture with
+  `Repaint`, and preserve exact emulator state on disk with `Snapshot`.
+- **Building your own UI.** Draw cells in a browser, native app or terminal
+  renderer, using row damage to avoid redrawing everything.
 
-Use `Snapshot()` for persistence and `RestoreSnapshot(data, limits)` to
-restore it into an existing or zero `Terminal`. The versioned binary format
-preserves exact cells on both screens, all saved cursors, REP, palette base
-and overrides, scrollback policy, damage and unfinished parser input.
-`AppendSnapshot` reuses a buffer. Restore is atomic, copies its input and
-retains only the receiver's reply writer and bell callback. It invokes
-neither callback. Zero limits allow 64 MiB of decoded storage and four
-million cells per screen; callers can choose other positive limits.
-Malformed, unsupported-version and limit errors are distinguishable with
-`errors.Is`. A snapshot is not terminal output.
+The library is pure Go and embeds in your process. It answers terminal
+queries and models output; your application owns process management, keyboard
+and mouse encoding, clipboard integration and the way cells appear on screen.
 
-Snapshots retain OSC 133 prompt rows, each screen's semantic cursor state,
-the prompt redraw policy, and the actual primary cursor while the alternate
-screen is active. Version 1 snapshots remain readable; they did not store
-these facts, so prompt metadata defaults to absent and the inactive primary
-position uses the old 1049 save when present, otherwise the active position.
+## Why choose it
 
-`Repaint(withScrollback)` returns bytes that, written to a terminal of the
-same size in its initial state (another `phosphor.Terminal`, or a real
-one), reproduce this one: scrollback, both screens with their soft wraps,
-tab stops, saved cursors and modes, margins, the cursor with its pending
-wrap, pen, character sets and shape, input modes, and the title. It is
-wrapped in a synchronized update and hides the cursor while painting.
-An unfinished escape sequence or UTF-8 character is restored after the
-painting, so later output continues it correctly. Controls which already
-took effect inside a sequence are not repeated, and a synchronized update
-in progress stays in progress. The continuation is reconstructed from the
-parser's bounded state; normal output needs no additional tracking buffer.
-Colors the program set with OSC 4/10/11/12 are left out, since replaying
-them would change the receiving terminal's own colors.
-`AppendRepaint` reuses a buffer.
+**Idle memory stays small.** An 80×24 shell prompt used about **1.45 KB of Go
+heap after Compact**, around **42% less than v0.3.0**, in the current measured
+workload. Rows grow as they are used, history has configurable line and byte
+budgets, and `Compact()` releases unused storage after output settles.
 
-The preceding character used by REP (`CSI b`) is not serialized. Resuming
-a pending REP after a repaint can therefore differ from uninterrupted
-output; preserving unfinished parser input does not remove that limit.
-A cursor outside enabled origin margins can be reconstructed when the
-alternate screen is available as scratch space. Other combinations with
-occupied alternate content, pending wrap or a lower-right cursor can still
-move the cursor after ANSI replay.
-Also, scalar ANSI output cannot always replay an emoji narrowed by VS15
-at the right edge of a one- or two-column screen after reflow. These are
-portable ANSI export limits; exact snapshots preserve those states.
+That prompt number is not the cost of every session. A closed editor's
+alternate screen must stay available for later re-entry: the completed
+recordings retained **22–47 KB of heap after Compact**. History and rich
+attributes add their own storage. [Benchmarks](docs/benchmarks.md) explains
+what is retained and how heap differs from process RSS.
 
-OSC 133 shell markers are available through `Prompt(y)`, returning
-`PromptNone`, `PromptPrimary` or `PromptContinuation`. Prompt rows travel
-through scrolling and reflow. `A`/`N` support `redraw=0`, `redraw=1` and
-`redraw=last`; a fresh headless terminal starts with redraw disabled, while
-RIS enables it as in libghostty-vt. ANSI replay preserves the headless text
-effects of an unmarked prompt cursor using explicit input state when no
-exact VT sequence is available. A GUI's per-cell semantic classification
-can differ in that case; binary snapshots preserve the original enum.
+**Continuation is part of correctness.** Checkpoints keep both screens,
+saved cursors, modes, colors, scrollback and unfinished input. Tests continue
+writing and resizing after restore, so a correct first picture is only the
+start. The library reads released v1 snapshots as well as its current format;
+[reader requirements](docs/reference.md#save-and-restore) matter when upgrading.
 
-### Unicode
-
-Mode 2027 (`CSI ? 2027 h`) enables streaming grapheme clustering, including
-emoji sequences, flags, skin tones, Hangul and variation selectors. It is
-off initially, matching libghostty-vt. Clusters survive split writes,
-history, resizing, compaction and exact snapshots. Each cell retains the
-primary codepoint plus 64 suffix codepoints, matching the pinned native
-engine (at most 260 UTF-8 bytes). Additional suffixes are dropped, while
-their width effects still take place.
-`CodepointWidth` reports a scalar's Unicode 17 terminal width (0, 1 or 2).
-It does not measure the width of a grapheme by summing its parts.
-
-`Restart()` is for running a new program in the same terminal: it resets
-everything as RIS does but keeps the scrollback and the old screen in
-view above the cursor, as a terminal that relaunches its command does.
-
-### Concurrency
-
-A `Terminal` is not safe for concurrent use. If one goroutine writes
-output while another reads the screen, hold a lock around both. The reply
-writer and bell callback run inside `Write` and must not call back into
-the `Terminal`.
-
-## What it models
-
-- Printing: UTF-8 (invalid input becomes U+FFFD; C1 controls sent as
-  UTF-8 act as their ESC forms), wcwidth widths (East Asian ambiguous =
-  1), wide characters and the blank they leave at a wrap, combining marks,
-  ZWJ and variation selectors kept with the previous character, DEC
-  special graphics and the British character set in G0-G3 with SI/SO,
-  LS2/LS3, SS2/SS3, REP, insert
-  mode, autowrap with xterm's pending-wrap rules, reverse wraparound (45,
-  1045).
-- Cursor: CUU/CUD/CUF/CUB, CNL/CPL, CHA/HPA/HPR, VPA/VPR, CUP/HVP, origin
-  mode, DECSC/DECRC, SCOSC/SCORC, 1048, IND/RI/NEL, HT/CHT/CBT with
-  HTS/TBC, DECSCUSR, independent cursor blinking (mode 12).
-- Editing: ICH/DCH/ECH, IL/DL, SU/SD, ED/EL with the current background
-  (BCE), ED 3, scroll-and-clear (ED 22), DECALN, character protection
-  (DECSCA, SPA/EPA) with DECSED/DECSEL.
-- Regions: DECSTBM, and DECLRMM/DECSLRM left and right margins with every
-  operation they constrain.
-- Screens: alternate screen modes 47, 1047, 1049; scrollback fed from the
-  top of the main screen, stored as logical lines.
-- Modes: DECAWM, IRM, LNM, DECOM, DECTCEM, DECCKM, DECKPAM, DECSCNM,
-  mouse tracking and encodings, focus events, bracketed paste,
-  synchronized update, grapheme clustering, gated 80/132-column switching
-  (DECCOLM gated by mode 40), smooth scrolling, kitty keyboard flags, XTSAVE/XTRESTORE.
-- SGR: bold, faint, italic, underline styles (single, double, curly,
-  dotted, dashed), blink, inverse, hidden, strikethrough, overline,
-  16/256/RGB colors in the `;` and `:` forms, underline color (58/59).
-- OSC: title (0, 2), hyperlinks (8), prompt markers (133), colors
-  (4, 10, 11, 12, 21, 104, 110-112).
-  X11 color names, `rgb:`, `rgbi:` and hex specifications share one parser.
-  OSC 21 covers indexed, foreground, background and cursor colors; empty
-  values reset them to the host palette. The host always has concrete
-  default colors; renderer-only colors such as selections are ignored.
-- Resize: the main screen reflows (narrowing and widening back is exact)
-  and height-only growth pulls history when the original primary cursor
-  was on the bottom row, including while the alternate screen is active.
-- RIS, DECSTR.
-
-## What it does not
-
-- Input encoding (keys, mouse reports, paste): the caller writes those to
-  the PTY, using `Modes`.
-- Double-width and double-height lines, rectangular area operations
-  (DECCRA, DECERA, DECFRA, DECIC...), national character sets other than
-  British, SGR fonts and super/subscript.
-- Sixel and kitty graphics, OSC 52 (clipboard), OSC 7 (working directory),
-  icon names, the title stack.
-- 8-bit C1 controls outside UTF-8, and S8C1T replies.
-- The alternate screen is cut or padded on resize, not reflowed
-  (full-screen programs redraw on SIGWINCH).
-
-## Conformance
-
-X11 color names are generated from the checksum-pinned source by
-`go run ./internal/colorgen`; `-source /path/to/rgb.txt` works offline.
-The data's license is in [licenses/X11.txt](licenses/X11.txt).
-
-Five external suites run as ordinary Go tests (`VT_CONF_REPORT=1 go test
--run 'Conformance|Libvterm|Alacritty' -v` prints the table).
-
-| Suite | How | Pass | Fail | Deliberate difference | Out of scope |
-|---|---|---|---|---|---|
-| libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 728 | 0 | 30 | 195 |
-| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 524 | 0 | 0 | 25 |
-| wezterm `term/src/test` | translated cases | 123 | 0 | 11 | 4 |
-| esctest2 (xterm) | independently written cases (the GPL source is not used) | 412 | 0 | 10 | 215 |
-| alacritty ref tests | recordings and reference grids, per line | 1510 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |
-
-"Deliberate difference" cases are listed with a reason in
-`conformance_known_test.go`: places where that emulator departs from
-xterm (wezterm lets the cursor column equal the width, alacritty ignores
-SGR 21 and keeps a pending wrap across EL, libvterm brightens bold colors
-in the pen and answers DA1 as a VT100), places where the upstream harness
-fakes state, and explicit policy conflicts such as tab resets on width
-changes and independent mouse-mode bits. Those references stay unchanged;
-following one terminal can disagree with another. "Out of scope" counts
-cases for features listed as not modeled, mostly input encoding,
-graphics-adjacent and window operations, palette rendering and rectangular
-operations. Query replies are checked by the
-libvterm scripts and by `TestReplies`.
-
-Besides the suites:
-
-- Fuzzers: `FuzzTokens` (an alphabet of the sequences programs use, plus
-  resizes, with invariants after every step and an exact `Repaint` round
-  trip), `FuzzRepaintContinuation` (prefix, repaint and continued output),
-  `FuzzStream` (raw bytes and resizes), `FuzzChunking` (how output
-  is split into writes does not matter), `FuzzWrite`, `FuzzDamage` (every
-  row whose cells changed is dirty), `FuzzReplies` (answering queries
-  never changes the state), `FuzzGraphemeTransitions` (clustering, mode
-  changes and reflow), `FuzzRestoreSnapshot` (malformed binary data and
-  atomic failure), `FuzzSnapshotContinuation` (exact restore followed by
-  continued output), `FuzzSparseHistoryValidation` (private history grammar),
-  `FuzzPrefixRows` and `FuzzColdPrefixWrites` (sparse rows against dense
-  storage), and, in the `oracle` module, `FuzzOracle`, a
-  differential fuzzer against `charmbracelet/x/vt` on the subset where it
-  agrees with xterm. CI runs each for 30 seconds. Before
-  the extraction the targets had about 2.3 hours of fuzzing; since, each
-  has run 4-5 minutes on 8 workers (which found one Repaint bug, now a
-  regression input).
-- Recordings of nvim, vim, less, nano and man, cut at 40 points: the
-  invariants, the `Repaint` round trip and resizes at each.
-- Every byte boundary in those recordings: repaint and continue the next
-  32 bytes before a later redraw can hide parser corruption. Focused cases
-  also check styles, modes, replies, bells, oversized sequences and every
-  parser state.
-- `TestRedrawDoesNotAllocate` pins zero allocations per redraw frame,
-  `TestDamageDoesNotAllocate` the same with damage tracking on, and
-  `TestCellDoesNotAllocate` reading every cell.
-
-## Performance
-
-The [current native comparison](oracle/ghostty/results/2026-10-27-round6/README.md)
-records the expanded compatibility corpus, lower idle memory and mixed
-throughput results against v0.3.0 and libghostty-vt. It retains raw policy
-and ANSI export differences. The [cold-prefix measurements](oracle/ghostty/results/2026-10-27-round4/cold-prefix-measurements.md)
-separately measure prompt allocation: it avoids allocating a full row before
-idle compaction, reducing both retained heap and fresh-process RSS.
-
-The [Unicode and exact-checkpoint comparison](oracle/ghostty/results/2026-10-27-round3/README.md)
-records the broader native compatibility corpus, Unicode audits, idle memory
-and checkpoint costs. Passing those finite tests is not universal terminal
+**Compatibility is checked against other terminals.** Five external suites,
+real editor recordings, fuzzing and a pinned libghostty-vt comparison cover
+cells, Unicode, replies and future behavior. Remaining policy differences and
+ANSI replay limits are [published](docs/benchmarks.md#compatibility), including
+the cases where terminals disagree. This is not a claim of universal VT
 compatibility.
 
-The [October 2026 follow-up comparison](oracle/ghostty/results/2026-10-27-round2/README.md)
-measures idle metadata reclamation, parsing, replay and compatibility against
-libghostty-vt. The [first round](oracle/ghostty/results/2026-10-27/README.md)
-also compares with phosphor v0.1.0. Cross-engine memory figures include
-native RSS. The table below records the original v0.1.0 comparison with
-other Go emulators.
+**Output parsing is fast, with tradeoffs.** The current comparison leads
+libghostty-vt on several editor/pager recordings and progress output; native
+leads on logs, a synthetic TUI and nano. Changes from v0.3.0 are mixed too.
+Choose using [your workload](docs/benchmarks.md#throughput), rather than a claim
+that one engine wins every stream.
 
-Apple M5 Pro, Go 1.26, one core. `oracle/compare_test.go` feeds the same
-streams, in 8 KiB writes as a PTY reader would, to each library at
-120x40 (`cd oracle && go test -bench Compare -benchmem`); n=6, all
-spreads under 5%.
+## Tradeoffs
 
-| Stream (~1 MiB unless noted) | phosphor | charmbracelet/x/vt v0.1.0 | hinshun/vt10x |
-|---|---|---|---|
-| vim session (6 KiB) | 350 MiB/s, 0 allocs | 23 MiB/s | 30 MiB/s |
-| less session (5 KiB) | 266 MiB/s, 0 allocs | 2 MiB/s | 27 MiB/s |
-| agent TUI (synchronized redraws, truecolor) | 408 MiB/s | 36 MiB/s | 43 MiB/s |
-| scrolling logs | 404 MiB/s | 5 MiB/s | 39 MiB/s |
-| progress bars | 1.1 GiB/s | 27 MiB/s | 42 MiB/s |
-| heap per idle 80x24 terminal at a prompt | 3.0 KiB | 4.5 MiB | 66 KiB |
+Phosphor models terminal text: UTF-8 and Unicode widths, colors and attributes,
+wide characters and graphemes, hyperlinks, alternate screens, margins,
+scrollback, common queries and input modes. `Modes()` tells your input encoder
+what the running program requested.
 
-Caveats: each library was used as its README suggests, with defaults.
-charmbracelet/x/vt's idle size is mostly what it allocates up front, and
-it does more per write (it keeps a renderable cell model for the Charm
-stack and runs callbacks); vt10x has no scrollback. The streams come from
-`internal/benchdata` and `testdata`, written for ptyd's workloads.
+It provides no window, fonts, GPU renderer, input encoder, sixel/kitty images
+or clipboard provider. Some VT features, including rectangular operations
+and double-size lines, are outside its scope. See the
+[supported behavior](docs/reference.md#supported-behavior) before choosing it
+for an application that depends on a particular escape sequence.
 
-Other costs (`go test -bench . -benchmem`): `Repaint` of a 100x30 screen
-4.4 us, of a 120x40 screen 9.3 us, with a full scrollback 17 us (one
-allocation); replaying a full checkpoint 0.46 ms; `Lines` 12 us. An
-80x24 terminal with 2,000 lines of log scrollback holds about 350 KB.
-Damage tracking and query replies cost nothing until used.
+`Snapshot` is the persistence format. `Repaint` is portable terminal output
+and has a weaker contract: REP, a few cursor/margin combinations, very narrow
+graphemes and mixed-background alternate screens can differ on continued
+output. Program-set palette colors are omitted from replay. See the precise
+[snapshot reader requirements](docs/reference.md#save-and-restore) and
+[ANSI attach limits](docs/reference.md#attach-a-client).
 
-## Prior art and credits
+A `Terminal` needs exclusive access: use one goroutine or hold a lock around
+all reads and writes. Reply writers and bell callbacks run during `Write`
+and must not call back into that terminal.
 
-The API takes from several emulators: the reply writer from xterm.js's
-`onData` and alacritty's `PtyWrite` event (as an `io.Writer`, so it wires
-straight to a PTY), row dirty flags that the renderer clears from ghostty
-and alacritty, `Wrapped` from xterm.js's `isWrapped`, cell values that do
-not allocate from xterm.js's reusable `IBufferCell`, the color kinds from
-libvterm and termwiz, and `Repaint` from tmux and xterm.js's serialize
-addon.
 
-The conformance suites come from other projects, used under their
-licenses; `testdata/conformance/NOTICE.md` has the sources and revisions:
+## Docs
 
-- [libvterm](https://github.com/neovim/libvterm), MIT, Copyright (c) 2008
-  Paul Evans: test scripts vendored unchanged.
-- [ghostty](https://github.com/ghostty-org/ghostty), MIT, Copyright (c)
-  2024 Mitchell Hashimoto, Ghostty contributors: unit tests translated.
-- [wezterm](https://github.com/wezterm/wezterm), MIT, Copyright (c)
-  2018-Present Wez Furlong: unit tests translated.
-- [alacritty](https://github.com/alacritty/alacritty), Apache-2.0 or MIT,
-  The Alacritty Project contributors: reference recordings and grids.
-- [esctest2](https://github.com/ThomasDickey/esctest2), GPL-2.0: not
-  vendored and nothing copied; the cases are written independently from
-  the xterm behavior it checks.
+- [Reference](docs/reference.md): PTY wiring, rendering, replies, history,
+  checkpoints, replay and supported behavior.
+- [Benchmarks](docs/benchmarks.md): current memory and throughput results,
+  compatibility coverage, caveats and raw evidence.
+- [Development](docs/development.md): run the demo, tests, benchmarks and
+  optional native comparison.
+- [Go API and examples](https://pkg.go.dev/github.com/2018kguo/phosphor): all
+  exported types and methods.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). X11 color names retain the notices in
-[licenses/X11.txt](licenses/X11.txt).
+MIT. See [LICENSE](LICENSE). External test sources and their licenses are
+listed in [NOTICE.md](testdata/conformance/NOTICE.md). X11 color names retain
+the notices in [licenses/X11.txt](licenses/X11.txt).

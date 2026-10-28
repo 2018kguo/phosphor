@@ -1,121 +1,47 @@
-# Native text-model comparison
+# What the native comparison covers
 
-Use `traces.json` and `-mode trace` for headless text-model differences.
-Use the regular Go conformance suites for larger sets of independent
-expected behaviors. Use throughput/state/memory modes for performance;
-correctness capture allocates and is intentionally outside those timers.
+The target is a headless PTY terminal: text, cursor, history, input modes, replies and future output after checkpoint/attach. Passing the finite corpus does not prove universal compatibility. Rendering, fonts/GPU work, accessibility, selection UI, images, audio, notifications and clipboard-provider integration are outside it. Regular Go suites supply independent expectations; performance modes exclude correctness capture allocations.
 
-The target is a terminal state machine for PTY hosting: text and cursor
-state, history, input modes, query replies, and exact continuation after
-an attach checkpoint. A GUI renderer, fonts, GPU work, accessibility,
-selection UI, images, audio, desktop notifications and clipboard-provider
-integration are outside this contract. Passing every current trace means
-only that this finite corpus passed. It does not establish universal
-terminal compatibility or equality to every terminal's policy.
+## Observations
 
-| State or behavior | What the oracle observes | Current boundary |
-|---|---|---|
-| Cells | Full base+combining/cluster text, physical width, wide tails, every blank | Empty cells and literal spaces remain different. Spacer heads project as empty width-1 cells because phosphor's public API does not distinguish them. |
-| Styles | Default/indexed/RGB foreground/background/underline color, bold/faint/italic/blink/inverse/invisible/strike/overline, underline style, protection | Native background-only cells are decoded through public cell getters. Underline color is retained on both sides. |
-| Hyperlinks | Exact URI per cell, including wide tails, after overwrite/erase/resize/Compact | Native C API exports URI, not OSC8 ID. Phosphor snapshot tests own exact ID preservation. |
-| Wrap and cursor | Row continuation, exact physical x/y, pending wrap, visible/shape/blink | Constructor-default shape resolves to the configured block in both engines. Cursor outside enabled origin margins is retained. Last-row forward-wrap flags are exercised through suffixes/reflow rather than a separate phosphor getter. |
-| Shell prompts | Raw per-row primary/continuation annotation through each public API; semantic cursor and redraw policy through future operations | Native constructor redraw is disabled; RIS enables it. DECSC does not save semantic content. Blank annotations, history pop, ED2, EL2, width-only and height-only resize are exercised without normalization. ANSI replay's unmarked prompt cursor may use input state with the same headless text effects; per-cell GUI semantic classification is outside this contract. Binary snapshots retain the exact enum. |
-| Modes | Application cursor/keypad, bracketed paste, focus, autowrap, insert, newline, origin, reverse video, sync output, independent mouse mode bits, effective mouse tracking/encoding, kitty flags | Array order is listed below. Native effective mouse state is observed through the public input encoder using distinguishable press/release/motion reports and all five encodings. Mode2027 and margin state are also queried through VT replies. |
-| Charsets and private cursor state | Designation/shift and saved-cursor effects in written suffixes | No claim to inspect every private native struct field. Control branches expose lost state after restore. |
-| History | Styled physical cells at the current width plus continuation flags, independent of logical/physical storage counters | Tests stay below both history retention budgets. Capacity pruning differences need separate bounded tests. Alternate screen history is omitted in both public projections. |
-| Queries | Raw PTY bytes, including DSR/CPR, DECRQM, DECRQSS, keyboard queries | Identity answers and default host colors have separate scopes. No string replacement or cursor-coordinate normalization. |
-| Continuation | Per-engine untouched control after Write, Resize, Compact, snapshot restore and ANSI replay | Both engines use their exact binary snapshot APIs. ANSI replay is measured separately. Snapshot effects include subsequent writes/resizes, not only the first restored picture. Snapshot/repaint failures name the affected engine. |
-| Unicode capacity | Native per-scalar width audit plus split cluster traces | The public CodepointWidth matches every one of 1,112,064 valid scalars. Both engines retain the primary codepoint plus up to 64 suffix codepoints. Boundary fixtures use two-byte accents and four-byte supplementary selectors with mode2027 off/on/mixed and subsequent Compact, resize, snapshot, ANSI replay and writes. The segmentation helper checks all 766 Unicode 17 corpus cases separately, with 25 explicit control-tailoring differences; it does not prove terminal dispatch for every possible sequence. |
+| Surface | Compared state and limits |
+|---|---|
+| Cells/styles | Full cluster text, width, wide tails, every blank; typed default/indexed/RGB foreground/background/underline, all attributes, underline style and protection. Zero cells differ from literal spaces. Spacer heads project as empty width 1 because Phosphor's public API does not distinguish them. Native background-only cells use public getters. |
+| Links | Exact per-cell URI, including wide tails after erase/resize/Compact. Native ABI omits OSC 8 IDs; Phosphor Snapshot tests preserve those separately. |
+| Cursor/wrap | Physical x/y, pending wrap, visible/shape/blink and row continuation. Default shape resolves to configured block; outside-origin positions are not clamped. Last-row forward-wrap flags are exposed through suffixes/reflow. |
+| Shell prompts | Raw primary/continuation row annotations; semantic cursor/redraw state through future operations. Native construction disables redraw; RIS enables it. DECSC does not save semantic content. Blank marks, history pop, ED 2/EL 2 and width/height changes are compared. ANSI can represent an unmarked prompt cursor as input with equal headless effects; Snapshot retains the enum. GUI per-cell semantic classification is outside scope. |
+| Modes | Independent stored bits and effective mouse tracking/encoding, observed through native input encoding (press/release/motion and all five encodings). Mode 2027 and margins are also queried in VT. No invented precedence or last-set order. |
+| Charsets/saves | Designation/shift and saved-cursor behavior through written suffixes; not inspection of every native private field. |
+| History | Styled physical cells and wrap flags at current width, below both retention budgets. Logical/physical counters may differ. Alternate history is omitted by both APIs; pruning requires separate bounded tests. |
+| Replies | Raw DSR/CPR, DECRQM, DECRQSS and keyboard bytes, without replacements or coordinate normalization. Identity and host defaults have separate scopes. |
+| Continuation | Write/Resize/Compact, exact binary Snapshot and separate ANSI replay, checked against each engine's untouched control through later writes/resizes. Failures name the exporter; direct parity remains independent. Combined `pass` requires all comparisons. |
+| Unicode | Public CodepointWidth matches all 1,112,064 valid scalars. Primary+64 suffix capacity is checked with two-byte accents/four-byte selectors, mode 2027 off/on/mixed and future operations. The helper separately checks 766 Unicode 17 cases with 25 explicit native control-tailoring differences; that is not all terminal dispatch. |
 
-The mode array order is: application cursor, application keypad,
-bracketed paste, focus events, autowrap, insert, newline, origin,
-reverse video, synchronized output, X10 mouse, normal mouse, button
-mouse, any-event mouse, UTF8 mouse, SGR mouse, URXVT mouse, SGR-pixel
-mouse, DECCOLM 132-column selection, permission to switch columns,
-smooth scrolling, mode47, mode1047 and mode1049. Stored mode bits are compared as reported; the oracle does not
-collapse native settings to make them agree.
+Mode array order: application cursor, application keypad, bracketed paste, focus, autowrap, insert, newline, origin, reverse video, synchronized output, X10/normal/button/any-event mouse, UTF8/SGR/URXVT/SGR-pixel encoding, 132-column selection, permission to switch columns, smooth scroll, mode 47, mode 1047, mode 1049. Stored bits are not collapsed to improve agreement.
 
-Each trace also reports direct parity between untouched engines separately
-from phosphor's and Ghostty's continuation checks. The untouched controls
-never restore snapshots, replay ANSI or compact state. A native exporter
-bug therefore remains a recorded failure without making the direct parity
-count ambiguous. The combined `pass` still requires all comparisons to pass.
+`shared_palette: true` initializes both hosts through public APIs with Phosphor's palette, including the native replay host. Configured reset tests can then compare raw replies; the original default-color fixture retains each product's own colors.
 
-Color protocol fixtures can set `shared_palette: true`. Before any input,
-both hosts use phosphor's default palette through their public configuration
-APIs. Native replay receives that host configuration before the bytes are
-fed. This makes reset behavior comparable while preserving raw replies;
-the original host-default fixture retains each product's own defaults.
+## Scopes and remaining differences
 
-Scope is fixed in fixture metadata, with these meanings:
+| Fixture scope | Meaning |
+|---|---|
+| `parity` | Any difference remains an unresolved comparison failure and makes trace exit 1. |
+| `identity` | Product/device identities may differ; both raw answers remain. |
+| `deliberate` | Host configuration differs, currently only initial colors. Configured color commands belong in parity. |
+| `limit` | Declared bounded capacity; no current fixture needs it after matching cluster capacity. |
 
-- `parity`: a difference is an unresolved compatibility failure and makes
-  the command fail.
-- `identity`: different product names and device identities are expected;
-  both byte strings are still recorded.
-- `deliberate`: host configuration differs, currently only the initial
-  color scheme. Configured color commands belong in parity tests.
-- `limit`: a declared bounded-capacity difference. No current fixture needs
-  this scope after the cluster capacities were matched.
+Scope changes need a contract explanation. Finding a failure is not a reason to exclude it. Two classes remain in parity: `dec-graphics-underscore-policy` keeps Phosphor's [xterm blank mapping](https://raw.githubusercontent.com/ThomasDickey/xterm-snapshots/master/charsets.c) versus native underscore; `cursor-1047-resize-background-limit` and its growth variant retain ANSI's mixed-background ALT loss on forced 1047 exit. Returning to MAIN with all independent mode bits preserved erases ALT with one background. Exact Snapshot preserves the original cells and their future use. [Final results](results/2026-10-27-round6/README.md) retain every failure, plus other portable ANSI limits such as REP and some outside-origin/narrowed-cluster states.
 
-Changing a scope requires a contract explanation. A newly found failure
-does not become an exclusion merely to improve the passing count.
+Native tests cover 216 three-operation screen-mode combinations and saved-mode restoration. All 47/1047/1049 bits are separate from active-screen state. DECSC has one slot per screen, shared with 1049; it saves single shift/underline style, not the live link. Screen transitions end links;1049 exit retains ALT.
 
-The cursor-lifetime fixtures retain two raw failures in `parity`:
+## Translated suites and storage checks
 
-- `dec-graphics-underscore-policy`: phosphor follows xterm's DEC graphics
-  mapping of underscore to a blank; the pinned native engine leaves an
-  underscore. This is a deliberate policy conflict, still included in the
-  direct comparison denominator. See xterm's
-  [character-set mapping](https://raw.githubusercontent.com/ThomasDickey/xterm-snapshots/master/charsets.c).
-- `cursor-1047-resize-background-limit`: after a 1047 exit and height growth,
-  inactive alternate rows can have different old/new backgrounds. When only
-  mode1047 is disabled, returning to primary while retaining all three mode
-  bits necessarily erases alternate with one background. Repaint therefore
-  loses the mixed backgrounds; Snapshot preserves them and their future use.
+The Go-translated Ghostty suite comes from `521cf2c`; attribution/license: [NOTICE](../../testdata/conformance/NOTICE.md). At `7bc614a`,549 cases meant 459 passing/6 known failures/84 excluded:42 grapheme,15 palette,12 link/semantic/OSC,6 reply,5 DECCOLM,2 image,2 charset. The newer pin has 460 `Terminal.zig` tests and 148 `stream_terminal.zig` tests plus other modules; these are different denominators.
 
-The bridge captures all three independent 47/1047/1049 bits on every step,
-separately from the active screen. DECSC has exactly one slot per screen,
-shared by 1049. It saves single shift and underline style, not the live
-hyperlink. A real screen transition ends the live hyperlink; 1049 exit
-retains alternate contents. The native cursor tests compare subsequent
-output against an untouched native terminal, including 216 combinations
-of three set/reset operations and explicit saved-mode restoration.
+The current translation passes 524, has zero known failures and excludes 25:15 palette,6 reply,2 image,2 charset. Five former link cases now check text/URIs and seven prompt cases check text/cursor/history/raw row marks. Native fixtures exercise every non-image group with raw replies and continuation, without turning unsupported commands into passes.
 
-The old Go-translated Ghostty suite comes from `521cf2c`, with license
-and attribution in `testdata/conformance/NOTICE.md`. At the `7bc614a`
-baseline, its 549 cases report 459 passing, 6 known failures and 84
-out-of-scope. Those exclusions include 42 grapheme, 15 palette/dynamic
-color, 12 hyperlink/semantic/OSC, 6 reply, 5 DECCOLM, 2 image and 2
-charset cases. A translation often checks only selected fields; it is
-not a native paired run. The newer pinned source has 460 tests in
-`Terminal.zig` and 148 in `stream_terminal.zig`; other Zig modules add
-further tests. Those counts are not interchangeable denominators.
+Prompt/wrap flags share one byte per annotated row. Private history markers are NUL +canonical zero uvarint +`P` +kind 0/1/2; positive uvarints remain sparse-hole runs. Unknown/truncated/noncanonical/out-of-range markers and markers in released v1 snapshots are rejected; unannotated history gains no bytes.
 
-The current Go translation passes 524 cases, keeps no known failures
-and excludes 25 cases. Five former hyperlink exclusions now
-assert exact text and per-cell URIs. Seven prompt cases also assert text,
-cursor, history and raw row annotations.
-Remaining exclusions are 15 palette, six reply, two image and two charset
-cases. Native fixtures exercise all non-image groups with raw replies and
-continuation checks; they retain failures rather than marking unsupported
-commands as passing. Images remain outside the headless text contract.
+Width changes reset tabs to the default eight-column interval; height changes retain custom stops. Five unchanged WezTerm expectations preserve tabs across width changes and remain explicit policy conflicts.
 
-Prompt and wrap metadata share one byte per annotated screen row. History
-uses its existing bounded VT representation with typed private row markers:
-NUL, canonical zero uvarint, `P`, then kind 0/1/2. Positive uvarints retain
-the existing sparse-hole grammar. Unknown, truncated, noncanonical or
-out-of-range markers are rejected, and released v1 snapshots cannot contain
-the new grammar. Ordinary history without annotations gains no marker bytes.
-
-Changing width resets tab stops to the default eight-column interval, as
-the pinned native engine documents and implements. Height-only resizing
-preserves custom stops. Five unchanged translated WezTerm expectations
-disagree because WezTerm keeps custom stops through width changes; those
-are explicit policy divergences, not universal terminal compatibility.
-
-The native traces are independently written input sequences using the
-public C ABI and public phosphor API. They do not copy a third-party
-test implementation. Future upstream translations must retain source
-revision and licensing; GPL esctest source must not be copied into this
-MIT project. Existing esctest-style cases are independently written.
+Native traces are independently written public-API sequences, not copied third-party tests. Future translations must retain revision/licensing. Do not copy GPL esctest source into this MIT project; existing esctest-style inputs were independently written.

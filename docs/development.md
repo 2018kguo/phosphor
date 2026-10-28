@@ -1,0 +1,113 @@
+# Develop and verify Phosphor
+
+The library needs Go 1.24 or newer. It is pure Go; ordinary builds and tests
+do not need a native terminal library, Zig or cgo. The interactive examples
+and optional comparison tools have separate Go modules and dependencies.
+
+## Run the demo
+
+From a clone in an interactive terminal:
+
+```sh
+cd examples
+go run ./mirror vim
+```
+
+Replace `vim` with a command and arguments of your own. The mirror starts a
+PTY, feeds output to Phosphor and redraws from cells and dirty-row reports.
+The examples module currently declares Go 1.26; this is separate from the
+library's Go 1.24 minimum.
+
+## Run checks
+
+From the repository root:
+
+```sh
+go test ./...
+go vet ./...
+go test -race ./...
+```
+
+Check the example and Go differential modules separately:
+
+```sh
+(cd examples && go build -o /dev/null ./... && go vet ./...)
+(cd oracle && go test ./... && go vet ./...)
+```
+
+Print the external conformance counts:
+
+```sh
+VT_CONF_REPORT=1 go test -run 'Conformance|Libvterm|Alacritty' -v
+```
+
+Known terminal-policy differences have explicit reasons in
+`conformance_known_test.go`; unexpected failures and unexpectedly passing
+known cases fail the suite. Exclusions do not count as passing coverage.
+Preserve upstream expectations and the [source notices](../testdata/conformance/NOTICE.md).
+
+For a bounded snapshot continuation fuzz run:
+
+```sh
+go test -run '^$' -fuzz '^FuzzSnapshotContinuation$' -fuzztime 30s
+```
+
+Other targets cover raw bytes, chunking, replies, Unicode, repaint, damage,
+compaction and sparse rows. [CI](../.github/workflows/test.yml) lists the
+maintained targets and runs Go 1.24/current-Go checks. A change to storage
+or persistence should preserve future writes and resize, not just a
+restored first frame. Actual released v1 snapshots are kept under
+[`testdata/snapshot-v1`](../testdata/snapshot-v1/README.md).
+
+## Measure your workload
+
+The root package benchmarks parsing, recorded PTY output, checkpointing,
+replay and memory:
+
+```sh
+go test -run '^$' -bench . -benchmem
+go test -run '^$' -bench '^BenchmarkWriteRecordedPTY$' -benchmem -count 5
+```
+
+The separate Go comparison uses the same streams across three libraries:
+
+```sh
+cd oracle
+go test -run '^$' -bench Compare -benchmem -count 5
+```
+
+Keep terminal geometry, byte chunks, history policy and retained state equal.
+Use fresh processes for RSS and retained heap; native allocations do not
+appear in Go heap counters. Include closed-editor recordings when that is
+the idle state you intend to host. [Benchmarks](benchmarks.md) explains the
+current results and why prompt memory is not a universal per-session cost.
+
+## Compare with libghostty-vt
+
+The optional driver uses public native APIs for compatibility, throughput,
+state costs and memory. Follow the pinned build and environment instructions
+in the [oracle README](../oracle/ghostty/README.md). Native builds require
+the documented Zig version, cgo headers and the built library; none is a
+production dependency of Phosphor.
+
+Run named traces with whole writes and byte chunks, keep raw replies and
+cells unchanged, and compare future behavior against untouched controls.
+The trace command exits nonzero for remaining parity failures, including
+documented policy/export differences. An exit status alone does not tell
+you which engine lost state. The [comparison contract](../oracle/ghostty/coverage.md)
+describes the captured fields and separate continuation counts.
+
+## Repository guide
+
+| Open | For |
+|---|---|
+| [terminal.go](../terminal.go), [read.go](../read.go), [style.go](../style.go) | Stream processing and public screen values |
+| [resize.go](../resize.go), [compact.go](../compact.go) | Reflow, history and idle storage |
+| [serialize.go](../serialize.go), [snapshot.go](../snapshot.go) | ANSI attach and exact checkpoints |
+| [example_test.go](../example_test.go), [mirror](../examples/mirror) | Runnable API use and a renderer |
+| [testdata](../testdata), `*_test.go` | Recordings, references and regression checks |
+| [oracle](../oracle) | Optional differential and native comparisons |
+
+X11 color names can be regenerated with `go run ./internal/colorgen`;
+`-source /path/to/rgb.txt` uses an offline source. The generator checks its
+input checksum. Preserve [the data's notices](../licenses/X11.txt).

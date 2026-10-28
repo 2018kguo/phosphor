@@ -1,65 +1,26 @@
-# Memory after completed editor and pager recordings
+# What completed editors keep in memory
 
-Keep the native-compatible inactive alternate screen and use the existing
-`Compact()` implementation. This release adds no cold-screen representation,
-compression codec, thaw importer or capacity reservation. Correct retention
-has a real idle cost: after compaction these completed recordings retain
-roughly 22–47KB of Go heap per terminal, compared with roughly 54–56KB before
-compaction. These are larger states than a fresh shell prompt.
+Correct 1049 exit keeps inactive ALT for later 47 re-entry. After Compact these completed recordings retained 22–47 KB of Go heap per terminal, versus 54–56 KB before. This is a larger state than a fresh prompt; no cold-screen codec or extra compression was added.
 
-## Exact source and binary
+## Build and method
 
-- Phosphor and permanent driver source: `8d1511ce4f0d5b5951f4506818c4da14b4f4a3bc`.
-- Native source: `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, built with
-  Zig 0.17.0, `zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4`.
-- Sampled driver SHA256: `bb7cd704d558ed4d0c7b374284af079a582623f5a1a6e8f0de75fbd1d94745bb`.
-- Linked `libghostty-vt.dylib` SHA256: `7700d7817d5c3c7107e5efb9cd165a1d9f16e877fe9f2cf886c528bfb707acbe`.
-- Production source manifest SHA256: `5880bcd622156f80410cce12b6fd3bb75918e6526b86261a088326d4ce4973b4`.
-  Every file was checked against the committed source before building and
-  checked again after all samples. The manifest hashes root Go files,
-  internal Go files, driver Go/C/header files and both modules' go.mod/go.sum,
-  excluding tests. It is the SHA256 of the path-to-file-SHA256 JSON object,
-  with sorted keys and compact separators. No uncommitted production bytes
-  were used. The unrelated README edit does not enter this build.
-- Platform: macOS arm64; Go 1.26.3; cgo enabled with the `ghostty` build tag.
+| Provenance | Value |
+|---|---|
+| Phosphor/driver source |`8d1511ce4f0d5b5951f4506818c4da14b4f4a3bc` (before the later parsing repair) |
+| Native source |`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, Zig 0.17.0, `zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4` |
+| Driver SHA256 |`bb7cd704d558ed4d0c7b374284af079a582623f5a1a6e8f0de75fbd1d94745bb` |
+| Linked dylib SHA256 |`7700d7817d5c3c7107e5efb9cd165a1d9f16e877fe9f2cf886c528bfb707acbe` |
+| Source manifest SHA256 |`5880bcd622156f80410cce12b6fd3bb75918e6526b86261a088326d4ce4973b4` |
 
-Build from `oracle/` using the native checkout's include and library paths:
+The manifest hashes production root/internal Go, driver Go/C/header and both modules' go.mod/go.sum (no tests); sorted path→SHA256 JSON, compact separators, then SHA256. Files matched committed source before/after sampling; no uncommitted production bytes entered the build. macOS/arm64, Go 1.26.3, cgo/ghostty tag. Absolute native include/library/rpath was `/private/tmp/phosphor-gaps.ro32ng/ghostty`; another build path can change the binary hash.
 
-```sh
-CGO_CFLAGS="-I$GHOSTTY_SOURCE/include" \
-CGO_LDFLAGS="-L$GHOSTTY_SOURCE/zig-out/lib -lghostty-vt -Wl,-rpath,$GHOSTTY_SOURCE/zig-out/lib" \
-go build -tags ghostty -o /tmp/phosphor-ghostty ./ghostty
-PHOSPHOR_DIR=/path/to/phosphor /tmp/phosphor-ghostty \
-  -mode memory -engine phosphor -workload closed-vim-compact -n 1024
-```
+[1024-terminal raw](closed-memory-1024.jsonl) /[256-terminal raw](closed-memory-256.jsonl):120 fresh-process samples =five recordings×two engines×plain/compacted×three repeats×two counts. Only a repeat label was added; order alternates and no samples/cells/replies were normalized or discarded.
 
-The binary SHA is for the recorded local build, whose absolute include,
-library and rpath paths were `/private/tmp/phosphor-gaps.ro32ng/ghostty`.
-Building elsewhere need not produce the same binary hash.
+Workloads `closed-{vim,nvim,nano,less,man}[-compact]` load actual completed rec-X.raw at 100×30 and reject unknown names or a still-active ALT. Both engines stay live while counters are read. Shared initialization is warmed; GC runs before baseline and twice after initialization, without forcing scavenging. Phosphor uses Compact, native uses GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL. Native wrapper heap excludes C allocations; compare RSS. Every table gives median 3 B/terminal.
 
-## Method and raw samples
+## Retained memory
 
-[closed-memory-1024.jsonl](closed-memory-1024.jsonl) and
-[closed-memory-256.jsonl](closed-memory-256.jsonl) retain all 120 samples:
-five recordings, two engines, plain/compacted, three fresh processes each,
-at two terminal counts. Each JSON line is the driver's raw output with
-only a `repeat` label added. Engine order alternates between repeats.
-There are no discarded outliers or reply/cell normalization.
-
-The permanent `closed-{vim,nvim,nano,less,man}[-compact]` workloads load the
-actual completed `rec-X.raw` inputs at 100×30. They reject unknown recording
-names and reject a final active alternate screen. Phosphor compaction is
-`Compact()`; native compaction is `GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL`.
-Both engines are alive when counters are collected. The driver warms shared
-initialization, runs GC before the baseline and twice after initialization,
-then records retained Go heap and process RSS. It does not force the Go
-scavenger to return all free pages to the OS.
-
-All table values are median 3 **bytes per terminal**. The native Go-heap field
-in the raw files measures only its small Go wrapper, excluding C allocations;
-use RSS for the cross-engine memory comparison.
-
-### 1024 terminals
+1,024 terminals:
 
 | Recording | Phosphor heap | Phosphor heap after Compact | Phosphor RSS | Phosphor RSS after Compact | Native RSS | Native RSS after FULL |
 |---|---:|---:|---:|---:|---:|---:|
@@ -69,7 +30,7 @@ use RSS for the cross-engine memory comparison.
 | less | 56,185.0 | 30,148.0 | 57,440 | 42,272 | 82,480 | 82,544 |
 | man | 56,158.5 | 22,431.0 | 57,456 | 33,824 | 82,352 | 82,320 |
 
-### 256 terminals
+256 terminals:
 
 | Recording | Phosphor heap | Phosphor heap after Compact | Phosphor RSS | Phosphor RSS after Compact | Native RSS | Native RSS after FULL |
 |---|---:|---:|---:|---:|---:|---:|
@@ -79,20 +40,11 @@ use RSS for the cross-engine memory comparison.
 | less | 56,240.5 | 30,169.8 | 55,424 | 42,368 | 84,160 | 84,032 |
 | man | 56,208.5 | 22,457.9 | 55,616 | 36,288 | 83,648 | 83,712 |
 
-Compaction's heap savings are larger than its immediate RSS savings because
-allocator pages can remain resident after rows are freed. This is especially
-visible for vim and nvim. Native FULL compression makes little difference
-for these no-history workloads: the pinned native Terminal.compress targets
-PRIMARY scrollback pages, while the completed program's retained ALT remains
-resident. Native page estimates in the raw files are allocation estimates,
-not resident-process measurements.
+Vim/nvim release more heap than RSS because allocator pages remain resident. Native FULL targets PRIMARY scrollback; these no-history runs keep ALT resident, so it changes little. Native page estimates are not RSS.
 
-## What occupies the retained alternate screen
+## Why more cannot simply be dropped
 
-A separate read-only cell inspection counted physical cell categories and
-slice capacities, distinguishing literal spaces from empty cells. The
-100×30 grid has 3000 positions. Prefix compaction removes only true zero
-suffixes and preserves every literal or styled space.
+Read-only inspection of the 3000-position ALT grid distinguished literal spaces from empty cells. Prefix compaction retains every literal/styled space and removes only strict zero suffixes:
 
 | Recording | ALT cell capacity before | ALT cell capacity after | Retained cells after | Zero cells in full grid | Default spaces | Styled spaces | Other cells |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -102,31 +54,10 @@ suffixes and preserves every literal or styled space.
 | less |48,000B |26,032B |1,627 |1,373 |275 |0 |1,352 |
 | man |48,000B |18,944B |1,184 |1,816 |281 |0 |903 |
 
-Each also retains 720B of row headers. These are capacity payloads, excluding
-Go size-class rounding, Terminal, saved cursors and lookup tables; they are
-not interchangeable with the measured heap or RSS. Some zero cells are
-inside retained prefixes, particularly in nvim. There are no styled empty
-cells in these five final ALT grids. Ordinary cell size remains 16B and
-Terminal remains 560B on 64-bit platforms.
+Each grid also keeps 720 B row headers. Payload capacities exclude size-class rounding, Terminal, saves and tables; they are not measured heap/RSS. Some zeros remain inside prefixes (especially nvim); none of these five final grids has styled empty cells. Cell 16 B/Terminal 560 B remain unchanged.
 
-Default spaces remain observable through Cell, and styled spaces also retain
-appearance. They cannot be treated as empty padding just to lower memory.
-The final ALT grids contain 1,941/2,038/1,866/1,567/1,069 complete-cell runs
-respectively. A naive 24B-per-run representation would exceed the existing
-compacted cell prefixes for every recording. Sparse-history VT encoding is
-not a drop-in exact screen representation: it reconstructs logical lines
-through terminal dispatch/reflow, and a cold ALT would still require one
-canonical live/cold owner and safe pool import/mutation lifetimes. That
-complexity is deferred, with no claimed compression benefit in this release.
+Literal/styled spaces are observable. Complete-cell run counts are 1,941/2,038/1,866/1,567/1,069 in table order; a naive 24 B/run representation would exceed compacted prefixes for every recording. Sparse VT history is not an exact cold-screen image: replay/reflow and pool mutation/import require one safe owner. That complexity was deferred; retained ALT row payload is 19.7–42.4 KB.
 
-The corrected 1049l behavior retains ALT contents for later 47h re-entry;
-`TestCursorLifetimeCheckpoint` and the paired native
-`TestNativeCursorLifetimeAndRepaint` exercise that future, including snapshot
-and ANSI replay. The RSS workload also requires the completed program to
-have returned to MAIN. It does not clear ALT or alter recording bytes to
-manufacture the lower result. Prompt correctness is covered separately from this memory denominator.
+`TestCursorLifetimeCheckpoint` /`TestNativeCursorLifetimeAndRepaint` exercise later 47 entry, snapshots and ANSI replay. The memory workload requires return to MAIN and never clears ALT or changes input to improve the number; prompt behavior is checked separately.
 
-No new production storage code was needed for this choice. The tradeoff is
-explicit: compatibility retains roughly 19.7–42.4KB of ALT row payload after
-prefix compaction for these recordings. A future exact image implementation
-could be measured against this baseline, but it is not implemented here.
+Build using the [driver instructions](../../README.md), then `PHOSPHOR_DIR=/path/to/phosphor BINARY -mode memory -engine phosphor -workload closed-vim-compact -n 1024`; repeat for both engines, workloads and counts. These hashes/numbers describe this pinned experiment, not a later rebuild.
