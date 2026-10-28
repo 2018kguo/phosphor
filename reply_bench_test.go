@@ -3,6 +3,7 @@ package phosphor
 import (
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -23,6 +24,42 @@ func BenchmarkWriteStreamReply(b *testing.B) {
 					}
 				}
 			})
+		}
+	}
+}
+
+// Keep mode-on Unicode and hyperlinks visible beside the ASCII-heavy streams.
+// The mixed and link bytes match the native oracle's audited fixtures.
+func BenchmarkWriteUnicodeAndLinks(b *testing.B) {
+	for _, fixture := range []struct{ name, line string }{
+		{"graphemes", "日本語 e\u0301 👩‍💻 🇺🇸 👨‍👩‍👧‍👦 한글\r\n"},
+		{"cjk", "日本語 中文 한글 테스트\r\n"},
+		{"ascii", "plain ASCII text with grapheme mode enabled\r\n"},
+		{"links", "\x1b]8;;https://example.invalid/build/123\x1b\\\x1b[32mcomplete build 123\x1b[0m\x1b]8;;\x1b\\\r\n"},
+	} {
+		data := []byte(strings.Repeat(fixture.line, (1<<20)/len(fixture.line)+1))
+		if fixture.name != "links" {
+			data = append([]byte("\x1b[?2027h"), data...)
+		}
+		for _, history := range []string{"budgeted", "none"} {
+			for _, chunk := range []int{1024, 8192} {
+				b.Run(fmt.Sprintf("%s/%s/chunk-%d", fixture.name, history, chunk), func(b *testing.B) {
+					opts := []Option{WithReply(io.Discard)}
+					if history == "none" {
+						opts = append(opts, WithScrollback(0))
+					}
+					term := New(120, 40, opts...)
+					b.SetBytes(int64(len(data)))
+					b.ReportAllocs()
+					for b.Loop() {
+						for p := data; len(p) > 0; {
+							n := min(len(p), chunk)
+							term.Write(p[:n])
+							p = p[n:]
+						}
+					}
+				})
+			}
 		}
 	}
 }
