@@ -85,7 +85,10 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 			return false
 		}
 	}
-	if !graphemeContinues(s, r) {
+	// Finish segmentation before a width change can scroll and reuse scratch.
+	var continues bool
+	t.scratch, continues = graphemeContinues(t.scratch, s, r)
+	if !continues {
 		return false
 	}
 	count := utf8.RuneCountInString(s)
@@ -106,13 +109,14 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 		return true
 	}
 	var modes clusterModes
+	var text string
 	if base.R >= clusterBase {
-		modes = t.x.clusters[base.R-clusterBase].joinModes
+		old := t.x.clusters[base.R-clusterBase]
+		modes, text = old.joinModes, old.text
 	}
-	text := s
 	if count < maxClusterRunes {
 		modes.set(count)
-		text += string(r)
+		text = s + string(r)
 	} else if newWidth == width {
 		return true
 	}
@@ -178,13 +182,12 @@ func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
 	return width, true
 }
 
-func graphemeContinues(s string, r rune) bool {
+func graphemeContinues(b []byte, s string, r rune) ([]byte, bool) {
 	// Terminal controls have already been executed. Ghostty treats any
 	// zero-width grapheme Control left in a mode-off cell as Other when
 	// clustering is later enabled. Replace only those properties for the
 	// boundary test; the original UTF-8 is retained in the stored cell.
-	var storage [2*maxCluster + utf8.UTFMax]byte
-	b := storage[:0]
+	b = b[:0]
 	for _, cp := range s {
 		if runeInRanges(cp, graphemeControls[:]) {
 			cp = 0xe000 // a private-use scalar with grapheme property Other
@@ -196,15 +199,13 @@ func graphemeContinues(s string, r rune) bool {
 		r = 0xe000
 	}
 	b = utf8.AppendRune(b, r)
-	// Copy only the used bytes: the iterator's indirect split call would
-	// otherwise make the entire scratch array escape to the heap.
-	iter := graphemes.FromString(string(b))
+	iter := graphemes.FromBytes(b)
 	for iter.Next() {
 		if iter.End() > boundary {
-			return iter.Start() < boundary
+			return b, iter.Start() < boundary
 		}
 	}
-	return false
+	return b, false
 }
 
 func emojiVariationBase(r rune) bool {
