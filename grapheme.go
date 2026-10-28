@@ -27,12 +27,7 @@ func (m *clusterModes) set(i int)     { m[i/64] |= 1 << uint(i%64) }
 // Invalid scalars have width one. A complete grapheme can have a different
 // width under mode 2027, so summing scalar widths measures mode-off layout.
 func CodepointWidth(r rune) int {
-	u := uint32(r)
-	if u > utf8.MaxRune {
-		return 1
-	}
-	word := scalarWidthPages[scalarWidthPageIDs[u>>8]][u>>5&7]
-	return int(word >> ((u & 31) * 2) & 3)
+	return codepointInfo(r).width()
 }
 
 func firstRune(s string) rune {
@@ -44,7 +39,7 @@ func firstRune(s string) rune {
 // grapheme boundary rules say it continues that cell's last cluster.
 // Re-segmenting the bounded cell text also handles enabling mode 2027
 // after older cells collected zero-width characters without segmentation.
-func (t *Terminal) extendGrapheme(r rune) bool {
+func (t *Terminal) extendGrapheme(r rune, info unicodeInfo) bool {
 	x, y := t.cur.x, t.cur.y
 	if x == 0 {
 		return false
@@ -75,21 +70,27 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	// Two simple scalar properties always start separate cells.
 	// Stored clusters still need replay: earlier mode-off text may contain
 	// boundaries that affect the suffix's state.
-	if graphemeSimpleScalar(row[x].R) && graphemeSimpleScalar(r) {
-		return false
+	var tail graphemeTail
+	if row[x].R < clusterBase {
+		previous := codepointInfo(row[x].R)
+		if previous.simple() && info.simple() {
+			return false
+		}
+		tail = graphemeTail{count: 1, lastInfo: previous}
+	} else {
+		tail = t.clusterTail(row[x])
 	}
 	s := t.cellString(row[x])
-	tail := t.clusterTail(row[x])
 	// Outside GB9b's Prepend rule, Ghostty follows UTS #51: a modifier
 	// must immediately follow its base. Extend, Control and ZWJ cannot
 	// bridge that boundary, including text attached while mode was off.
 	if emojiModifier(r) {
-		previous, _ := utf8.DecodeLastRuneInString(s)
-		if !runeInRanges(previous, emojiModifierBases[:]) && !runeInRanges(previous, graphemePrepends[:]) {
+		previous := tail.lastInfo.grapheme()
+		if previous&gpModifierBase == 0 && previous&gpKindMask != gpPrepend {
 			return false
 		}
 	}
-	if !tail.continues(r) {
+	if !tail.continues(info) {
 		return false
 	}
 	count := int(tail.count)
@@ -97,8 +98,7 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	if x+1 < len(row) && row[x+1].R == wideTail {
 		width = 2
 	}
-	prev, _ := utf8.DecodeLastRuneInString(s)
-	newWidth, keep := graphemeWidthEffect(width, prev, r)
+	newWidth, keep := graphemeWidthEffectInfo(width, tail.lastInfo, info, r)
 	if !keep {
 		return true
 	}
@@ -172,14 +172,17 @@ func graphemeSimpleScalar(r rune) bool {
 	if u > utf8.MaxRune {
 		return false
 	}
-	property := graphemeProps(r)
 	// Unicode 18 permits a GCB Other linker to join a later consonant.
-	return property&gpKindMask == gpOther && property&gpInCBMask != gpLinker
+	return codepointInfo(r).simple()
 }
 
 func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
+	return graphemeWidthEffectInfo(width, codepointInfo(prev), codepointInfo(r), r)
+}
+
+func graphemeWidthEffectInfo(width int, previous, current unicodeInfo, r rune) (int, bool) {
 	if r == 0xfe0e || r == 0xfe0f {
-		if !emojiVariationBase(prev) {
+		if previous&codepointVSBase == 0 {
 			return width, false
 		}
 		if r == 0xfe0f {
@@ -189,33 +192,17 @@ func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
 	}
 	// A second spacing scalar widens a cluster. Emoji modifiers contribute
 	// no width within a valid cluster, despite their standalone width of two.
-	if CodepointWidth(r) > 0 && !emojiModifier(r) && !runeInRanges(r, graphemePrepends[:]) {
+	if current.width() > 0 && !emojiModifier(r) && current.grapheme()&gpKindMask != gpPrepend {
 		return 2, true
 	}
 	return width, true
 }
 
 func emojiVariationBase(r rune) bool {
-	return runeInRanges(r, emojiVariationBases[:])
+	return codepointInfo(r)&codepointVSBase != 0
 }
 
 func emojiModifier(r rune) bool { return r >= 0x1f3fb && r <= 0x1f3ff }
-
-func runeInRanges(r rune, ranges [][2]rune) bool {
-	lo, hi := 0, len(ranges)
-	for lo < hi {
-		mid := int(uint(lo+hi) >> 1)
-		v := ranges[mid]
-		if r < v[0] {
-			hi = mid
-		} else if r > v[1] {
-			lo = mid + 1
-		} else {
-			return true
-		}
-	}
-	return false
-}
 
 // appendCluster starts the base with clustering off, then replays the
 // mode each following codepoint was joined under. This also separates a

@@ -105,72 +105,7 @@ func graphemeProperties(breaks, emoji, derived []byte) (pages [0x1100][256]uint8
 	return pages
 }
 
-func emitGraphemeProperties(out *bytes.Buffer, breaks, emoji, derived []byte) {
-	pages := graphemeProperties(breaks, emoji, derived)
-	fmt.Fprintln(out, "type graphemeProperty uint8\n\nconst (")
-	for _, kind := range graphemeKinds {
-		fmt.Fprintf(out, "gp%s graphemeProperty = %d\n", kind.goName, kind.value)
-	}
-	for _, flag := range graphemeFlags {
-		fmt.Fprintf(out, "gp%s graphemeProperty = %d\n", flag.name, flag.value)
-	}
-	out.WriteString(")\n")
-	index := make(map[[256]uint8]int)
-	var unique [][256]uint8
-	var ids [0x1100]int
-	for i, page := range pages {
-		id, ok := index[page]
-		if !ok {
-			id = len(unique)
-			index[page] = id
-			unique = append(unique, page)
-		}
-		ids[i] = id
-	}
-	idType, idBytes := "uint8", 1
-	if len(unique) > 256 {
-		idType, idBytes = "uint16", 2
-	}
-	fmt.Fprintf(out, "// %d deduplicated pages; %d bytes of shared lookup data.\nvar graphemePropertyPageIDs = [0x1100]%s{\n", len(unique), len(ids)*idBytes+256*len(unique), idType)
-	for i, id := range ids {
-		fmt.Fprintf(out, "%d,", id)
-		if i%32 == 31 {
-			out.WriteByte('\n')
-		}
-	}
-	out.WriteString("}\n\nvar graphemePropertyPages = [...][256]uint8{\n")
-	for _, page := range unique {
-		out.WriteString("{\n")
-		for i, p := range page {
-			fmt.Fprintf(out, "%d,", p)
-			if i%32 == 31 {
-				out.WriteByte('\n')
-			}
-		}
-		out.WriteString("},\n")
-	}
-	out.WriteString("}\n")
-	emitGraphemeTransitions(out, pages)
-}
-
-func emitGraphemeTransitions(out *bytes.Buffer, pages [0x1100][256]uint8) {
-	var used [128]bool
-	for _, page := range pages {
-		for _, property := range page {
-			used[property] = true
-		}
-	}
-	var classes []uint8
-	var classIDs [128]uint8
-	for property, keep := range used {
-		if keep {
-			classIDs[property] = uint8(len(classes))
-			classes = append(classes, uint8(property))
-		}
-	}
-	if len(classes) > 32 {
-		panic("grapheme classes exceed five bits")
-	}
+func emitGraphemeTransitions(out *bytes.Buffer, classes []uint8) {
 	var transitions [16 << 10]uint8
 	for state := range 16 {
 		for i, last := range classes {
@@ -193,14 +128,7 @@ func emitGraphemeTransitions(out *bytes.Buffer, pages [0x1100][256]uint8) {
 	}
 	fmt.Fprintln(out, "// Boundary transitions use 16 state encodings and five-bit property classes.")
 	fmt.Fprintln(out, "// Rules adapted from Copyright (c) 2020 Matt Sherman; see licenses/uax29.txt.")
-	out.WriteString("var graphemePropertyClasses = [128]uint8{\n")
-	for i, id := range classIDs {
-		fmt.Fprintf(out, "%d,", id)
-		if i%32 == 31 {
-			out.WriteByte('\n')
-		}
-	}
-	out.WriteString("}\n\nvar graphemeTransitions = [16 << 10]uint8{\n")
+	out.WriteString("var graphemeTransitions = [16 << 10]uint8{\n")
 	for i, transition := range transitions {
 		fmt.Fprintf(out, "%d,", transition)
 		if i%32 == 31 {

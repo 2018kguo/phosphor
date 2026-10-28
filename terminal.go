@@ -443,10 +443,11 @@ func (t *Terminal) printRune(r rune) {
 	if r > 0x7f {
 		t.cur.ss = 0
 	}
-	if t.grapheme && r > 255 && t.extendGrapheme(r) {
+	info := codepointInfo(r)
+	if t.grapheme && r > 255 && t.extendGrapheme(r, info) {
 		return
 	}
-	w := CodepointWidth(r)
+	w := info.width()
 	if w == 0 {
 		if !t.grapheme {
 			t.combine(r)
@@ -1533,10 +1534,10 @@ func (t *Terminal) combine(r rune) {
 		return
 	}
 	if r == 0xfe0e || r == 0xfe0f {
-		base := firstRune(s)
+		base := codepointInfo(firstRune(s)).grapheme()
 		// Native mode-off filtering uses the tailored grapheme class;
 		// emoji modifier bases are separate from Extended_Pictographic.
-		if !runeInRanges(base, emojiPictographs[:]) || runeInRanges(base, emojiModifierBases[:]) {
+		if base&gpPictographic == 0 || base&gpModifierBase != 0 {
 			return
 		}
 	}
