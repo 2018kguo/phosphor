@@ -108,3 +108,7 @@ Snapshot tests cover future output and resize, including checkpoints written
 by the released v0.3.0 library. Recordings and fuzz tests exercise chunk
 boundaries, Unicode, dirty rows and exact versus ANSI continuation. Read
 [the API limits](reference.md#attach-a-client) when attach fidelity matters.
+
+The [earlier Go-only chart](bench-light.svg) ([dark version](bench-dark.svg))
+compares older library versions. Use the tables above for the current native
+comparison.

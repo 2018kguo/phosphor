@@ -126,13 +126,6 @@ A `Terminal` needs exclusive access: use one goroutine or hold a lock around
 all reads and writes. Reply writers and bell callbacks run during `Write`
 and must not call back into that terminal.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/bench-dark.svg">
-  <img alt="Historical Go-only comparison: throughput and idle memory for phosphor, charmbracelet/x/vt and hinshun/vt10x" src="docs/bench-light.svg">
-</picture>
-
-*The retained chart is the earlier Go-only comparison, not the current native
-benchmark. Current measurements and their constraints are in the guide below.*
 
 ## Docs
 
