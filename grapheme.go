@@ -75,6 +75,12 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	if row[x].R <= 0 {
 		return false
 	}
+	// A scalar Other followed by another Other always starts a new cell.
+	// Stored clusters still need replay: earlier mode-off text may contain
+	// boundaries that affect the suffix's state.
+	if graphemeSimpleScalar(row[x].R) && graphemeSimpleScalar(r) {
+		return false
+	}
 	s := t.cellString(row[x])
 	// Outside GB9b's Prepend rule, Ghostty follows UTS #51: a modifier
 	// must immediately follow its base. Extend, Control and ZWJ cannot
@@ -164,6 +170,14 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	t.print(base.R, 2)
 	t.insert, t.lastChar = insert, lastChar
 	return true
+}
+
+func graphemeSimpleScalar(r rune) bool {
+	u := uint32(r)
+	if u > utf8.MaxRune {
+		return false
+	}
+	return graphemeSimplePages[graphemeSimplePageIDs[u>>8]][u>>6&3]>>(u&63)&1 != 0
 }
 
 func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
