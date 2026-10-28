@@ -30,9 +30,9 @@ Input generation, one warm-up feed, forced pre-run GC, construction and disposal
 are outside timing. Process CPU includes GC within the timed window, native
 work and the Go-to-C boundary. Both engines parse synchronously and format
 replies into discard sinks.
-Native continuation retention is disabled.
+libghostty-vt continuation retention is disabled.
 
-| Input | Phosphor, history | Native, history | Phosphor, no history | Native, no history |
+| Input | Phosphor, history | libghostty-vt, history | Phosphor, no history | libghostty-vt, no history |
 |---|---:|---:|---:|---:|
 | Synthetic agent TUI | 491.5 | 483.9 | 520.5 | 510.9 |
 | Scrolling logs | 766.8 | 914.4 | 1,317.9 | 595.0 |
@@ -46,14 +46,14 @@ Native continuation retention is disabled.
 | OSC 8 links | 261.2 | 24.5 | 297.7 | 16.2 |
 
 Nominal history budgets are 2,000 lines / 256 KiB. They retain different work:
-Phosphor keeps 2,000 logical log lines; native keeps 387–678 physical rows.
+Phosphor keeps 2,000 logical log lines; libghostty-vt keeps 387–678 physical rows.
 For mixed graphemes those counts are 1,691 and 539–739. The history columns
 compare each engine's configured policy, not equal retained contents. The
 no-history control explicitly verifies zero retained rows on both engines.
 
-The measured native grapheme lead is about 13% with history and 3% without it.
+The measured libghostty-vt grapheme lead is about 13% with history and 3% without it.
 Small differences remain uncertain on a shared host; six short samples do not
-identify an overall fastest terminal core. The native library was built in
+identify an overall fastest terminal core. The libghostty-vt library was built in
 ReleaseFast from the verified source, with the compiler binary and library
 checksums recorded. Both binaries' loaded library paths were observed before timing.
 
@@ -68,12 +68,12 @@ Go benchmarks use wall time and decimal MB/s. Distinct clusters still allocate.
 An 80×24 prompt after erase retains about 1.51 KB of Go heap after `Compact` with a reply
 sink installed. The measured prompt RSS comparison specifically uses prompts
 followed by erase-to-end-of-line, then compaction. Across fresh processes with
-128 or 1,024 emulators, Phosphor uses about 10–26× less incremental RSS than native
+128 or 1,024 emulators, Phosphor uses about 10–26× less incremental RSS than libghostty-vt
 in those fixtures. This is a workload result, not a cost for every idle terminal.
 
 Completed editor/pager recordings retain inactive alternate screens. At 1,024
 emulators, Phosphor retains 22–47 KB of Go heap and uses about 19–51% less
-incremental RSS than native. A separate fixture checks identical contents of
+incremental RSS than libghostty-vt. A separate fixture checks identical contents of
 exactly 100 styled history rows before and after compaction; its RSS is about
 3.1× lower. All 126 fresh-process memory samples are in the bundle.
 
@@ -85,7 +85,7 @@ History byte budgets do not cap the entire emulator.
 
 ## Compatibility
 
-The native trace corpus contains 218 named cases and 853 parity actions.
+The libghostty-vt trace corpus contains 218 named cases and 853 parity actions.
 It compares cells, styles, links, cursor, modes, history and raw replies. Whole,
 one-byte and seven-byte writes agree. Continuation checks compare each engine
 with its own untouched control; they are separate from direct cross-engine parity.
@@ -94,10 +94,10 @@ with its own untouched control; they are separate from direct cross-engine parit
 |---|---:|
 | Direct input | 852 / 853 |
 | Phosphor checkpoint/repaint/Compact continuation | 851 / 853 |
-| Native checkpoint/repaint continuation | 746 / 853 |
+| libghostty-vt checkpoint/repaint continuation | 746 / 853 |
 
 The direct difference is DEC special-graphics underscore: Phosphor uses xterm's
-blank mapping; native keeps an underscore. Two Phosphor ANSI continuation cases
+blank mapping; libghostty-vt keeps an underscore. Two Phosphor ANSI continuation cases
 lose mixed alternate-screen backgrounds after resize and forced 1047 exit.
 Exact snapshots retain those cells. Failures stay in the evidence, and these
 counts are not a percentage of universal terminal compatibility.
@@ -105,8 +105,8 @@ counts are not a percentage of universal terminal compatibility.
 Known ANSI limits have explicit mechanism tests. For the forced-1047 background
 case, fuzzing checks the declared background projection and keeps all other
 state assertions active. Exact snapshots must retain the original cells and
-future behavior. A passing limit test does not count as passing native parity;
-the native trace comparison retains the raw differing cells.
+future behavior. A passing limit test does not count as passing libghostty-vt parity;
+the libghostty-vt trace comparison retains the raw differing cells.
 
 Ordinary tests also run translated Ghostty/WezTerm tables, libvterm scripts,
 Alacritty references, the pinned Unicode corpus and independent xterm-style cases.
@@ -117,7 +117,7 @@ preserve upstream attribution and policy differences.
 ## Reproduce
 
 [Development](development.md) covers Go benchmarks and test suites. The
-[native comparison guide](../oracle/ghostty/README.md) builds the native library,
+[libghostty-vt comparison guide](../oracle/ghostty/README.md) builds libghostty-vt,
 then builds the same driver against two explicit core revisions. The burst
 witnesses include cumulative cursor movement so missing middle input stays
 observable even with no history or collected replies. Run them before interpreting timings. Use fresh processes for each memory sample,

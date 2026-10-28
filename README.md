@@ -1,20 +1,23 @@
-# phosphor
+<h1 align="center">Phosphor</h1>
+<p align="center">A small terminal emulator for Go programs that keep many sessions alive.</p>
+<p align="center">
+  <a href="#use-it">Get started</a> ·
+  <a href="docs/reference.md">Reference</a> ·
+  <a href="docs/benchmarks.md">Benchmarks</a> ·
+  <a href="docs/development.md">Development</a>
+</p>
 
-**A small, headless terminal emulator for Go programs that keep lots of PTYs alive.**
+Feed Phosphor a program's output and read its screen: text, colors, hyperlinks,
+cursor and scrollback. Save a checkpoint to resume later, or send the current
+screen to a client attaching mid-session. You supply the PTY and renderer.
 
-Feed it a program's output and read what a terminal would show: cells, colors,
-hyperlinks, cursor, modes and scrollback. Save an exact checkpoint, or send ANSI
-to a client attaching later. You supply the PTY, input encoding and renderer.
+It powers [ptyd](https://github.com/2018kguo/ptyd), where shells and editors
+often sit idle with nobody watching. Small retained state and reliable
+recovery matter alongside parsing speed.
 
-Phosphor is the screen model inside [ptyd](https://github.com/2018kguo/ptyd).
-It is built for sessions that spend much of their lives waiting at a prompt,
-with no client attached, but still need to resume an editor correctly.
-
-![bash and vim running inside phosphor; the gutter lights up on changed rows](docs/demo.gif)
+![bash and vim running inside Phosphor; the gutter lights up on changed rows](docs/demo.gif)
 
 ## Use it
-
-Add it to a Go project:
 
 ```sh
 go get github.com/2018kguo/phosphor
@@ -25,164 +28,94 @@ package main
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/2018kguo/phosphor"
 )
 
 func main() {
 	t := phosphor.New(80, 24)
-	io.WriteString(t, "\x1b[32mok\x1b[0m 12 tests\r\n")
-
-	fmt.Println(t.Line(0)) // ok 12 tests
-	fmt.Println(t.Cell(0, 0).Style.Fg == phosphor.IndexedColor(2)) // true
+	t.Write([]byte("\x1b[32mhello\x1b[0m\r\n"))
+	fmt.Println(t.Line(0)) // hello
 }
 ```
 
-`Terminal` is an `io.Writer`; escape sequences and UTF-8 may be split across
-writes. For a live program, use `phosphor.WithReply(ptmx)` to send terminal
-query replies back through the PTY master. Some shells and editors wait for
-those answers. The [reference](docs/reference.md#connect-a-pty) shows the wiring.
+`Terminal` is an `io.Writer`; UTF-8 and escape sequences can span writes.
+Use `Cell` for attributes and `RowDirty` to redraw changed rows. For a live
+program, connect query replies with `phosphor.WithReply(ptmx)`: shells and
+editors may wait for those answers. See [PTY wiring](docs/reference.md#connect-a-pty).
 
-To try a renderer, clone the repo and run:
+To run the renderer shown above, clone the repo, then:
 
 ```sh
 cd examples
 go run ./mirror vim
 ```
 
-The [mirror example](examples/mirror/main.go) produces the demo above. Its
-characters and colors come from `Cell`; it redraws only changed rows.
+## Why choose Phosphor
 
-## When it is useful
+- **Go integration.** Pure Go, no cgo, external Go dependencies or separate
+  compiler toolchain. Read cells directly from your application.
+- **Small idle sessions.** Rows grow as needed, history has line and byte
+  budgets, and `Compact()` releases unused storage when output settles.
+- **Recoverable state.** `Snapshot` saves both screens, history, modes,
+  saved cursors and unfinished input. Tests continue writing and resizing
+  after restore.
+- **Your own interface.** Build a browser view, terminal renderer or agent
+  tool around the same screen model.
 
-- **Hosting many sessions.** Keep a screen model for remote shells, coding
-  agents or background jobs, including sessions nobody is currently viewing.
-- **Inspecting terminal programs.** Read the current screen, attributes,
-  hyperlinks and shell prompt markers instead of trying to interpret logs as
-  an editor's display.
-- **Attaching and recovering.** Give a new client the current picture with
-  `Repaint`, and preserve exact emulator state on disk with `Snapshot`.
-- **Building your own UI.** Draw cells in a browser, native app or terminal
-  renderer, using row damage to avoid redrawing everything.
-
-The library is pure Go and embeds in your process. It answers terminal
-queries and models output; your application owns process management, keyboard
-and mouse encoding, clipboard integration and the way cells appear on screen.
-
-## Why Phosphor instead of libghostty
+### Compared with libghostty-vt
 
 [libghostty-vt](https://github.com/ghostty-org/ghostty/blob/main/include/ghostty/vt.h)
-already provides an embeddable terminal core. It supports headless use,
-snapshots and idle compression. Choosing it does not mean embedding the
-Ghostty GUI.
+is also a headless, embeddable core with snapshots and idle compression.
+Phosphor's reasons to exist are its Go API and storage model. The recorded
+comparison shows where those choices help and where libghostty-vt leads:
 
-Phosphor grew out of ptyd's need to keep many sessions alive while nobody
-is watching them. A shell can wait at a prompt for hours. An editor can
-close while its alternate screen still needs to survive. The storage kept
-between bursts of output matters as much as parsing speed.
-
-Recorded headless workloads show the storage and speed tradeoffs:
-
-| Workload or retained state | Phosphor compared with libghostty-vt |
+| Recorded workload | Result |
 |---|---|
-| Prompts after erase and compaction | About **10–26× less incremental RSS**, depending on emulator count and allocator amortization |
-| Completed editors and pagers | **19–51% less RSS**, with inactive editor buffers retained |
-| Exactly 100 styled history rows | About **3.1× less RSS**, with equal retained contents verified |
-| Editor/pager recordings and progress | **1.22–2.67× more bytes per CPU second** under the recorded budgets |
-| Scrolling logs | Native is **19% faster** with budgeted history; Phosphor is **2.2× faster** with history disabled |
-| Grapheme-heavy Unicode | Native is about **13% faster** with history and **3% faster** without it at the measured write size |
+| Prompts after erase and compaction | Phosphor uses **10–26× less incremental RSS**, across 128 and 1,024 emulators |
+| Completed editors and pagers, inactive screens retained | Phosphor uses **19–51% less incremental RSS** |
+| Equal contents: 100 styled history rows | Phosphor uses **3.1× less incremental RSS** |
+| Editor/pager recordings and progress | Phosphor processes **1.22–2.67× more bytes per CPU second** with the recorded history budgets |
+| Scrolling logs | libghostty-vt is **19% faster** with budgeted history; Phosphor is **2.2× faster** without history |
+| Mixed graphemes | libghostty-vt is **13% faster** with history and **3% faster** without history |
 
-Inputs match, but equal byte budgets keep different amounts of history:
-Phosphor stores serialized logical lines; native prunes physical pages.
-The memory runs use 128 and 1,024 emulators in fresh processes and compact
-both engines. They exclude the child program and PTY. The
-[report](docs/benchmarks.md) records
-policies, all samples and a history-disabled parsing control. These are
-workload measurements, not per-session guarantees.
+These are headless workloads on one host. RSS is process memory; the deltas
+exclude startup, PTYs and child programs. Equal history budgets retain
+different contents because Phosphor stores logical lines and libghostty-vt
+prunes physical pages. [Methods, retained contents and raw samples](docs/benchmarks.md)
+are published together.
 
-Phosphor keeps that model in Go: no cgo, native library or separate build
-toolchain. Its production module has no external Go dependencies. Its API exposes cells directly, and the application decides when
-to compact storage and save a checkpoint. This makes it a useful fit for
-Go daemons that want to control the lifetime and cost of terminal state.
-Maintaining a separate emulator also means maintaining its compatibility;
-the test corpus and remaining differences are part of that cost.
-
-Choose libghostty when you want Ghostty's terminal behavior and a native
-dependency fits your application. It also supplies input encoders and other
-APIs that Phosphor leaves to the host. Both cores can run without a renderer.
-The reasons to choose Phosphor are its Go integration and storage choices.
-Speed and fidelity still need to be checked against your programs.
-
-## What the measurements show
-
-**Idle memory stays small.** An 80×24 prompt after erase and compaction used about **1.51 KB of Go
-heap**, with a reply sink installed in the measured workload. Rows grow as they are used,
-history has configurable line and byte budgets, and `Compact()` releases
-unused storage after output settles.
-
-That prompt number is not the cost of every session. A closed editor's
-alternate screen must stay available for later re-entry: the completed
-recordings retained **22–47 KB of heap after Compact**. History and rich
-attributes add their own storage. [Benchmarks](docs/benchmarks.md) explains
-what is retained and how heap differs from process RSS.
-
-**Continuation is part of correctness.** Checkpoints keep both screens,
-saved cursors, modes, colors, scrollback and unfinished input. Tests continue
-writing and resizing after restore, so a correct first picture is only the
-start. The library also reads the earlier checkpoint format;
-[reader requirements](docs/reference.md#save-and-restore) matter when upgrading.
-
-**Compatibility is checked against other terminals.** Five external suites,
-real editor recordings, fuzzing and a pinned libghostty-vt comparison cover
-cells, Unicode, replies and future behavior. Remaining policy differences and
-ANSI replay limits are [published](docs/benchmarks.md#compatibility), including
-the cases where terminals disagree. This is not a claim of universal VT
-compatibility.
-
-**Output parsing depends on the workload.** The recorded comparison leads
-libghostty-vt on several editor/pager recordings and progress output. History
-policy changes the log result, and native leads on grapheme-heavy Unicode.
-Choose using [your workload](docs/benchmarks.md#throughput), rather than a claim
-that one engine wins every stream.
+Choose libghostty-vt when you want Ghostty's behavior and its broader APIs,
+including input encoders, and can accept a native dependency. Choose Phosphor
+when its Go integration and retained-memory costs fit your host application.
 
 ## Tradeoffs
 
-Phosphor models terminal text: UTF-8 and Unicode widths, colors and attributes,
-wide characters and graphemes, hyperlinks, alternate screens, margins,
-scrollback, common queries and input modes. `Modes()` tells your input encoder
-what the running program requested.
+Phosphor models terminal text, including Unicode graphemes, attributes,
+hyperlinks, alternate screens, margins, queries and input modes. It supplies
+no window, fonts, input encoder, clipboard provider or terminal graphics.
+Some VT features, including rectangular operations and double-size lines,
+are outside its scope. Check [supported behavior](docs/reference.md#supported-behavior)
+and [compatibility coverage](docs/benchmarks.md#compatibility) for your programs.
 
-It provides no window, fonts, GPU renderer, input encoder, sixel/kitty images
-or clipboard provider. Some VT features, including rectangular operations
-and double-size lines, are outside its scope. See the
-[supported behavior](docs/reference.md#supported-behavior) before choosing it
-for an application that depends on a particular escape sequence.
+Use `Snapshot` for exact persistence. `Repaint` emits ANSI for attachment
+and has [documented limits](docs/reference.md#attach-a-client), including
+palette changes and some alternate-screen, cursor and grapheme states.
+See [checkpoint reader requirements](docs/reference.md#save-and-restore)
+when upgrading.
 
-`Snapshot` is the persistence format. `Repaint` is portable terminal output
-and has a weaker contract: REP, a few cursor/margin combinations, very narrow
-graphemes and mixed-background alternate screens can differ on continued
-output. Program-set palette colors are omitted from replay. See the precise
-[snapshot reader requirements](docs/reference.md#save-and-restore) and
-[ANSI attach limits](docs/reference.md#attach-a-client).
+A `Terminal` needs exclusive access: use one goroutine or a lock around reads
+and writes. Reply writers and bell callbacks run during `Write` and must not
+call back into that terminal.
 
-A `Terminal` needs exclusive access: use one goroutine or hold a lock around
-all reads and writes. Reply writers and bell callbacks run during `Write`
-and must not call back into that terminal.
+## Documentation
 
-## Docs
-
-- [Reference](docs/reference.md): PTY wiring, rendering, replies, history,
-  checkpoints, replay and supported behavior.
-- [Benchmarks](docs/benchmarks.md): current memory and throughput results,
-  compatibility coverage, caveats and raw evidence.
-- [Development](docs/development.md): run the demo, tests, benchmarks and
-  optional native comparison.
-- [Go API and examples](https://pkg.go.dev/github.com/2018kguo/phosphor): all
-  exported types and methods.
+- [Reference](docs/reference.md): PTYs, rendering, replies, history and persistence.
+- [Benchmarks](docs/benchmarks.md): performance, compatibility and reproducible evidence.
+- [Development](docs/development.md): tests, examples and libghostty-vt comparisons.
+- [Go API](https://pkg.go.dev/github.com/2018kguo/phosphor): exported types and methods.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). External test sources and their licenses are
-listed in [NOTICE.md](testdata/conformance/NOTICE.md). X11 color names retain
-the notices in [licenses/X11.txt](licenses/X11.txt).
+MIT. See [LICENSE](LICENSE), [external test notices](testdata/conformance/NOTICE.md)
+and [X11 color notices](licenses/X11.txt).
