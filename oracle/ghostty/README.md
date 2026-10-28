@@ -2,11 +2,11 @@
 
 This tool asks whether the same PTY bytes produce the same terminal state, and what each engine costs in time and memory. It measures headless emulation; fonts, rendering and whole-daemon latency are outside the experiment. Production Phosphor needs neither cgo nor Ghostty.
 
-Start with the [v0.4 results](results/2026-10-27-round6/README.md) and [comparison contract](coverage.md). Earlier phases cover [idle rows](results/2026-10-27/README.md), [metadata pools](results/2026-10-27-round2/README.md), [Unicode/checkpoints](results/2026-10-27-round3/README.md), [gap audit](results/2026-10-27-round4/README.md) and [shell prompts](results/2026-10-27-round5/README.md). They describe their measured revisions, not the current release.
+Start with the [idle-state and compatibility results](results/2026-10-27-round6/README.md) and [comparison contract](coverage.md). Earlier phases cover [idle rows](results/2026-10-27/README.md), [metadata pools](results/2026-10-27-round2/README.md), [Unicode/checkpoints](results/2026-10-27-round3/README.md), [gap audit](results/2026-10-27-round4/README.md) and [shell prompts](results/2026-10-27-round5/README.md). They describe their measured revisions, not the current release.
 
 ## Build
 
-The current comparison pins Ghostty `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, Zig 0.17.0 and ReleaseFast. From a clean native checkout:
+The comparison pins Ghostty `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c` and ReleaseFast. Use the Zig toolchain required by its [build manifest](https://github.com/ghostty-org/ghostty/blob/46e9dc9a927b2e7e7cba79e6902c176127dbdf2c/build.zig.zon). From a clean native checkout:
 
 ```sh
 git clone https://github.com/ghostty-org/ghostty.git /tmp/ghostty-comparison
@@ -27,7 +27,7 @@ go test -tags ghostty ./ghostty
 /tmp/phosphor-ghostty -mode trace -traces ghostty/traces.json > traces.jsonl
 ```
 
-Use that same checkout to generate tables and build the linked library. Native build-info says `0.1.0-dev` without commit metadata; the verified source pin identifies it.
+Use that same checkout to generate tables and build the linked library. Native build-info omits commit metadata; the verified source pin identifies the measured build.
 
 ## Choose a measurement
 
@@ -60,6 +60,6 @@ Use RSS for cross-engine comparisons: the native Go heap contains only its wrapp
 | `closed-{vim,nvim,nano,less,man}[-compact]` | Completed recordings with inactive ALT retained; see [costs and exact build](results/2026-10-27-round6/closed-memory.md). |
 | `equal-100-history`, `full`, `compressed` | Equal 100 styled lines /full configured history /native idle compression. Phosphor already stores compact VT history. |
 
-`compaction_applied` distinguishes old binaries without Compact. v0.3 freed dead rows; v0.4 also avoids initial full-width prompt allocation and frees zero tails. Freed heap need not immediately leave RSS; the tool does not impose a production GC policy.
+`compaction_applied` distinguishes old binaries without Compact. Earlier compaction freed dead rows; the measured candidate also avoids initial full-width prompt allocation and frees zero tails. Freed heap need not immediately leave RSS; the tool does not impose a production GC policy.
 
 Trace capture rejects oversized input rather than truncating: fixtures 2 MiB/512 cases/256 actions per case/1 MiB written per case; geometry 1..256×1..128; native capture 256 total history+screen rows/32768 cells/1024 codepoints per cell/4096 URI bytes per cell/1 MiB replies. These are oracle bounds, not engine capacities. See [coverage](coverage.md) for scopes, policies and export limits.

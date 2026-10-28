@@ -1,8 +1,10 @@
 # Second comparison: release unused metadata
 
-Could idle compaction also reclaim dead links and combining characters? Yes: the erased rich-screen case saved about 98% of Go heap, without changing ordinary prompt/full-screen storage. Scroll-and-clear (`CSI22J`) also gained native-compatible behavior. This phase predates exact binary checkpoints.
+Idle compaction reclaimed dead links and combining characters. The erased rich-screen case saved about 98% of Go heap, without changing ordinary prompt/full-screen storage. Scroll-and-clear (`CSI22J`) also gained native-compatible behavior. This phase predates exact binary checkpoints.
 
-Baseline `49f49b8`; measured `f6046d4`; final runtime `47ad94e` adds post-resize pool collection outside the measured paths. Ghostty `919dca5c848d43a489a4cb2e1feade016f0fa2db`, Zig 0.17.0, `-Demit-lib-vt -Doptimize=ReleaseFast`. Compare the [first phase](../2026-10-27/README.md) for v0.1.0 results.
+Baseline `49f49b8`; measured `f6046d4`; final runtime `47ad94e` adds post-resize pool collection outside the measured paths. Ghostty `919dca5c848d43a489a4cb2e1feade016f0fa2db`, `-Demit-lib-vt -Doptimize=ReleaseFast`. Compare the [first phase](../2026-10-27/README.md) for the initial results.
+
+Build toolchains are recorded in [environment metadata](../environments.json).
 
 ## Retained memory
 
@@ -34,7 +36,7 @@ Earlier pool prototypes held 128 terminals per fresh process; medians of three G
 
 ## Parsing and state costs
 
-Five alternating rounds, 1 KiB writes, 120×40; median MiB per process CPU second includes GC/cgo/native work. Apple M5 Pro, Go 1.26.3 macOS/arm64; Colima Linux/arm64, four vCPUs, 5 GiB container memory, Go 1.26.10.
+Five alternating rounds, 1 KiB writes, 120×40; median MiB per process CPU second includes GC/cgo/native work. Apple M5 Pro macOS/arm64; Colima Linux/arm64, four vCPUs, 5 GiB container memory.
 
 | Stream | macOS prior | macOS candidate | macOS Ghostty | Linux prior | Linux candidate | Linux Ghostty |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -59,7 +61,7 @@ Host drift matters: Linux logs' separate medians suggest -4%, while paired round
 
 Persistence remained 98,427 bytes of Phosphor ANSI versus 317,035 bytes of native binary snapshot. Native restored its stronger representation faster.
 
-The retained SGR-table change `0d6b7e872bca679be95bbac95e420d000c4450f4` (base `49f49b8`) removed a 192-byte copy; appendSGR's frame shrank 336→144 bytes. The baseline profile attributed 37% of log CPU to appendRow, 16% printASCII, 10% rotation, 8% appendSGR. Six rotating 200 ms control/table/guard rounds gave these baseline/table speed ratios (>1 favors the table):
+The retained SGR-table change `0d6b7e872bca679be95bbac95e420d000c4450f4` (base `49f49b8`) removed a 192-byte copy; appendSGR's frame shrank from 336 to 144 bytes. The baseline profile attributed 37% of log CPU to appendRow, 16% printASCII, 10% rotation, 8% appendSGR. Six rotating 200 ms control/table/guard rounds gave these baseline/table speed ratios (>1 favors the table):
 
 | Work | Ratio |
 | --- | ---: |
@@ -78,9 +80,9 @@ Unchanged controls moved too. Initial CPU pairs suggested 2.4% less log CPU /2.2
 
 ## Correctness and the resize fix
 
-Selected probes improved 22/39→32/39 versus native 39/39; all 13 new scroll-clear cases match (ten formerly failed). Seven remaining differences were graphemes. ANSI still omitted REP and clamped an outside-origin cursor; both exporters exposed the latter, native Snapshot preserved it.
+Selected probes improved from 22/39 to 32/39 versus native 39/39; all 13 new scroll-clear cases match (ten formerly failed). Seven remaining differences were graphemes. ANSI still omitted REP and clamped an outside-origin cursor; both exporters exposed the latter, native Snapshot preserved it.
 
-Review of Phosphor `49f49b8..c8ea2cd` (`40a5881` only changed a driver executable bit) and ptyd `af36c18` to the working tree based on `231304c` found a crash: detached resize imports were invisible to collection after Compact. Public 100×4→100×5 witnesses with 400 entries panicked at cluster index 36/length 36 or link 4/length 4; the focused red case also reached index 138/length 138. [Before/after pool](history-pools-before.txt) /[after](history-pools-after.txt) and [link](history-links-before.txt) /[after](history-links-after.txt) outputs retain the evidence.
+Review of Phosphor `49f49b8..c8ea2cd` (`40a5881` only changed a driver executable bit) and ptyd `af36c18` to the working tree based on `231304c` found a crash: detached resize imports were invisible to collection after Compact. Public 100×4 to 100×5 witnesses with 400 entries panicked at cluster index 36/length 36 or link 4/length 4; the focused red case also reached index 138/length 138. [Before/after pool](history-pools-before.txt) /[after](history-pools-after.txt) and [link](history-links-before.txt) /[after](history-links-after.txt) outputs retain the evidence.
 
 Fix `f936a21` after `e4d756c` counts imported references (including repeats), temporarily raises existing collection thresholds, then restores them after attaching rows. It keeps the uint16 link bound; plain ASCII imports allocate no extra state. Twelve cluster/link/mixed ×height/width ×main/ALT cases cross three history batches, saved pens, future collection and resizes: [red](idle-memory/resize-import-red.txt), [green](idle-memory/resize-import-green.txt). Final resize cleanup keeps zero unused entries after 1/10/100 idle cycles. Lock review found no reverse overlapping `t.mu`/`t.scrMu` edge in ptyd.
 

@@ -2,7 +2,9 @@
 
 This pre-release experiment cut erased-screen Go heap by 92% while preserving meaningful cells. Ghostty still led several parsing streams and had broader Unicode support. These are historical measurements, not current release claims.
 
-Source: candidate `4216f73`, base `608a9b8`; idle-only baseline `d4bb0c0` has v0.1.0's 880-byte Terminal layout. Ghostty `919dca5c848d43a489a4cb2e1feade016f0fa2db`, Zig 0.17.0, `-Demit-lib-vt -Doptimize=ReleaseFast`. No PGO. macOS: Apple M5 Pro, Go 1.26.3; Linux: Colima arm64, four vCPUs, 6 GB RAM, Go 1.26.10.
+Source: candidate `4216f73`, base `608a9b8`; idle-only baseline `d4bb0c0` has the original 880-byte Terminal layout. Ghostty `919dca5c848d43a489a4cb2e1feade016f0fa2db`, `-Demit-lib-vt -Doptimize=ReleaseFast`. No PGO. macOS: Apple M5 Pro; Linux: Colima arm64, four vCPUs, 6 GB RAM.
+
+Build toolchains are recorded in [environment metadata](../environments.json).
 
 ## Memory
 
@@ -34,7 +36,7 @@ These cases have no history. Allocator retention and lazily touched native pages
 
 Five alternating rounds, identical bytes in 1 KiB chunks, 120×40. Median MiB per process CPU second includes GC, cgo and native work; wall samples remain in the raw data:
 
-| Input | macOS v0.1.0 | macOS candidate | macOS Ghostty | Linux v0.1.0 | Linux candidate | Linux Ghostty |
+| Input | macOS baseline | macOS candidate | macOS Ghostty | Linux baseline | Linux candidate | Linux Ghostty |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Synthetic agent TUI | 427 | 464 | 504 | 428 | 448 | 487 |
 | Scrolling logs | 417 | 550 | 912 | 412 | 553 | 896 |
@@ -45,11 +47,11 @@ Five alternating rounds, identical bytes in 1 KiB chunks, 120×40. Median MiB pe
 | nano recording | 429 | 446 | 576 | 412 | 423 | 563 |
 | man recording | 377 | 384 | 436 | 359 | 369 | 419 |
 
-Log CPU throughput rose about 32% on macOS /34% on Linux through reused history buffers, ASCII serialization and CSI digit runs. Shared-host noise limits small claims: [ten one-second nvim pairs](linux-nvim-focus.jsonl) gave about 565→609 MiB/CPU-s, contradicting the short Linux result. NEON expansion, word packing and four-cell unrolling were rejected for regressions elsewhere.
+Log CPU throughput rose about 32% on macOS /34% on Linux through reused history buffers, ASCII serialization and CSI digit runs. Shared-host noise limits small claims: [ten one-second nvim pairs](linux-nvim-focus.jsonl) gave about 565 to 609 MiB/CPU-s, contradicting the short Linux result. NEON expansion, word packing and four-cell unrolling were rejected for regressions elsewhere.
 
 For a 120×40 screen with 627 history rows, median wall times over five macOS rounds:
 
-| Operation | v0.1.0 | Candidate phosphor | Ghostty |
+| Operation | Baseline | Candidate phosphor | Ghostty |
 | --- | ---: | ---: | ---: |
 | Read visible text and selected metadata | 11.1 us | 5.6 us | 6.5 us |
 | ANSI export with history | 14.7 us | 14.5 us | 215.6 us |

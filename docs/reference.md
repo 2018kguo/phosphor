@@ -121,11 +121,13 @@ screen. Set positive `MaxBytes` and `MaxCells` for your application; these
 bound restoration, not future output. Use `errors.Is` with
 `ErrSnapshotMalformed`, `ErrSnapshotVersion` and `ErrSnapshotLimit`.
 
-Phosphor v0.4 writes snapshot format 2 and reads released format 1 checkpoints
-from v0.3. Older readers cannot read format 2: upgrade readers before writing
-new checkpoints. Legacy snapshots lack newer facts such as prompt metadata;
+The reader accepts the current checkpoint format and the earlier format
+covered by the [archived fixtures](../testdata/snapshot-v1/README.md).
+Older readers cannot read newly written checkpoints: upgrade readers before
+writing them. Legacy snapshots lack newer facts such as prompt metadata;
 the reader supplies defaults and migrates the old cursor representation.
-For ptyd checkpoints written with Phosphor v0.4, use ptyd v0.3 or newer.
+Applications such as ptyd must upgrade their embedded reader too. A daemon's
+outer checkpoint header alone does not identify the emulator format inside it.
 
 ## Attach a client
 

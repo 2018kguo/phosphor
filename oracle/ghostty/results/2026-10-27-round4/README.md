@@ -1,18 +1,20 @@
 # Fourth comparison: find the remaining gaps
 
-This intermediate audit expanded the corpus and exposed missing commands, policy differences and exporter failures. It was not a release pass. Native: `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, macOS/arm64, Zig 0.17.0, `zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4`; build-info `0.1.0-dev` needs that source pin.
+This intermediate audit expanded the corpus and exposed missing commands, policy differences and exporter failures. It was not a release pass. Native: `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, macOS/arm64, `zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4`; build-info omits the commit, so the source pin identifies the build.
 
 | Dataset | Historical result |
 |---|---|
-| [Released v0.3](traces-v030.jsonl) |150/174 original parity actions. |
+| [Baseline](traces-v030.jsonl) |150/174 original parity actions. |
 | [Mouse bits/tabs](traces-modes-tabs.jsonl) |158/174, including independently observed effective mouse state. |
 | [Expanded, before fixes](traces-expanded-before.jsonl) |112 cases/340 actions: direct 293, Phosphor continuation 338, native 334, combined 289 passes. Trace exited 1. |
 | [Old policies](traces-existing-policies.jsonl) |Pre-fix differences, including prints after autowrap was re-enabled. |
-| [Clipped/policy expansion](traces-policies-clipped.jsonl) |149 cases/468 actions,21 mode bits (including 3/40/4), eight styled 4→1-column cases and 12 ALT transitions. Only two semantic annotation cases still differed directly; exporter failures stayed separate. |
+| [Clipped/policy expansion](traces-policies-clipped.jsonl) |149 cases/468 actions,21 mode bits (including 3/40/4), eight styled cases resized from four columns to one; 12 ALT transitions. Only two semantic annotation cases still differed directly; exporter failures stayed separate. |
 
 Twelve cluster-boundary cases passed:64/65 suffixes, two-byte accents/four-byte selectors, mode 2027 off/on/mixed, Compact/resize/snapshot/ANSI/future writes. Native keeps primary+64 and ignores extra suffixes without moving the cursor; the old capacity exclusion became parity.
 
 Mouse press/release/button/free-motion and a column beyond byte coordinates distinguished tracking modes and all five encodings through the public native encoder. Native's own ANSI export lost effective state in three fixtures; Phosphor passed. Two Phosphor continuation failures were outside-origin ANSI restoration. Untouched controls kept these separate from direct parity.
+
+Build toolchains are recorded in [environment metadata](../environments.json).
 
 ## Commands found by the translated-suite audit
 

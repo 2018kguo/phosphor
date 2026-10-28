@@ -14,7 +14,7 @@ with no client attached, but still need to resume an editor correctly.
 
 ## Use it
 
-Add it to a Go 1.24+ project:
+Add it to a Go project:
 
 ```sh
 go get github.com/2018kguo/phosphor
@@ -70,12 +70,37 @@ The library is pure Go and embeds in your process. It answers terminal
 queries and models output; your application owns process management, keyboard
 and mouse encoding, clipboard integration and the way cells appear on screen.
 
-## Why choose it
+## Why Phosphor instead of libghostty
+
+[libghostty-vt](https://github.com/ghostty-org/ghostty/blob/main/include/ghostty/vt.h)
+already provides an embeddable terminal core. It supports headless use,
+snapshots and idle compression. Choosing it does not mean embedding the
+Ghostty GUI.
+
+Phosphor grew out of ptyd's need to keep many sessions alive while nobody
+is watching them. A shell can wait at a prompt for hours. An editor can
+close while its alternate screen still needs to survive. The storage kept
+between bursts of output matters as much as parsing speed.
+
+Phosphor keeps that model in Go: no cgo, native library or separate build
+toolchain. Its API exposes cells directly, and the application decides when
+to compact storage and save a checkpoint. This makes it a useful fit for
+Go daemons that want to control the lifetime and cost of terminal state.
+Maintaining a separate emulator also means maintaining its compatibility;
+the test corpus and remaining differences are part of that cost.
+
+Choose libghostty when you want Ghostty's terminal behavior and a native
+dependency fits your application. It also supplies input encoders and other
+APIs that Phosphor leaves to the host. Both cores can run without a renderer.
+The reasons to choose Phosphor are its Go integration and storage choices.
+Speed and fidelity still need to be checked against your programs.
+
+## What the measurements show
 
 **Idle memory stays small.** An 80×24 shell prompt used about **1.45 KB of Go
-heap after Compact**, around **42% less than v0.3.0**, in the current measured
-workload. Rows grow as they are used, history has configurable line and byte
-budgets, and `Compact()` releases unused storage after output settles.
+heap after Compact** in the measured workload. Rows grow as they are used,
+history has configurable line and byte budgets, and `Compact()` releases
+unused storage after output settles.
 
 That prompt number is not the cost of every session. A closed editor's
 alternate screen must stay available for later re-entry: the completed
@@ -86,7 +111,7 @@ what is retained and how heap differs from process RSS.
 **Continuation is part of correctness.** Checkpoints keep both screens,
 saved cursors, modes, colors, scrollback and unfinished input. Tests continue
 writing and resizing after restore, so a correct first picture is only the
-start. The library reads released v1 snapshots as well as its current format;
+start. The library also reads the earlier checkpoint format;
 [reader requirements](docs/reference.md#save-and-restore) matter when upgrading.
 
 **Compatibility is checked against other terminals.** Five external suites,
@@ -98,7 +123,7 @@ compatibility.
 
 **Output parsing is fast, with tradeoffs.** The current comparison leads
 libghostty-vt on several editor/pager recordings and progress output; native
-leads on logs, a synthetic TUI and nano. Changes from v0.3.0 are mixed too.
+leads on logs, a synthetic TUI and nano.
 Choose using [your workload](docs/benchmarks.md#throughput), rather than a claim
 that one engine wins every stream.
 
@@ -125,7 +150,6 @@ output. Program-set palette colors are omitted from replay. See the precise
 A `Terminal` needs exclusive access: use one goroutine or hold a lock around
 all reads and writes. Reply writers and bell callbacks run during `Write`
 and must not call back into that terminal.
-
 
 ## Docs
 

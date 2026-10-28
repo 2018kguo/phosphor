@@ -1,7 +1,8 @@
 # Develop and verify Phosphor
 
-The library needs Go 1.24 or newer. It is pure Go; ordinary builds and tests
-do not need a native terminal library, Zig or cgo. The interactive examples
+The library's toolchain requirement is in [go.mod](../go.mod).
+It is pure Go; ordinary builds and tests do not need a native terminal
+library, Zig or cgo. The interactive examples
 and optional comparison tools have separate Go modules and dependencies.
 
 ## Run the demo
@@ -15,8 +16,7 @@ go run ./mirror vim
 
 Replace `vim` with a command and arguments of your own. The mirror starts a
 PTY, feeds output to Phosphor and redraws from cells and dirty-row reports.
-The examples module currently declares Go 1.26; this is separate from the
-library's Go 1.24 minimum.
+The [examples module](../examples/go.mod) declares its own toolchain requirement.
 
 ## Run checks
 
@@ -54,9 +54,9 @@ go test -run '^$' -fuzz '^FuzzSnapshotContinuation$' -fuzztime 30s
 
 Other targets cover raw bytes, chunking, replies, Unicode, repaint, damage,
 compaction and sparse rows. [CI](../.github/workflows/test.yml) lists the
-maintained targets and runs Go 1.24/current-Go checks. A change to storage
-or persistence should preserve future writes and resize, not just a
-restored first frame. Actual released v1 snapshots are kept under
+maintained targets and tests the minimum supported and current Go toolchains.
+A change to storage or persistence should preserve future writes and resize, not just a
+restored first frame. Checkpoints from an earlier writer are kept under
 [`testdata/snapshot-v1`](../testdata/snapshot-v1/README.md).
 
 ## Measure your workload
@@ -87,7 +87,7 @@ current results and why prompt memory is not a universal per-session cost.
 The optional driver uses public native APIs for compatibility, throughput,
 state costs and memory. Follow the pinned build and environment instructions
 in the [oracle README](../oracle/ghostty/README.md). Native builds require
-the documented Zig version, cgo headers and the built library; none is a
+the pinned build's Zig toolchain, cgo headers and the built library; none is a
 production dependency of Phosphor.
 
 Run named traces with whole writes and byte chunks, keep raw replies and

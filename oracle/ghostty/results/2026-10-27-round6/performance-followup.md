@@ -1,8 +1,10 @@
 # Recover the cost of bulk erasure
 
+Build toolchains are recorded in [environment metadata](../environments.json).
+
 A semantic-preserving EL 2 change had replaced bulk zeroing with scalar stores. Restoring `clear` after half-wide repairs, plus skipping SGR 0 pool work for E=0, recovered the measured cost without changing damage, wrap/prompt flags, prefix storage, colored erase, layouts or snapshots. The dense-row probe was rejected.
 
-Apple M5 Pro, macOS/arm64, Go 1.26.3; before `8d1511c`, after only those two changes. Same driver/data,1024-byte reads, GOMAXPROCS=1, seven alternating 750 ms pairs. Host speed changed between probes and early wall samples were interrupted: compare adjacent controls, not separate runs. All [accepted-change samples](performance-bulk-clear.jsonl) remain.
+Apple M5 Pro, macOS/arm64; before `8d1511c`, after only those two changes. Same driver/data,1024-byte reads, GOMAXPROCS=1, seven alternating 750 ms pairs. Host speed changed between probes and early wall samples were interrupted: compare adjacent controls, not separate runs. All [accepted-change samples](performance-bulk-clear.jsonl) remain.
 
 | Stream | Before wall MiB/s, seven samples | After wall MiB/s, seven samples | Wall median change | CPU median change |
 |---|---|---|---:|---:|
@@ -22,7 +24,7 @@ CPU changes within adjacent pairs, in order:
 | less-recording | +22.30%, +19.25%, +19.37%, +23.96%, +21.15%, +21.16%, +20.52% |
 | logs | +5.24%, +2.42%, -1.23%, -0.51%, +5.52%, +3.09%, +1.42% |
 
-Matched two-second `BenchmarkWriteStream/claude` profiles used the same 8192-byte harness:8d spent 170/2050 ms in fillCells (140 ms at scalar stores), versus v0.3's 40 ms cumulative EL 2 bulk-clear path. [Profile text](performance-claude-profiles.txt) supports the hotspot, not exact attribution of every percentage point; binary profiles stayed in the experiment directory.
+Matched two-second `BenchmarkWriteStream/claude` profiles used the same 8192-byte harness:8d spent 170/2050 ms in fillCells (140 ms at scalar stores), versus the baseline's 40 ms cumulative EL 2 bulk-clear path. [Profile text](performance-claude-profiles.txt) supports the hotspot, not exact attribution of every percentage point; binary profiles stayed in the experiment directory.
 
 [Row-only probe](performance-row-probe.jsonl): vim+2.7%, Claude-1.4%, less/progress within 0.7%, logs within 0.3%; seven 750 ms pairs except logs five 300 ms pairs. Excluded. [SGR 0-only probe](performance-sgr-probe.jsonl): progress+3.7%, vim+2.5%, Claude flat, less within 0.6%. Retained: E=0 guarantees default underline/no link. SGR 59 stayed unchanged.
 

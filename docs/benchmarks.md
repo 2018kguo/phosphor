@@ -3,21 +3,22 @@
 Choose Phosphor for small idle sessions, a Go cell model and exact checkpoints.
 Parsing throughput varies with the program; it does not beat every other
 engine on every stream. These results describe fixed workloads on an Apple
-M5 Pro, macOS arm64, Go 1.26.3. Native comparisons use libghostty-vt at
-`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, ReleaseFast, Zig 0.17.0.
+M5 Pro, macOS arm64. Native comparisons use libghostty-vt at
+`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, ReleaseFast.
 
 The [measurement report](../oracle/ghostty/results/2026-10-27-round6/README.md)
-has the methods, source versions and every raw sample.
+has the methods, source commits and every raw sample. Toolchain details are
+recorded in [environment metadata](../oracle/ghostty/results/environments.json).
 
 ## Idle memory
 
 At a shell prompt, an 80×24 terminal retained about **1.45 KB of Go heap after
-Compact**, roughly **42% below v0.3.0**. Prefix rows avoid paying for a full
+Compact**. Prefix rows avoid paying for a full
 screen while only a prompt is visible.
 
 Median bytes per terminal, three fresh processes with 1,024 live terminals:
 
-| Workload after idle compaction | v0.3 heap | v0.4 heap | v0.4 RSS delta | Native RSS delta |
+| Workload after idle compaction | Baseline heap | Phosphor heap | Phosphor RSS delta | Native RSS delta |
 |---|---:|---:|---:|---:|
 | Shell prompt, including EL | 2,521 | 1,449 | 1,264 | 31,280 |
 | Colored prompt, including EL | 2,515 | 1,443 | 1,760 | 47,840 |
@@ -45,7 +46,7 @@ can exceed it. Measure the screen contents and history retention you need.
 
 Median MiB/s, five alternating rounds, 500 ms samples, 120×40, 1 KiB writes:
 
-| Stream | v0.3.0 | v0.4.0 | libghostty-vt |
+| Stream | Baseline | Phosphor | libghostty-vt |
 |---|---:|---:|---:|
 | Synthetic coding-agent TUI | 441.8 | 427.4 | 467.7 |
 | Logs | 521.8 | 537.9 | 884.7 |
@@ -57,7 +58,7 @@ Median MiB/s, five alternating rounds, 500 ms samples, 120×40, 1 KiB writes:
 | man recording | 409.7 | 519.9 | 407.8 |
 
 Phosphor leads native on five of these streams; native leads logs, the
-synthetic TUI and nano. Against v0.3.0, several recordings improve while the
+synthetic TUI and nano. Against the baseline, several recordings improve while the
 TUI, progress and vim medians are about 3–6% lower. Short samples and shared
 host scheduling do not establish small regressions or universal speedups.
 Raw wall and process CPU samples retain the variation and every outlier.
@@ -105,7 +106,7 @@ record sources and licenses. Graphics and GUI behavior are outside this
 headless text-model comparison.
 
 Snapshot tests cover future output and resize, including checkpoints written
-by the released v0.3.0 library. Recordings and fuzz tests exercise chunk
+by an earlier library build. Recordings and fuzz tests exercise chunk
 boundaries, Unicode, dirty rows and exact versus ANSI continuation. Read
 [the API limits](reference.md#attach-a-client) when attach fidelity matters.
 
