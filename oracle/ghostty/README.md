@@ -49,7 +49,8 @@ Use the same driver against two explicit core revisions. For the recorded
 baseline and candidate:
 
 ```sh
-ghostty/build.sh ecfe310cd6da699df77796d35a091423075b30b3   611b81c71c4c1ec030fa32dc1555f30535a2df9f "$PHOSPHOR_DIR/.bench/native"
+ghostty/build.sh ecfe310cd6da699df77796d35a091423075b30b3 \
+  e706934f1da337140282911de72fd725262f42e3 "$PHOSPHOR_DIR/.bench/native"
 ```
 
 The builder uses disposable core checkouts and alternate module files, leaving
@@ -61,7 +62,9 @@ inspect them for uncommitted measurement changes.
 ## Measure
 
 ```sh
-GOMAXPROCS=1 COMPARE_CHUNK=1024 COMPARE_DURATION=750ms   COMPARE_HISTORY=budgeted ghostty/ab.sh   "$PHOSPHOR_DIR/.bench/native/baseline"   "$PHOSPHOR_DIR/.bench/native/candidate" "$PHOSPHOR_DIR/.bench/throughput.jsonl"
+GOMAXPROCS=1 COMPARE_CHUNK=1024 COMPARE_DURATION=1s COMPARE_HISTORY=budgeted \
+  ghostty/ab.sh "$PHOSPHOR_DIR/.bench/native/baseline" \
+  "$PHOSPHOR_DIR/.bench/native/candidate" "$PHOSPHOR_DIR/.bench/throughput.jsonl"
 ```
 
 The maintained runner balances all three sample positions. Its default six

@@ -157,7 +157,7 @@ These limits apply to future output as well as the first attached picture.
 
 ## Supported behavior
 
-Phosphor models UTF-8, scalar widths from the pinned native core, combining marks, wide cells,
+Phosphor models UTF-8, scalar widths from the pinned libghostty-vt core, combining marks, wide cells,
 DEC special graphics and the British charset; cursor movement, tabs, pending
 wrap, editing, protection, BCE, scrolling and margins; screens 47/1047/1049;
 SGR attributes and underline styles/colors; title, hyperlinks, shell markers,
