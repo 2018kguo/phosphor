@@ -31,8 +31,8 @@ The mode array order is: application cursor, application keypad,
 bracketed paste, focus events, autowrap, insert, newline, origin,
 reverse video, synchronized output, X10 mouse, normal mouse, button
 mouse, any-event mouse, UTF8 mouse, SGR mouse, URXVT mouse, SGR-pixel
-mouse, DECCOLM132-column selection, permission to switch columns, and
-smooth scrolling. Stored mode bits are compared as reported; the oracle does not
+mouse, DECCOLM 132-column selection, permission to switch columns,
+smooth scrolling, mode47, mode1047 and mode1049. Stored mode bits are compared as reported; the oracle does not
 collapse native settings to make them agree.
 
 Each trace also reports direct parity between untouched engines separately
@@ -92,10 +92,11 @@ not a native paired run. The newer pinned source has 460 tests in
 `Terminal.zig` and 148 in `stream_terminal.zig`; other Zig modules add
 further tests. Those counts are not interchangeable denominators.
 
-The current Go translation passes 517 cases, keeps no known failures
-and excludes 32 cases. Five former hyperlink exclusions now
-assert exact text and per-cell URIs. Remaining exclusions are 15 palette,
-seven semantic prompt, six reply, two image and two charset
+The current Go translation passes 524 cases, keeps no known failures
+and excludes 25 cases. Five former hyperlink exclusions now
+assert exact text and per-cell URIs. Seven prompt cases also assert text,
+cursor, history and raw row annotations.
+Remaining exclusions are 15 palette, six reply, two image and two charset
 cases. Native fixtures exercise all non-image groups with raw replies and
 continuation checks; they retain failures rather than marking unsupported
 commands as passing. Images remain outside the headless text contract.

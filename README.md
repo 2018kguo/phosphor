@@ -294,18 +294,20 @@ Five external suites run as ordinary Go tests (`VT_CONF_REPORT=1 go test
 
 | Suite | How | Pass | Fail | Deliberate difference | Out of scope |
 |---|---|---|---|---|---|
-| libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 731 | 0 | 26 | 195 |
-| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 502 | 0 | 5 | 42 |
-| wezterm `term/src/test` | translated cases | 128 | 0 | 6 | 4 |
-| esctest2 (xterm) | independently written cases (the GPL source is not used) | 410 | 0 | 12 | 215 |
-| alacritty ref tests | recordings and reference grids, per line | 1507 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |
+| libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 728 | 0 | 30 | 195 |
+| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 524 | 0 | 0 | 25 |
+| wezterm `term/src/test` | translated cases | 123 | 0 | 11 | 4 |
+| esctest2 (xterm) | independently written cases (the GPL source is not used) | 412 | 0 | 10 | 215 |
+| alacritty ref tests | recordings and reference grids, per line | 1510 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |
 
 "Deliberate difference" cases are listed with a reason in
 `conformance_known_test.go`: places where that emulator departs from
 xterm (wezterm lets the cursor column equal the width, alacritty ignores
 SGR 21 and keeps a pending wrap across EL, libvterm brightens bold colors
 in the pen and answers DA1 as a VT100), places where the upstream harness
-fakes state, and the few gaps in the list above. "Out of scope" counts
+fakes state, and explicit policy conflicts such as tab resets on width
+changes and independent mouse-mode bits. Those references stay unchanged;
+following one terminal can disagree with another. "Out of scope" counts
 cases for features listed as not modeled, mostly input encoding,
 graphics-adjacent and window operations, palette rendering and rectangular
 operations. Query replies are checked by the
@@ -322,7 +324,9 @@ Besides the suites:
   never changes the state), `FuzzGraphemeTransitions` (clustering, mode
   changes and reflow), `FuzzRestoreSnapshot` (malformed binary data and
   atomic failure), `FuzzSnapshotContinuation` (exact restore followed by
-  continued output), and, in the `oracle` module, `FuzzOracle`, a
+  continued output), `FuzzSparseHistoryValidation` (private history grammar),
+  `FuzzPrefixRows` and `FuzzColdPrefixWrites` (sparse rows against dense
+  storage), and, in the `oracle` module, `FuzzOracle`, a
   differential fuzzer against `charmbracelet/x/vt` on the subset where it
   agrees with xterm. CI runs each for 30 seconds. Before
   the extraction the targets had about 2.3 hours of fuzzing; since, each
@@ -340,12 +344,12 @@ Besides the suites:
 
 ## Performance
 
-The [native prompt and continuation comparison](oracle/ghostty/results/2026-10-27-round5/README.md)
-and [cold-prefix measurements](oracle/ghostty/results/2026-10-27-round4/cold-prefix-measurements.md)
-record the latest compatibility and idle-memory work. Prompt allocation
-changes reduce fresh-process RSS without requiring a full-row allocation
-before idle compaction; active recording throughput is approximately flat
-in controlled checks.
+The [current native comparison](oracle/ghostty/results/2026-10-27-round6/README.md)
+records the expanded compatibility corpus, lower idle memory and mixed
+throughput results against v0.3.0 and libghostty-vt. It retains raw policy
+and ANSI export differences. The [cold-prefix measurements](oracle/ghostty/results/2026-10-27-round4/cold-prefix-measurements.md)
+separately measure prompt allocation: it avoids allocating a full row before
+idle compaction, reducing both retained heap and fresh-process RSS.
 
 The [Unicode and exact-checkpoint comparison](oracle/ghostty/results/2026-10-27-round3/README.md)
 records the broader native compatibility corpus, Unicode audits, idle memory
