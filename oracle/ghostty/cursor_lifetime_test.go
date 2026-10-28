@@ -5,6 +5,8 @@ package main
 import (
 	"fmt"
 	"testing"
+
+	"github.com/2018kguo/phosphor"
 )
 
 func TestNativeCursorLifetimeAndRepaint(t *testing.T) {
@@ -56,5 +58,59 @@ func TestNativeCursorLifetimeAndRepaint(t *testing.T) {
 		p.Close()
 		n.Close()
 		r.Close()
+	}
+}
+
+// Native Terminal.zig switchScreenMode clears the whole ALT on 1047 reset;
+// deccolm only reaches 80/132, so it cannot stage and restore a 47-column host.
+func TestNativeRepaintRectangleGrowthLimit(t *testing.T) {
+	p, n, s, r := newTracedEngine("phosphor", 13, 12), newTracedEngine("ghostty", 13, 12), newTracedEngine("phosphor", 47, 8), newTracedEngine("ghostty", 47, 8)
+	defer p.Close()
+	defer n.Close()
+	defer s.Close()
+	defer r.Close()
+	for _, e := range []*tracedEngine{p, n} {
+		e.Write([]byte("\x1b[?47h\x1b[?1049h\x1b[48;2;1;2;3m\x1b[?1047l"))
+		e.Resize(47, 8)
+	}
+	if err := s.Engine.(*phos).t.RestoreSnapshot(p.Snapshot(), phosphor.SnapshotLimits{}); err != nil {
+		t.Fatal(err)
+	}
+	r.Write(p.Repaint(false))
+	for _, suffix := range []string{"", "\x1b[?47h"} {
+		for _, e := range []*tracedEngine{p, n, s, r} {
+			e.Write([]byte(suffix))
+		}
+		if d := differences(traceState(t, p), traceState(t, n)); len(d) > 0 {
+			t.Fatalf("direct: %+v", d)
+		}
+		if d := differences(traceState(t, s), traceState(t, n)); len(d) > 0 {
+			t.Fatalf("snapshot: %+v", d)
+		}
+		expected := traceState(t, n)
+		if suffix != "" {
+			if d := differences(expected, traceState(t, r)); len(d) == 0 {
+				t.Fatal("raw ANSI loss disappeared; reassess boundary")
+			}
+			bg := expected.Screen[0][0].Bg
+			for y := range expected.Screen {
+				for x := 13; x < 47; x++ {
+					expected.Screen[y][x].Bg = bg
+				}
+			}
+		}
+		if d := differences(expected, traceState(t, r)); len(d) > 0 {
+			t.Fatalf("ANSI changed more than zero-padding background: %+v", d)
+		}
+	}
+	for _, e := range []*tracedEngine{p, n, s} {
+		e.Write([]byte("\x1b8X\x1b[?1049l\x1b8Y"))
+		e.Resize(19, 9)
+	}
+	if d := differences(traceState(t, p), traceState(t, n)); len(d) > 0 {
+		t.Fatalf("direct future: %+v", d)
+	}
+	if d := differences(traceState(t, s), traceState(t, n)); len(d) > 0 {
+		t.Fatalf("snapshot future: %+v", d)
 	}
 }
