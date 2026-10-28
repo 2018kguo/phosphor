@@ -88,6 +88,10 @@ func (g *ghost) Resize(c, r int) {
 	must(C.int(C.ghostty_terminal_resize(g.t, C.uint16_t(c), C.uint16_t(r), 8, 16)))
 }
 func (g *ghost) Close() { C.ghostty_terminal_free(g.t); g.t = nil }
+func (g *ghost) compact() {
+	var result C.GhosttyTerminalCompressionResult
+	must(C.int(C.ghostty_terminal_compress(g.t, C.GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL, &result)))
+}
 func take(p *C.uint8_t, n C.size_t) []byte {
 	b := C.GoBytes(unsafe.Pointer(p), C.int(n))
 	C.ghostty_free(nil, p, n)
@@ -495,6 +499,10 @@ func replayChecks() {
 		}
 	}
 }
+func equalHistoryInput() []byte {
+	return []byte(strings.Repeat("\x1b[32mINFO\x1b[0m request id=12345 path=/api/v1/items status=200 took=3ms\r\n", 123))
+}
+
 func memory(name, workload string, n int) {
 	if n < 1 {
 		panic("memory terminal count must be positive")
@@ -517,7 +525,7 @@ func memory(name, workload string, n int) {
 		cols, rows = 100, 30
 	}
 	if workload == "equal-100-history" || workload == "equal-100-history-compact" {
-		fill = []byte(strings.Repeat("\x1b[32mINFO\x1b[0m request id=12345 path=/api/v1/items status=200 took=3ms\r\n", 123))
+		fill = equalHistoryInput()
 	}
 	if workload == "cleared" || workload == "cleared-compact" || workload == "full-window" || workload == "full-window-compact" {
 		var grid strings.Builder
@@ -564,8 +572,7 @@ func memory(name, workload string, n int) {
 		} else {
 			feed(t, fill, 1024)
 			if workload == "compressed" && name == "ghostty" {
-				var result C.GhosttyTerminalCompressionResult
-				must(C.int(C.ghostty_terminal_compress(t.(*ghost).t, C.GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL, &result)))
+				t.(*ghost).compact()
 			}
 		}
 		if workload == "prompt-erase" || workload == "prompt-erase-compact" || workload == "colored-prompt-erase" || workload == "colored-prompt-erase-compact" {
@@ -577,8 +584,7 @@ func memory(name, workload string, n int) {
 					c.Compact()
 				}
 			} else {
-				var result C.GhosttyTerminalCompressionResult
-				must(C.int(C.ghostty_terminal_compress(t.(*ghost).t, C.GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL, &result)))
+				t.(*ghost).compact()
 			}
 		}
 		terms[i] = t

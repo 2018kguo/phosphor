@@ -167,3 +167,25 @@ func TestMeasurementBurstParsesEveryChunk(t *testing.T) {
 		})
 	}
 }
+
+func TestEqualHistoryMemoryFixture(t *testing.T) {
+	a, b := newTracedEngine("phosphor", 80, 24), newTracedEngine("ghostty", 80, 24)
+	defer a.Close()
+	defer b.Close()
+	feed(a, equalHistoryInput(), 1024)
+	feed(b, equalHistoryInput(), 1024)
+	before := traceState(t, a)
+	if len(before.History) != 100 {
+		t.Fatalf("expected exactly 100 retained rows, got %d", len(before.History))
+	}
+	if diff := differences(before, traceState(t, b)); len(diff) != 0 {
+		t.Fatalf("memory fixtures retain different content: %+v", diff)
+	}
+	a.Engine.(*phos).t.Compact()
+	b.Engine.(*ghost).compact()
+	for _, engine := range []*tracedEngine{a, b} {
+		if diff := differences(before, traceState(t, engine)); len(diff) != 0 {
+			t.Fatalf("compaction changed retained content: %+v", diff)
+		}
+	}
+}
