@@ -2,11 +2,7 @@ package phosphor
 
 //go:generate go run ./internal/unicodegen
 
-import (
-	"unicode/utf8"
-
-	"github.com/clipperhouse/uax29/v2/graphemes"
-)
+import "unicode/utf8"
 
 // A cluster stores its physical width independently of its first scalar:
 // selectors can narrow a wide emoji or widen a text character. joinModes
@@ -91,10 +87,7 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 			return false
 		}
 	}
-	// Finish segmentation before a width change can scroll and reuse scratch.
-	var continues bool
-	t.scratch, continues = graphemeContinues(t.scratch, s, r)
-	if !continues {
+	if !graphemeContinues(s, r) {
 		return false
 	}
 	count := utf8.RuneCountInString(s)
@@ -177,7 +170,7 @@ func graphemeSimpleScalar(r rune) bool {
 	if u > utf8.MaxRune {
 		return false
 	}
-	return graphemeSimplePages[graphemeSimplePageIDs[u>>8]][u>>6&3]>>(u&63)&1 != 0
+	return graphemeProps(r)&gpKindMask == gpOther
 }
 
 func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
@@ -198,30 +191,25 @@ func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
 	return width, true
 }
 
-func graphemeContinues(b []byte, s string, r rune) ([]byte, bool) {
+func graphemeContinues(s string, r rune) bool {
 	// Terminal controls have already been executed. Ghostty treats any
 	// zero-width grapheme Control left in a mode-off cell as Other when
 	// clustering is later enabled. Replace only those properties for the
 	// boundary test; the original UTF-8 is retained in the stored cell.
-	b = b[:0]
+	var state graphemeBreakState
+	var last graphemeProperty
+	first := true
 	for _, cp := range s {
-		if runeInRanges(cp, graphemeControls[:]) {
-			cp = 0xe000 // a private-use scalar with grapheme property Other
+		property := graphemeProps(cp)
+		if !first && !state.continues(last, property) {
+			state = graphemeBreakState{}
 		}
-		b = utf8.AppendRune(b, cp)
+		last, first = property, false
 	}
-	boundary := len(b)
-	if runeInRanges(r, graphemeControls[:]) {
-		r = 0xe000
+	if first {
+		return false
 	}
-	b = utf8.AppendRune(b, r)
-	iter := graphemes.FromBytes(b)
-	for iter.Next() {
-		if iter.End() > boundary {
-			return b, iter.Start() < boundary
-		}
-	}
-	return b, false
+	return state.continues(last, graphemeProps(r))
 }
 
 func emojiVariationBase(r rune) bool {

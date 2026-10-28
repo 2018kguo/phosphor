@@ -44,7 +44,7 @@ func TestGraphemeUAX29Corpus(t *testing.T) {
 				prefix = string(r)
 				continue
 			}
-			_, got := graphemeContinues(nil, prefix, r)
+			got := graphemeContinues(prefix, r)
 			want := !boundaries[offset]
 			total++
 			key := boundary{prefix, r}

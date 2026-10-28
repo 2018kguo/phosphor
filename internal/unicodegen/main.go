@@ -35,69 +35,11 @@ func main() {
 	breaks := fetch(root+"auxiliary/GraphemeBreakProperty.txt", "d6b51d1d2ae5c33b451b7ed994b48f1f4dc62b2272a5831e7fd418514a6bae89")
 	emit(&out, "graphemeControls", breaks, func(fields []string) bool { return len(fields) == 3 && fields[1] == ";" && fields[2] == "Control" })
 	emit(&out, "graphemePrepends", breaks, func(fields []string) bool { return len(fields) == 3 && fields[1] == ";" && fields[2] == "Prepend" })
-	emitSimpleScalars(&out, breaks)
+	derived := fetch(root+"DerivedCoreProperties.txt", "24c7fed1195c482faaefd5c1e7eb821c5ee1fb6de07ecdbaa64b56a99da22c08")
+	emitGraphemeProperties(&out, breaks, emoji, derived)
 	formatted, err := format.Source(out.Bytes())
 	must(err)
 	must(os.WriteFile("grapheme_table.go", formatted, 0644))
-}
-
-// Two single scalars with grapheme property Other always have a boundary.
-// Control is also Other under the terminal's existing mode-off tailoring;
-// CR and LF retain their distinct properties.
-func emitSimpleScalars(out *bytes.Buffer, data []byte) {
-	var pages [0x1100][4]uint64
-	for i := range pages {
-		for j := range pages[i] {
-			pages[i][j] = ^uint64(0)
-		}
-	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	for scanner.Scan() {
-		line, _, _ := strings.Cut(scanner.Text(), "#")
-		fields := strings.Fields(line)
-		if len(fields) != 3 || fields[1] != ";" || fields[2] == "Control" {
-			continue
-		}
-		first, last, isRange := strings.Cut(fields[0], "..")
-		lo, err := strconv.ParseUint(first, 16, 32)
-		must(err)
-		hi := lo
-		if isRange {
-			hi, err = strconv.ParseUint(last, 16, 32)
-			must(err)
-		}
-		for cp := lo; cp <= hi; cp++ {
-			pages[cp>>8][cp>>6&3] &^= uint64(1) << (cp & 63)
-		}
-	}
-	must(scanner.Err())
-	index := make(map[[4]uint64]int)
-	var unique [][4]uint64
-	var ids [0x1100]int
-	for i, page := range pages {
-		id, ok := index[page]
-		if !ok {
-			id = len(unique)
-			index[page] = id
-			unique = append(unique, page)
-		}
-		ids[i] = id
-	}
-	if len(unique) > 256 {
-		panic("simple scalar pages exceed byte index")
-	}
-	fmt.Fprintf(out, "// %d deduplicated pages; %d bytes of shared lookup data.\nvar graphemeSimplePageIDs = [0x1100]uint8{\n", len(unique), len(ids)+32*len(unique))
-	for i, id := range ids {
-		fmt.Fprintf(out, "%d,", id)
-		if i%32 == 31 {
-			out.WriteByte('\n')
-		}
-	}
-	out.WriteString("}\n\nvar graphemeSimplePages = [...][4]uint64{\n")
-	for _, page := range unique {
-		fmt.Fprintf(out, "{0x%016X,0x%016X,0x%016X,0x%016X},\n", page[0], page[1], page[2], page[3])
-	}
-	out.WriteString("}\n")
 }
 
 // The native driver enumerates every Unicode scalar. Requiring its summary

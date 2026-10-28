@@ -8,15 +8,13 @@ import (
 // Check every accepted codepoint against the independent segmenter, including
 // terminal Control tailoring. The shortcut only applies to two scalar cells.
 func TestGraphemeSimpleScalarBoundaries(t *testing.T) {
-	var scratch []byte
 	checked := 0
 	for r := rune(0); r <= utf8.MaxRune; r++ {
 		if r >= 0xd800 && r <= 0xdfff || !graphemeSimpleScalar(r) {
 			continue
 		}
-		var forward, reverse bool
-		scratch, forward = graphemeContinues(scratch, "a", r)
-		scratch, reverse = graphemeContinues(scratch, string(r), 'a')
+		forward := graphemeContinues("a", r)
+		reverse := graphemeContinues(string(r), 'a')
 		if forward || reverse {
 			t.Fatalf("shortcut accepts a continuing scalar %U", r)
 		}
