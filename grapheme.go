@@ -222,6 +222,20 @@ func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
 	if c.joinModes == (clusterModes{}) && int(c.width) == CodepointWidth(firstRune(c.text)) {
 		return append(b, c.text...)
 	}
+	if c.joinModes[1] == 0 && c.joinModes[0] >= 2 {
+		count := utf8.RuneCountInString(c.text)
+		if count >= 2 && count < 64 && c.joinModes[0] == (uint64(1)<<uint(count))-2 {
+			first, n := utf8.DecodeRuneInString(c.text)
+			if CodepointWidth(first) <= t.cols && (tail.R != wideTail || styleOf(tail) == styleOf(head)) {
+				// Every suffix scalar was joined with clustering on. With
+				// no differing wide-tail style, width changes add no bytes.
+				b = append(b, c.text[:n]...)
+				b = append(b, "\x1b[?2027h"...)
+				b = append(b, c.text[n:]...)
+				return append(b, "\x1b[?2027l"...)
+			}
+		}
+	}
 	mode := false
 	style := head
 	width := 0
@@ -230,7 +244,11 @@ func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
 		cp, n := utf8.DecodeRuneInString(c.text[i:])
 		next := c.joinModes.has(index) || i == 0 && CodepointWidth(cp) > t.cols
 		if next != mode {
-			b = appendMode(b, 2027, next)
+			if next {
+				b = append(b, "\x1b[?2027h"...)
+			} else {
+				b = append(b, "\x1b[?2027l"...)
+			}
 			mode = next
 		}
 		if i == 0 {
@@ -251,7 +269,7 @@ func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
 		// A full cluster can change width without retaining its last input.
 		// Replay an over-capacity suffix: it changes geometry, not cell text.
 		if !mode {
-			b = appendMode(b, 2027, true)
+			b = append(b, "\x1b[?2027h"...)
 			mode = true
 		}
 		if c.width == 1 && emojiVariationBase(prev) {
@@ -269,7 +287,7 @@ func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
 		}
 	}
 	if mode {
-		b = appendMode(b, 2027, false)
+		b = append(b, "\x1b[?2027l"...)
 	}
 	return t.appendStyle(b, style, head)
 }
