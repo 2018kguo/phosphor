@@ -89,9 +89,6 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 		return false
 	}
 	count := utf8.RuneCountInString(s)
-	if count >= maxClusterRunes {
-		return true
-	}
 	width := 1
 	if x+1 < len(row) && row[x+1].R == wideTail {
 		width = 2
@@ -112,8 +109,16 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	if base.R >= clusterBase {
 		modes = t.x.clusters[base.R-clusterBase].joinModes
 	}
-	modes.set(count)
-	base.R = t.intern(cluster{text: s + string(r), width: uint8(newWidth), joinModes: modes})
+	text := s
+	if count < maxClusterRunes {
+		modes.set(count)
+		text += string(r)
+	} else if newWidth == width {
+		return true
+	}
+	// Native applies geometry before its bounded suffix storage drops r.
+	// Keep that width change even when the cell text is already full.
+	base.R = t.intern(cluster{text: text, width: uint8(newWidth), joinModes: modes})
 	if newWidth == width {
 		row[x] = base
 		t.touch(y)
@@ -226,7 +231,7 @@ func runeInRanges(r rune, ranges [][2]rune) bool {
 // mode each following codepoint was joined under. This also separates a
 // new cell from a prior cell ending in ZWJ.
 func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
-	if c.joinModes == (clusterModes{}) {
+	if c.joinModes == (clusterModes{}) && int(c.width) == CodepointWidth(firstRune(c.text)) {
 		return append(b, c.text...)
 	}
 	mode := false
@@ -253,6 +258,27 @@ func (t *Terminal) appendCluster(b []byte, c cluster, head, tail cell) []byte {
 		b = append(b, c.text[i:i+n]...)
 		prev = cp
 		i += n
+	}
+	if int(c.width) != width && utf8.RuneCountInString(c.text) == maxClusterRunes {
+		// A full cluster can change width without retaining its last input.
+		// Replay an over-capacity suffix: it changes geometry, not cell text.
+		if !mode {
+			b = appendMode(b, 2027, true)
+			mode = true
+		}
+		if c.width == 1 && emojiVariationBase(prev) {
+			b = utf8.AppendRune(b, 0xfe0e)
+		} else if c.width == 2 {
+			if tail.R == wideTail {
+				b = t.appendStyle(b, style, tail)
+				style = tail
+			}
+			if emojiVariationBase(prev) {
+				b = utf8.AppendRune(b, 0xfe0f)
+			} else if prev == 0x200d {
+				b = utf8.AppendRune(b, 0x2764)
+			}
+		}
 	}
 	if mode {
 		b = appendMode(b, 2027, false)
