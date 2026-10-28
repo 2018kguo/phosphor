@@ -196,7 +196,9 @@ func graphemeContinues(s string, r rune) bool {
 		r = 0xe000
 	}
 	b = utf8.AppendRune(b, r)
-	iter := graphemes.FromBytes(b)
+	// Copy only the used bytes: the iterator's indirect split call would
+	// otherwise make the entire scratch array escape to the heap.
+	iter := graphemes.FromString(string(b))
 	for iter.Next() {
 		if iter.End() > boundary {
 			return iter.Start() < boundary
