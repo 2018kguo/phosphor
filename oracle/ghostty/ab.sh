@@ -7,7 +7,7 @@ candidate=$2
 output=$3
 : "${PHOSPHOR_DIR:?Set PHOSPHOR_DIR to the phosphor checkout}"
 : > "$output"
-for stream in claude-synthetic logs progress vim-recording less-recording rec-nvim-recording rec-nano-recording rec-man-recording; do
+for stream in claude-synthetic logs progress vim-recording less-recording rec-nvim-recording rec-nano-recording rec-man-recording graphemes links; do
   for round in 0 1 2 3 4; do
     labels=(baseline phosphor ghostty)
     if (( round % 2 )); then labels=(ghostty phosphor baseline); fi

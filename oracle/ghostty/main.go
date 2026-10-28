@@ -10,10 +10,12 @@ import "C"
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"runtime"
@@ -53,7 +55,12 @@ type Engine interface {
 }
 type phos struct{ t *phosphor.Terminal }
 
-func (p *phos) Write(b []byte)        { p.t.Write(b) }
+func (p *phos) Write(b []byte) {
+	n, err := p.t.Write(b)
+	if err != nil || n != len(b) {
+		panic(fmt.Sprintf("incomplete Phosphor write: %d/%d: %v", n, len(b), err))
+	}
+}
 func (p *phos) Resize(c, r int)       { p.t.Resize(c, r) }
 func (p *phos) Close()                { p.t = nil }
 func (p *phos) Repaint(h bool) []byte { return p.t.Repaint(h) }
@@ -141,7 +148,7 @@ func (g *ghost) View() View {
 }
 func newEngine(name string, c, r int) Engine {
 	if name == "phosphor" {
-		return &phos{phosphor.New(c, r)}
+		return &phos{phosphor.New(c, r, phosphor.WithReply(io.Discard))}
 	}
 	if name != "ghostty" {
 		panic(name)
@@ -152,6 +159,18 @@ func newEngine(name string, c, r int) Engine {
 	}
 	return &ghost{t}
 }
+
+// Native continuation retention is optional checkpoint bookkeeping. Enable
+// it only for tests and measurements that export unfinished parser state.
+func newCheckpointEngine(name string, c, r int) Engine {
+	t := newEngine(name, c, r)
+	if g, ok := t.(*ghost); ok {
+		continuation := C.size_t(64 << 10)
+		must(C.int(C.ghostty_terminal_set(g.t, C.GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES, unsafe.Pointer(&continuation))))
+	}
+	return t
+}
+
 func restore(name string, b []byte, c, r int) Engine {
 	if name == "phosphor" {
 		var t phosphor.Terminal
@@ -190,6 +209,13 @@ type Stream struct {
 
 func streams() []Stream {
 	out := []Stream{{"claude-synthetic", benchdata.Claude(1<<20, 120, 40), 120, 40}, {"logs", benchdata.Logs(1 << 20), 120, 40}, {"progress", benchdata.Progress(1 << 20), 120, 40}}
+	// Explicitly exercise retained links and grapheme clustering as well as
+	// the ASCII-heavy workloads. Generate all bytes before starting the clock.
+	graphemeLine := "日本語 e\u0301 👩‍💻 🇺🇸 👨‍👩‍👧‍👦 한글\r\n"
+	graphemes := []byte("\x1b[?2027h" + strings.Repeat(graphemeLine, (1<<20)/len(graphemeLine)+1))
+	linkLine := "\x1b]8;;https://example.invalid/build/123\x1b\\\x1b[32mcomplete build 123\x1b[0m\x1b]8;;\x1b\\\r\n"
+	links := []byte(strings.Repeat(linkLine, (1<<20)/len(linkLine)+1))
+	out = append(out, Stream{"graphemes", graphemes, 120, 40}, Stream{"links", links, 120, 40})
 	for _, f := range []string{"vim", "less", "rec-nvim", "rec-nano", "rec-man"} {
 		b, e := os.ReadFile(os.Getenv("PHOSPHOR_DIR") + "/testdata/" + f + ".raw")
 		if e != nil {
@@ -214,6 +240,7 @@ func processCPU() time.Duration {
 	return time.Duration(usage.Utime.Nano() + usage.Stime.Nano())
 }
 func throughput(duration time.Duration) {
+	emitted := false
 	rounds := 5
 	if raw := os.Getenv("COMPARE_ROUNDS"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -226,7 +253,7 @@ func throughput(duration time.Duration) {
 		if selected := os.Getenv("COMPARE_STREAM"); selected != "" && s.Name != selected {
 			continue
 		}
-		for _, chunk := range []int{1024, 4096, 8192} {
+		for _, chunk := range []int{1024, 4096, 8192, 65536} {
 			if selected := os.Getenv("COMPARE_CHUNK"); selected != "" && fmt.Sprint(chunk) != selected {
 				continue
 			}
@@ -251,11 +278,15 @@ func throughput(duration time.Duration) {
 					}
 					elapsed := time.Since(start)
 					cpu := processCPU() - cpuStart
-					emit(map[string]any{"kind": "throughput", "engine": name, "stream": s.Name, "chunk": chunk, "round": round, "iterations": n, "bytes_per_iteration": len(s.Data), "seconds": elapsed.Seconds(), "mib_per_s": float64(n*len(s.Data)) / elapsed.Seconds() / (1 << 20), "cpu_seconds": cpu.Seconds(), "mib_per_cpu_s": float64(n*len(s.Data)) / cpu.Seconds() / (1 << 20)})
+					emit(map[string]any{"kind": "throughput", "engine": name, "stream": s.Name, "chunk": chunk, "round": round, "iterations": n, "bytes_per_iteration": len(s.Data), "seconds": elapsed.Seconds(), "mib_per_s": float64(n*len(s.Data)) / elapsed.Seconds() / (1 << 20), "cpu_seconds": cpu.Seconds(), "mib_per_cpu_s": float64(n*len(s.Data)) / cpu.Seconds() / (1 << 20), "input_sha256": fmt.Sprintf("%x", sha256.Sum256(s.Data)), "input_bytes": uint64(n) * uint64(len(s.Data)), "reply_policy": "enabled-discard", "native_continuation_bytes": 0, "retention": stats(t)})
+					emitted = true
 					t.Close()
 				}
 			}
 		}
+	}
+	if !emitted {
+		panic("no throughput samples match COMPARE_STREAM and COMPARE_CHUNK")
 	}
 }
 func stateCosts(duration time.Duration) {
@@ -263,7 +294,7 @@ func stateCosts(duration time.Duration) {
 		if selected := os.Getenv("COMPARE_ENGINE"); selected != "" && name != selected {
 			continue
 		}
-		t := newEngine(name, 120, 40)
+		t := newCheckpointEngine(name, 120, 40)
 		feed(t, benchdata.Claude(4<<20, 120, 40), 1024)
 		for _, op := range []string{"view", "repaint-screen", "repaint-history", "snapshot", "restore"} {
 			snapshot := t.Snapshot()
@@ -385,7 +416,7 @@ func replayChecks() {
 		for _, s := range inputs {
 			for _, fraction := range []int{13, 37, 71, 100} {
 				cut := len(s.Data) * fraction / 100
-				t := newEngine(name, s.Cols, s.Rows)
+				t := newCheckpointEngine(name, s.Cols, s.Rows)
 				feed(t, s.Data[:cut], 1024)
 				snapshot := t.Snapshot()
 				r := restore(name, snapshot, s.Cols, s.Rows)
@@ -408,7 +439,7 @@ func replayChecks() {
 				if kind == "ansi-attach-with-continuation" && name == "phosphor" {
 					continue
 				}
-				t := newEngine(name, 12, 5)
+				t := newCheckpointEngine(name, 12, 5)
 				t.Write(c.Before)
 				var r Engine
 				var b []byte
@@ -454,7 +485,7 @@ func memory(name, workload string, n int) {
 		}
 		cols, rows = 100, 30
 	}
-	if workload == "equal-100-history" {
+	if workload == "equal-100-history" || workload == "equal-100-history-compact" {
 		fill = []byte(strings.Repeat("\x1b[32mINFO\x1b[0m request id=12345 path=/api/v1/items status=200 took=3ms\r\n", 123))
 	}
 	if workload == "cleared" || workload == "cleared-compact" || workload == "full-window" || workload == "full-window-compact" {
@@ -487,6 +518,9 @@ func memory(name, workload string, n int) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	rss0 := uint64(C.exp_rss())
+	if rss0 == 0 {
+		panic("RSS measurement unavailable")
+	}
 	for i := range terms {
 		t := newEngine(name, cols, rows)
 		if workload == "blank" {
@@ -522,6 +556,9 @@ func memory(name, workload string, n int) {
 	runtime.GC()
 	runtime.ReadMemStats(&after)
 	rss1 := uint64(C.exp_rss())
+	if rss1 == 0 {
+		panic("RSS measurement unavailable")
+	}
 	if closedRecording && terms[n-1].View().Alt {
 		panic("completed recording left the alternate screen active")
 	}
