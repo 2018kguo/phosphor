@@ -183,7 +183,7 @@ func state(t *Terminal) string { return stateOf(t, true) }
 
 func stateOf(t *Terminal, withScrollback bool) string {
 	var b strings.Builder
-	dump := func(name string, scr [][]cell, wrap []bool) {
+	dump := func(name string, scr [][]cell, wrap []rowFlags) {
 		for y, row := range scr {
 			fmt.Fprintf(&b, "%s%d", name, y)
 			for x := range t.cols {
@@ -202,7 +202,7 @@ func stateOf(t *Terminal, withScrollback bool) string {
 					fmt.Fprintf(&b, "/%+v", t.extraAt(c.E))
 				}
 			}
-			if wrap != nil && wrap[y] {
+			if wrap != nil && wrap[y]&rowWrap != 0 {
 				b.WriteString(" wrapped")
 			}
 			b.WriteByte('\n')

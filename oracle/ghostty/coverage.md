@@ -19,6 +19,7 @@ terminal compatibility or equality to every terminal's policy.
 | Styles | Default/indexed/RGB foreground/background/underline color, bold/faint/italic/blink/inverse/invisible/strike/overline, underline style, protection | Native background-only cells are decoded through public cell getters. Underline color is retained on both sides. |
 | Hyperlinks | Exact URI per cell, including wide tails, after overwrite/erase/resize/Compact | Native C API exports URI, not OSC8 ID. Phosphor snapshot tests own exact ID preservation. |
 | Wrap and cursor | Row continuation, exact physical x/y, pending wrap, visible/shape/blink | Constructor-default shape resolves to the configured block in both engines. Cursor outside enabled origin margins is retained. Last-row forward-wrap flags are exercised through suffixes/reflow rather than a separate phosphor getter. |
+| Shell prompts | Raw per-row primary/continuation annotation through each public API; semantic cursor and redraw policy through future operations | Native constructor redraw is disabled; RIS enables it. DECSC does not save semantic content. Blank annotations, history pop, ED2, EL2, width-only and height-only resize are exercised without normalization. ANSI replay's unmarked prompt cursor may use input state with the same headless text effects; per-cell GUI semantic classification is outside this contract. Binary snapshots retain the exact enum. |
 | Modes | Application cursor/keypad, bracketed paste, focus, autowrap, insert, newline, origin, reverse video, sync output, independent mouse mode bits, effective mouse tracking/encoding, kitty flags | Array order is listed below. Native effective mouse state is observed through the public input encoder using distinguishable press/release/motion reports and all five encodings. Mode2027 and margin state are also queried through VT replies. |
 | Charsets and private cursor state | Designation/shift and saved-cursor effects in written suffixes | No claim to inspect every private native struct field. Control branches expose lost state after restore. |
 | History | Styled physical cells at the current width plus continuation flags, independent of logical/physical storage counters | Tests stay below both history retention budgets. Capacity pruning differences need separate bounded tests. Alternate screen history is omitted in both public projections. |
@@ -70,13 +71,20 @@ not a native paired run. The newer pinned source has 460 tests in
 `Terminal.zig` and 148 in `stream_terminal.zig`; other Zig modules add
 further tests. Those counts are not interchangeable denominators.
 
-The current Go translation passes 507 cases, keeps five documented
-differences and excludes 37 cases. Five former hyperlink exclusions now
+The current Go translation passes 517 cases, keeps no known failures
+and excludes 32 cases. Five former hyperlink exclusions now
 assert exact text and per-cell URIs. Remaining exclusions are 15 palette,
-seven semantic prompt, six reply, five DECCOLM, two image and two charset
+seven semantic prompt, six reply, two image and two charset
 cases. Native fixtures exercise all non-image groups with raw replies and
 continuation checks; they retain failures rather than marking unsupported
 commands as passing. Images remain outside the headless text contract.
+
+Prompt and wrap metadata share one byte per annotated screen row. History
+uses its existing bounded VT representation with typed private row markers:
+NUL, canonical zero uvarint, `P`, then kind 0/1/2. Positive uvarints retain
+the existing sparse-hole grammar. Unknown, truncated, noncanonical or
+out-of-range markers are rejected, and released v1 snapshots cannot contain
+the new grammar. Ordinary history without annotations gains no marker bytes.
 
 Changing width resets tab stops to the default eight-column interval, as
 the pinned native engine documents and implements. Height-only resizing

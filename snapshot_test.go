@@ -26,6 +26,12 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 		!slices.Equal(a.kitty, b.kitty) || !bytes.Equal(a.appendContinuation(nil), b.appendContinuation(nil)) {
 		t.Fatal("future-output state changed")
 	}
+	if a.semantic != b.semantic || a.promptRedraw != b.promptRedraw {
+		t.Fatal("exact semantic cursor state changed")
+	}
+	if a.altActive && a.x.inactivePrimary != b.x.inactivePrimary {
+		t.Fatal("actual inactive primary cursor changed")
+	}
 	for i := range 3 {
 		var left, right savedCursor
 		if a.saved != nil {
@@ -41,7 +47,7 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 	for _, s := range []struct {
 		name   string
 		a, b   [][]cell
-		aw, bw []bool
+		aw, bw []rowFlags
 	}{{"main", a.main, b.main, a.mainWrap, b.mainWrap}, {"alternate", a.alt, b.alt, a.altWrap, b.altWrap}} {
 		if len(s.a) != len(s.b) {
 			t.Fatalf("%s presence changed", s.name)
@@ -59,7 +65,7 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 					t.Fatalf("%s cell %d,%d: %+v / %+v", s.name, x, y, left, right)
 				}
 			}
-			if (s.aw != nil && s.aw[y]) != (s.bw != nil && s.bw[y]) {
+			if rowFlagsAt(s.aw, y) != rowFlagsAt(s.bw, y) {
 				t.Fatalf("%s row %d wrap changed", s.name, y)
 			}
 		}
@@ -273,7 +279,7 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 		"cluster-join": func(t *Terminal) {
 			t.ext().clusters = []cluster{{text: "á", width: 1, joinModes: clusterModes{1 << 2}}}
 		},
-		"wrap":              func(t *Terminal) { t.mainWrap = []bool{false, true} },
+		"wrap":              func(t *Terminal) { t.mainWrap = []rowFlags{0, rowWrap} },
 		"palette-slot":      func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 259}}} },
 		"palette-duplicate": func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 1}, {i: 1}}} },
 		"title-command":     func(t *Terminal) { t.title = "title\x1b[c" },
@@ -406,6 +412,8 @@ func FuzzSnapshotContinuation(f *testing.F) {
 		"hello", "\x1b[38:2::10:20:30m漢\xf0\x9f", "\x1b[?2027h😀︎❤️👩‍👩‍👧‍👦",
 		"\x1b[?2027h\x1b[?7lA❤️", "abc\x1b7\x1b[?7l\x1b[HX\x1b8",
 		"\x1b]8;id=a;https://example.com\x1b\\á\x1b7\x1b[?1049hALT\x1b7",
+		"\x1b]133;A;redraw=last\ahello\x1b]133;I\a\r\ninput",
+		"\x1b]133;P;k=s\a\x1b[?47h\x1b]133;B\aALT",
 		snapshotScene(),
 	} {
 		f.Add([]byte(in), uint8(12), uint8(5), uint16(len(in)/2))

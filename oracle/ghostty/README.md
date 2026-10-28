@@ -105,7 +105,7 @@ compares the physical cursor and continued text without normalizing them.
 
 `trace` compares a deeper [text-model contract](coverage.md). It records
 full cell text and widths, typed colors and attributes, underline styles
-and colors, hyperlink targets, protected cells, row wraps, physical
+and colors, hyperlink targets, protected cells, row wraps, shell prompt rows, physical
 cursor and appearance, modes, title, history cells and raw PTY replies.
 Each action is checked. An untouched control for each engine checks
 continuation after snapshots, ANSI replay and compaction, including

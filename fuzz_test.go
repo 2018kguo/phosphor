@@ -24,8 +24,8 @@ func (t *Terminal) checkInvariants() string {
 	if t.alt != nil && len(t.alt) != t.rows {
 		fail("alt has %d rows, want %d", len(t.alt), t.rows)
 	}
-	for _, w := range [][]bool{t.mainWrap, t.altWrap} {
-		if w != nil && (len(w) != t.rows || w[t.rows-1]) {
+	for _, w := range [][]rowFlags{t.mainWrap, t.altWrap} {
+		if w != nil && (len(w) != t.rows || w[t.rows-1]&rowWrap != 0) {
 			fail("wrap flags %v for %d rows", w, t.rows)
 		}
 	}
@@ -133,6 +133,7 @@ func fuzzOps(in []byte, maxCols, maxRows int, write func([]byte), resize func(c,
 // the state stays consistent and that Repaint, with and without the
 // scrollback, reproduces it on a fresh terminal.
 func FuzzStream(f *testing.F) {
+	f.Add([]byte("\x1b]133;A;redraw=1\ahello\x00\x05\x04\x1b]133;B\a\r\nINPUT\x1b[H\x1b[2J"), uint8(3), uint8(4))
 	f.Add([]byte("old\r\n\x1b[44mabcdefg\x1b[22JX\x00\x01\x03\x1b[?22J\x1b8Y"), uint8(3), uint8(2))
 	f.Add([]byte("\x1b[2;4r\x1b[?1049h漢\x1b[3M\x1b[?6h\x1b[5;5H"), uint8(10), uint8(4))
 	f.Add([]byte("hello world this wraps\x00\x05\x03more text é\x00\x0c\x05"), uint8(8), uint8(3))

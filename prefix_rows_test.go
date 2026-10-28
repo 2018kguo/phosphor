@@ -86,7 +86,7 @@ func TestPrefixRowsKeepPhysicalWrappedExtent(t *testing.T) {
 	for _, term := range []*Terminal{a, b} {
 		term.main[0], term.main[1] = make([]cell, 8), make([]cell, 8)
 		term.main[0][0].R, term.main[1][0].R = 'A', 'B'
-		term.mainWrap = []bool{true, false, false}
+		term.mainWrap = []rowFlags{rowWrap, 0, 0}
 		term.cur.x, term.cur.y = 1, 1
 	}
 	b.Compact()

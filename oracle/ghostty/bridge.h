@@ -23,7 +23,7 @@ typedef struct {
 typedef struct {
   ExpInfo info;
   ExpCell *cells;
-  uint8_t *wraps;
+  uint8_t *wraps, *prompts;
   size_t history_rows, total_rows;
   bool modes[21], cursor_blink;
   uint8_t cursor_shape, kitty;

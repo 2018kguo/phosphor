@@ -167,6 +167,12 @@ million cells per screen; callers can choose other positive limits.
 Malformed, unsupported-version and limit errors are distinguishable with
 `errors.Is`. A snapshot is not terminal output.
 
+Snapshots retain OSC 133 prompt rows, each screen's semantic cursor state,
+the prompt redraw policy, and the actual primary cursor while the alternate
+screen is active. Version 1 snapshots remain readable; they did not store
+these facts, so prompt metadata defaults to absent and the inactive primary
+position uses the old 1049 save when present, otherwise the active position.
+
 `Repaint(withScrollback)` returns bytes that, written to a terminal of the
 same size in its initial state (another `phosphor.Terminal`, or a real
 one), reproduce this one: scrollback, both screens with their soft wraps,
@@ -191,6 +197,15 @@ outside that region, so the next printed character can move after repaint.
 Also, scalar ANSI output cannot always replay an emoji narrowed by VS15
 at the right edge of a one- or two-column screen after reflow. These are
 portable ANSI export limits; exact snapshots preserve those states.
+
+OSC 133 shell markers are available through `Prompt(y)`, returning
+`PromptNone`, `PromptPrimary` or `PromptContinuation`. Prompt rows travel
+through scrolling and reflow. `A`/`N` support `redraw=0`, `redraw=1` and
+`redraw=last`; a fresh headless terminal starts with redraw disabled, while
+RIS enables it as in libghostty-vt. ANSI replay preserves the headless text
+effects of an unmarked prompt cursor using explicit input state when no
+exact VT sequence is available. A GUI's per-cell semantic classification
+can differ in that case; binary snapshots preserve the original enum.
 
 ### Unicode
 
@@ -244,7 +259,8 @@ the `Terminal`.
   values reset them to the host palette. The host always has concrete
   default colors; renderer-only colors such as selections are ignored.
 - Resize: the main screen reflows (narrowing and widening back is exact)
-  and lines come back from the scrollback when it grows.
+  and height-only growth pulls history when the original primary cursor
+  was on the bottom row, including while the alternate screen is active.
 - RIS, DECSTR.
 
 ## What it does not

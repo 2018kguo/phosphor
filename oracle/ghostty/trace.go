@@ -48,6 +48,7 @@ type modelState struct {
 	Title          string
 	Screen         [][]modelCell
 	Wrapped        []bool
+	Prompt         []int
 	History        [][]modelCell
 	HistoryWrapped []bool
 	Replies        string
@@ -129,6 +130,7 @@ func (t *tracedEngine) state() (modelState, error) {
 			}
 			s.Screen = append(s.Screen, row)
 			s.Wrapped = append(s.Wrapped, p.t.Wrapped(y))
+			s.Prompt = append(s.Prompt, int(p.t.Prompt(y)))
 		}
 		if !m.AltScreen {
 			for i := 0; i < p.t.ScrollbackLen(); i++ {
@@ -160,6 +162,7 @@ func (t *tracedEngine) state() (modelState, error) {
 	}
 	cells := unsafe.Slice(raw.cells, int(raw.total_rows)*s.Cols)
 	wraps := unsafe.Slice(raw.wraps, int(raw.total_rows))
+	prompts := unsafe.Slice(raw.prompts, int(raw.total_rows))
 	for y := 0; y < int(raw.total_rows); y++ {
 		row := make([]modelCell, s.Cols)
 		for x := range row {
@@ -176,6 +179,7 @@ func (t *tracedEngine) state() (modelState, error) {
 		} else {
 			s.Screen = append(s.Screen, row)
 			s.Wrapped = append(s.Wrapped, wraps[y] != 0)
+			s.Prompt = append(s.Prompt, int(prompts[y]))
 		}
 	}
 	if t.native != nil {

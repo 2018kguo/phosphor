@@ -226,7 +226,7 @@ static uint32_t exp_color(GhosttyStyleColor c) {
 }
 void exp_capture_free(ExpState *out) {
   free(out->cells); free(out->wraps);
-  out->cells = NULL; out->wraps = NULL;
+  out->cells = NULL; out->wraps = NULL; out->prompts = NULL;
 }
 int exp_capture(GhosttyTerminal t, ExpState *out) {
   memset(out, 0, sizeof(*out));
@@ -239,7 +239,8 @@ int exp_capture(GhosttyTerminal t, ExpState *out) {
   if (out->info.cols > 256 || out->total_rows > 256 || out->total_rows * out->info.cols > 32768)
     return GHOSTTY_LIMIT_EXCEEDED;
   out->cells = calloc(out->total_rows * out->info.cols, sizeof(ExpCell));
-  out->wraps = calloc(out->total_rows, 1);
+  out->wraps = calloc(out->total_rows, 2);
+  out->prompts = out->wraps ? out->wraps + out->total_rows : NULL;
   if (!out->cells || !out->wraps) { rc = GHOSTTY_OUT_OF_MEMORY; goto fail; }
   for (size_t y = 0; y < out->total_rows; y++) {
     for (size_t x = 0; x < out->info.cols; x++) {
@@ -248,10 +249,12 @@ int exp_capture(GhosttyTerminal t, ExpState *out) {
         .value = {.coordinate = {(uint16_t)x, (uint32_t)(y < out->history_rows ? y : y - out->history_rows)}}};
       if ((rc = ghostty_terminal_grid_ref(t, point, &ref))) goto fail;
       if (!x) {
-        GhosttyRow row; bool wrap;
+        GhosttyRow row; bool wrap; GhosttyRowSemanticPrompt prompt;
         if ((rc = ghostty_grid_ref_row(&ref, &row)) ||
-            (rc = ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &wrap))) goto fail;
+            (rc = ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &wrap)) ||
+            (rc = ghostty_row_get(row, GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, &prompt))) goto fail;
         out->wraps[y] = wrap;
+        out->prompts[y] = (uint8_t)prompt;
       }
       ExpCell *c = &out->cells[y * out->info.cols + x];
       GhosttyCell raw; GhosttyCellWide wide; GhosttyCellContentTag tag; bool protected;

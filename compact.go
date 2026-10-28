@@ -25,10 +25,10 @@ func (t *Terminal) Compact() {
 			}
 		}
 	}
-	if !t.anyWrap(t.mainWrap) {
+	if !t.anyRowFlags(t.mainWrap) {
 		t.mainWrap = nil
 	}
-	if !t.anyWrap(t.altWrap) {
+	if !t.anyRowFlags(t.altWrap) {
 		t.altWrap = nil
 	}
 	t.scratch = nil
@@ -87,7 +87,7 @@ func (t *Terminal) compactPools() {
 			t.compactExtras()
 		}
 	}
-	if x.tabs == nil && len(x.savedModes) == 0 && x.privateModes == 0 && len(x.clusters) == 0 && len(x.rare) == 0 {
+	if !t.altActive && x.tabs == nil && len(x.savedModes) == 0 && x.privateModes == 0 && len(x.clusters) == 0 && len(x.rare) == 0 {
 		t.x = nil
 	}
 }

@@ -81,7 +81,7 @@ func TestSparseHistoryLongWrappedLine(t *testing.T) {
 		}
 	}
 	for range 1000 {
-		term.pushScrollback(row, true, row)
+		term.pushScrollback(row, rowWrap, row)
 	}
 	columns := 0
 	for _, line := range term.sb[term.sbStart:] {
@@ -155,7 +155,7 @@ func BenchmarkSparseRichHistoryDecode(b *testing.B) {
 }
 
 func FuzzSparseHistoryValidation(f *testing.F) {
-	for _, line := range []string{"", "  A", "prefix\x00\x02  A", "\x1b[41m\x00\x01 \x1b[0m", "\x1b]8;;https://example.com\x1b\\A\x1b]8;;\x1b\\"} {
+	for _, line := range []string{"", "  A", "prefix\x00\x02  A", "\x1b[41m\x00\x01 \x1b[0m", "\x1b]8;;https://example.com\x1b\\A\x1b]8;;\x1b\\", "\x00\x00P\x01", "\x00\x00P\x01hello\x00\x00P\x02\x00\x02  "} {
 		f.Add([]byte(line), uint8(8))
 	}
 	f.Fuzz(func(t *testing.T, line []byte, width uint8) {

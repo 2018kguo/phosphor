@@ -230,7 +230,7 @@ func TestGraphemeHistoryNarrowReflow(t *testing.T) {
 	}
 }
 
-func TestGraphemePortableRepaintEdgeLimit(t *testing.T) {
+func TestGraphemePortableRepaintNarrowedEdge(t *testing.T) {
 	term := New(3, 4)
 	term.Write([]byte("\x1b[?2027hA☔︎"))
 	term.Resize(2, 4)
@@ -239,14 +239,8 @@ func TestGraphemePortableRepaintEdgeLimit(t *testing.T) {
 	}
 	replay := New(2, 4)
 	replay.Write(term.Repaint(false))
-	// Scalar VT paints the wide umbrella before seeing VS15, so a portable
-	// receiver wraps it first. Exact internal persistence uses Snapshot;
-	// Repaint cannot promise this geometry on arbitrary terminal hosts.
-	if reflect.DeepEqual(term.Lines(), replay.Lines()) {
-		t.Fatal("edge limit changed; update the documented portable VT boundary")
-	}
-	if replay.Cell(0, 1).Rune != '☔' {
-		t.Fatalf("unexpected scalar VT boundary:%q", replay.Lines())
+	if !reflect.DeepEqual(term.Lines(), replay.Lines()) || term.Cursor() != replay.Cursor() || term.Wrapped(1) != replay.Wrapped(1) {
+		t.Fatalf("narrowed edge replay changed geometry: source=%q/%+v replay=%q/%+v", term.Lines(), term.Cursor(), replay.Lines(), replay.Cursor())
 	}
 }
 

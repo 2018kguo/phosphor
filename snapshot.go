@@ -102,6 +102,7 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 		}
 	}
 	flags |= uint64(t.privateModes()) << 18
+	flags |= uint64(t.semantic[0])<<21 | uint64(t.semantic[1])<<23 | uint64(t.promptRedraw)<<25
 	e.u(flags)
 	for _, n := range []int{t.top, t.bot, t.left, t.right, t.sbMaxLines, t.sbMaxBytes} {
 		e.u(uint64(n))
@@ -142,6 +143,11 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 	for _, s := range x.savedModes {
 		e.u(uint64(s.mode))
 		e.boolean(s.on)
+	}
+	if t.altActive {
+		e.u(uint64(x.inactivePrimary.x))
+		e.u(uint64(x.inactivePrimary.y))
+		e.boolean(x.inactivePrimary.pending)
 	}
 	e.cursor(t.cur)
 	var saves [3]savedCursor
@@ -234,9 +240,9 @@ func (e *snapshotEncoder) cursor(c cursor) {
 	e.u(flags)
 	e.u(uint64(c.gl))
 }
-func (e *snapshotEncoder) screen(screen [][]cell, wraps []bool) {
+func (e *snapshotEncoder) screen(screen [][]cell, wraps []rowFlags) {
 	for y, row := range screen {
-		e.boolean(wraps != nil && wraps[y])
+		e.u(uint64(rowFlagsAt(wraps, y)))
 		n := len(row)
 		for n > 0 && row[n-1] == (cell{}) {
 			n--
@@ -309,7 +315,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	} else if next.rows > limits.MaxCells/next.cols {
 		d.fail(ErrSnapshotLimit, "screen cells")
 	}
-	flagMask := uint64((1 << 21) - 1)
+	flagMask := uint64((1 << 27) - 1)
 	if version == 1 {
 		flagMask = (1 << 18) - 1
 	}
@@ -362,7 +368,12 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 	}
 	d.section = "lookup tables"
-	x := extra{privateModes: uint8(flags >> 18)}
+	x := extra{privateModes: uint8(flags>>18) & 7}
+	next.semantic = [2]semanticContent{semanticContent(flags>>21) & 3, semanticContent(flags>>23) & 3}
+	next.promptRedraw = promptRedraw(flags>>25) & 3
+	if next.promptRedraw > promptRedrawLast {
+		d.fail(ErrSnapshotMalformed, "prompt redraw mode")
+	}
 	n = d.count(int(^uint32(0)>>1)-int(clusterBase)+1, int(unsafe.Sizeof(cluster{})))
 	if n > 0 {
 		x.clusters = make([]cluster, n)
@@ -440,7 +451,10 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 			x.savedModes[i] = s
 		}
 	}
-	if x.clusters != nil || x.rare != nil || x.tabs != nil || x.savedModes != nil || x.privateModes != 0 {
+	if version >= 2 && next.altActive {
+		x.inactivePrimary = point{int(d.number(uint64(next.cols - 1))), int(d.number(uint64(next.rows - 1))), d.boolean()}
+	}
+	if next.altActive || x.clusters != nil || x.rare != nil || x.tabs != nil || x.savedModes != nil || x.privateModes != 0 {
 		if d.charge(1, int(unsafe.Sizeof(extra{}))) {
 			next.x = new(extra)
 			*next.x = x
@@ -456,6 +470,15 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 				*c = savedCursor{cursor: d.cursor(&next), valid: true}
 			}
 		}
+	}
+	if version == 1 && next.altActive && next.x != nil {
+		// Released v1 did not retain the inactive primary position. A valid
+		// 1049 save is the only known primary point; DECSC may be unrelated.
+		c := next.cur
+		if next.saved != nil && next.saved.alternate.valid {
+			c = next.saved.alternate.cursor
+		}
+		next.x.inactivePrimary = point{c.x, c.y, c.wrapPending}
 	}
 	d.section = "screens"
 	next.main, next.mainWrap = d.screen(&next)
@@ -661,25 +684,29 @@ func (d *snapshotDecoder) cursor(t *Terminal) cursor {
 	}
 	return c
 }
-func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []bool) {
+func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []rowFlags) {
 	if !d.charge(t.rows, int(unsafe.Sizeof([]cell{}))) {
 		return nil, nil
 	}
 	screen := make([][]cell, t.rows)
-	var wraps []bool
+	var wraps []rowFlags
 	for y := range screen {
 		if d.err != nil {
 			break
 		}
-		if d.boolean() {
-			if y == t.rows-1 {
+		flags := rowFlags(d.number(5))
+		if d.version == 1 && flags > 1 {
+			d.fail(ErrSnapshotMalformed, "legacy row wrap")
+		}
+		if flags != 0 {
+			if y == t.rows-1 && flags&rowWrap != 0 {
 				d.fail(ErrSnapshotMalformed, "last row wraps")
 			}
 			if wraps == nil && d.charge(t.rows, 1) {
-				wraps = make([]bool, t.rows)
+				wraps = make([]rowFlags, t.rows)
 			}
 			if wraps != nil {
-				wraps[y] = true
+				wraps[y] = flags
 			}
 		}
 		n := d.integer()

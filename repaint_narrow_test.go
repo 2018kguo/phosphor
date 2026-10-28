@@ -38,7 +38,7 @@ func TestRepaintNarrowedEdgeKeepsSoftWrap(t *testing.T) {
 	restored.Write(term.Repaint(true))
 	assertSparseObservations(t, term, restored)
 	for y := range term.rows {
-		if (term.mainWrap != nil && term.mainWrap[y]) != (restored.mainWrap != nil && restored.mainWrap[y]) {
+		if rowFlagsAt(term.mainWrap, y) != rowFlagsAt(restored.mainWrap, y) {
 			t.Fatalf("row %d soft wrap changed", y)
 		}
 	}

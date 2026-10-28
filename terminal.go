@@ -1,6 +1,7 @@
 package phosphor
 
 import (
+	"bytes"
 	"encoding/binary"
 	"strings"
 	"unicode/utf8"
@@ -79,21 +80,24 @@ type savedCursors struct {
 type Terminal struct {
 	cols, rows int
 	main, alt  [][]cell // alt is nil unless the alternate screen is in use
-	// Soft-wrap flags, nil until a row wraps: wrap[y] means row y
-	// continues on row y+1.
-	mainWrap, altWrap []bool
+	// Canonical row metadata, nil until a row wraps or a shell annotates it.
+	// rowWrap means row y continues on row y+1.
+	mainWrap, altWrap []rowFlags
 	altActive         bool
 	cur               cursor
 	saved             *savedCursors
-	top, bot          int       // scroll region, inclusive
-	left, right       int       // left and right margins, inclusive
-	lrmm              bool      // DECLRMM: left and right margins enabled
-	protISO           bool      // protection was last set by SPA (ISO), not DECSCA
-	ss                uint8     // pending single shift (2 or 3)
-	grapheme          bool      // 2027: Unicode grapheme clustering
-	x                 *extra    // state few programs use, nil until one does
-	cfg               *config   // options and palette changes, nil if none
-	dirty             *dirtySet // damage, nil until ClearDirty is first called
+	top, bot          int   // scroll region, inclusive
+	left, right       int   // left and right margins, inclusive
+	lrmm              bool  // DECLRMM: left and right margins enabled
+	protISO           bool  // protection was last set by SPA (ISO), not DECSCA
+	ss                uint8 // pending single shift (2 or 3)
+	grapheme          bool  // 2027: Unicode grapheme clustering
+	// These bytes occupy existing padding before x; Terminal stays560 bytes.
+	semantic     [2]semanticContent // screen content state, independent of DECSC
+	promptRedraw promptRedraw
+	x            *extra    // state few programs use, nil until one does
+	cfg          *config   // options and palette changes, nil if none
+	dirty        *dirtySet // damage, nil until ClearDirty is first called
 
 	// modes
 	autowrap     bool
@@ -146,6 +150,9 @@ type extra struct {
 	tabs         []uint64    // tab stops, nil for every 8 columns
 	savedModes   []savedMode // XTSAVE
 	privateModes uint8       // rare DEC private modes: columns3/40 and smooth scrolling4
+	// The primary screen's actual cursor while the alternate is active.
+	// A DECSC slot can name a different position and cannot replace this fact.
+	inactivePrimary point
 	// characters with combining marks, referenced by cells
 	clusters   []cluster
 	clusterCap int
@@ -226,7 +233,7 @@ func (t *Terminal) screen() [][]cell {
 }
 
 // wraps returns the active screen's soft-wrap flags (nil if none is set).
-func (t *Terminal) wraps() []bool {
+func (t *Terminal) wraps() []rowFlags {
 	if t.altActive {
 		return t.altWrap
 	}
@@ -240,14 +247,18 @@ func (t *Terminal) setWrap(y int, on bool) {
 		if !on {
 			return
 		}
-		w = make([]bool, t.rows)
+		w = make([]rowFlags, t.rows)
 		if t.altActive {
 			t.altWrap = w
 		} else {
 			t.mainWrap = w
 		}
 	}
-	w[y] = on
+	if on {
+		w[y] |= rowWrap
+	} else {
+		w[y] &^= rowWrap
+	}
 }
 
 // wrapped reports whether row y continues the row above it (for row 0 of
@@ -257,7 +268,7 @@ func (t *Terminal) wrapped(y int) bool {
 		return !t.altActive && t.sbOpen
 	}
 	w := t.wraps()
-	return w != nil && w[y-1]
+	return w != nil && w[y-1]&rowWrap != 0
 }
 
 // Write feeds the terminal a program's output, implementing io.Writer.
@@ -653,16 +664,17 @@ func (t *Terminal) reset() {
 	*t = Terminal{
 		cfg: cfg, dirty: dirty,
 		cols: t.cols, rows: t.rows,
-		main:       make([][]cell, t.rows),
-		bot:        t.rows - 1,
-		right:      t.cols - 1,
-		autowrap:   true,
-		sb:         sb,
-		sbStart:    sbStart,
-		sbBytes:    sbBytes,
-		sbMaxLines: t.sbMaxLines,
-		sbMaxBytes: t.sbMaxBytes,
-		osc:        t.osc[:0],
+		main:         make([][]cell, t.rows),
+		bot:          t.rows - 1,
+		right:        t.cols - 1,
+		autowrap:     true,
+		promptRedraw: promptRedrawAll, // native RIS differs from headless construction
+		sb:           sb,
+		sbStart:      sbStart,
+		sbBytes:      sbBytes,
+		sbMaxLines:   t.sbMaxLines,
+		sbMaxBytes:   t.sbMaxBytes,
+		osc:          t.osc[:0],
 	}
 	t.touchAll()
 }
@@ -922,10 +934,10 @@ func (t *Terminal) softReset() {
 	t.protISO = false
 	t.appCursor = false
 	t.appKeypad = false
+	t.lrmm = false
 	t.top, t.bot, t.left, t.right = 0, t.rows-1, 0, t.cols-1
 	t.cur.pen = cell{}
 	t.cur.g, t.cur.gl, t.ss = [4]charset{}, 0, 0
-	t.cur.wrapPending = false
 	if t.saved != nil {
 		slot := 0
 		if t.altActive {
@@ -1058,7 +1070,7 @@ func (t *Terminal) decMode(mode int, on bool) {
 	case 2027:
 		t.grapheme = on
 	case 47, 1047:
-		t.setAlt(on, mode == 1047)
+		t.setAlt(on, mode)
 	case 1048:
 		if on {
 			t.saveCursor()
@@ -1070,14 +1082,14 @@ func (t *Terminal) decMode(mode int, on bool) {
 			if !t.altActive {
 				t.cursorSaves().alternate = savedCursor{cursor: t.cur, valid: true}
 			}
-			t.setAlt(true, true)
+			t.setAlt(true, 1049)
 			t.clearScreen()
 		} else if t.altActive {
 			var saved savedCursor
 			if t.saved != nil {
 				saved = t.saved.alternate
 			}
-			t.setAlt(false, true)
+			t.setAlt(false, 1049)
 			if saved.valid {
 				t.setCursor(saved.cursor)
 			}
@@ -1088,12 +1100,22 @@ func (t *Terminal) decMode(mode int, on bool) {
 // setAlt switches screens. Leaving the alternate screen frees it, unless
 // it was left with mode 47 (which keeps its contents for the next switch)
 // and holds something.
-func (t *Terminal) setAlt(on, clearOnExit bool) {
+func (t *Terminal) setAlt(on bool, mode int) {
 	if on == t.altActive {
 		return
 	}
 	t.touchAll()
+	content := t.semanticContent()
+	if on {
+		t.ext().inactivePrimary = point{t.cur.x, t.cur.y, t.cur.wrapPending}
+	} else if t.x != nil {
+		t.x.inactivePrimary = point{}
+	}
 	t.altActive = on
+	if on || mode != 1049 {
+		t.setSemanticContent(content)
+	}
+	clearOnExit := mode != 47
 	if on {
 		if t.alt == nil {
 			t.alt = make([][]cell, t.rows)
@@ -1138,7 +1160,7 @@ func (t *Terminal) eraseRows(from, to int) {
 			scr[y] = t.blankRow()
 		}
 		if w != nil {
-			w[y] = false
+			w[y] = 0
 		}
 	}
 }
@@ -1213,7 +1235,7 @@ func (t *Terminal) fillCells(y, from, to int) {
 	}
 	if to == t.cols {
 		if w := t.wraps(); w != nil {
-			w[y] = false
+			w[y] &^= rowWrap
 		}
 	}
 	scr := t.screen()
@@ -1339,6 +1361,8 @@ func (t *Terminal) print(r rune, w int) {
 // wrapLine moves the cursor to the next line for autowrap and marks the
 // row it left as continuing there.
 func (t *Terminal) wrapLine() {
+	content := t.semanticContent()
+	defer t.semanticWrap(content)
 	y := t.cur.y
 	if !t.fullWidth() || t.cur.x != t.cols-1 {
 		t.index() // soft wraps are only kept for full rows
@@ -1449,6 +1473,7 @@ func (t *Terminal) printASCII(p []byte) {
 // index moves the cursor down a line, scrolling at the bottom margin. It
 // reports whether the cursor moved or the region scrolled.
 func (t *Terminal) index() bool {
+	defer t.semanticIndex()
 	if t.cur.y == t.bot {
 		if !t.inMargins(t.cur.x) {
 			return false
@@ -1488,7 +1513,7 @@ func (t *Terminal) scrollUp(top, bot, n int) {
 	if top == 0 && !t.altActive {
 		w := t.mainWrap
 		for i, row := range scr[:n] {
-			t.pushScrollback(row, w != nil && w[i], rowAt(scr, i+1))
+			t.pushScrollback(row, rowFlagsAt(w, i), rowAt(scr, i+1))
 		}
 		open := t.sbOpen
 		t.rotate(top, bot, n)
@@ -1537,14 +1562,17 @@ func (t *Terminal) rotate(top, bot, n int) {
 	if w := t.wraps(); w != nil {
 		if up {
 			copy(w[top:], w[top+n:bot+1])
-			clear(w[max(bot-n, top) : bot+1])
+			clear(w[max(bot-n+1, top) : bot+1])
+			if bot-n >= top {
+				w[bot-n] &^= rowWrap
+			}
 		} else {
 			copy(w[top+n:bot+1], w[top:bot+1-n])
 			clear(w[top : top+n])
-			w[bot] = false
+			w[bot] &^= rowWrap
 		}
 		if top > 0 {
-			w[top-1] = false
+			w[top-1] &^= rowWrap
 		}
 	}
 	if top == 0 && !t.altActive {
@@ -1735,6 +1763,9 @@ func (t *Terminal) eraseDisplay(mode int, selective bool) {
 		t.eraseFull(0, t.cur.y, keep)
 		t.erase(t.cur.y, 0, t.cur.x+1, keep)
 	case 2:
+		if !t.altActive && screenAtPrompt(t.main, t.mainWrap) {
+			t.scrollClear()
+		}
 		t.eraseFull(0, t.rows, keep)
 	case 3:
 		if !selective {
@@ -1769,7 +1800,7 @@ func (t *Terminal) scrollClear() {
 	}
 	if !t.altActive {
 		for y, row := range scr[:n] {
-			t.pushScrollback(row, t.mainWrap != nil && t.mainWrap[y], rowAt(scr, y+1))
+			t.pushScrollback(row, rowFlagsAt(t.mainWrap, y), rowAt(scr, y+1))
 		}
 	}
 	// rotate normally erases with the pen's background. Scroll-and-clear
@@ -1795,7 +1826,8 @@ func (t *Terminal) eraseLine(mode int, selective bool) {
 	case 1:
 		t.erase(t.cur.y, 0, t.cur.x+1, keep)
 	case 2:
-		t.eraseFull(t.cur.y, t.cur.y+1, keep)
+		// EL clears cells, not the shell's row prompt annotation.
+		t.erase(t.cur.y, 0, t.cols, keep)
 	}
 }
 
@@ -2148,18 +2180,7 @@ func (t *Terminal) oscDispatch() {
 			t.setLink(params + ";" + uri)
 		}
 	case len(s) >= 5 && string(s[:4]) == "133;":
-		// Shell prompt A/N commands first request a fresh line, as L
-		// does on its own. Other prompt markers do not change text.
-		if (s[4] == 'L' || s[4] == 'A' || s[4] == 'N') && (len(s) == 5 || s[5] == ';') {
-			left := 0
-			if t.cur.x >= t.left {
-				left = t.left
-			}
-			if t.cur.x != left {
-				t.carriageReturn()
-				t.index()
-			}
-		}
+		t.semanticCommand(s[4:])
 	default:
 		t.oscColor(s)
 	}
@@ -2349,7 +2370,8 @@ func (t *Terminal) visitClusterRefs(ref func(*rune)) {
 // lines past the line and byte budgets. A row that continues on the next
 // one (wrapped, with next the row below) is kept whole, and the next row
 // is appended to its line.
-func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
+func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
+	wrapped := flags&rowWrap != 0
 	if t.sbMaxLines <= 0 {
 		return
 	}
@@ -2365,6 +2387,17 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		t.scratch = t.appendRowHistory(t.scratch[:0], row, t.cols, true, true)
 	}
 	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+	if semantic := flags & rowSemanticMask; semantic != 0 || join && bytes.Contains(t.sb[len(t.sb)-1], []byte{0, 0, 'P'}) {
+		if semantic != 0 && contentEnd(row) == 0 {
+			// An annotated empty row is meaningful to native reflow.
+			t.scratch = append(t.scratch, 0, 1, ' ')
+		}
+		n := len(t.scratch)
+		t.scratch = append(t.scratch, 0, 0, 0, 0)
+		copy(t.scratch[4:], t.scratch[:n])
+		t.scratch[0], t.scratch[1], t.scratch[2], t.scratch[3] = 0, 0, 'P', byte(semantic>>1)
+		join = join && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+	}
 	putBack := join && t.sbSpacer && !startsWide(row)
 	if join && !wrapped && contentEnd(row) < t.cols {
 		// Replayed, this row starts by wrapping, so something must be

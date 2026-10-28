@@ -20,9 +20,9 @@ func TestCompactKeepsNonzeroCells(t *testing.T) {
 			screen[y][0] = c
 		}
 	}
-	term.mainWrap = make([]bool, term.rows)
-	term.altWrap = make([]bool, term.rows)
-	term.altWrap[1] = true
+	term.mainWrap = make([]rowFlags, term.rows)
+	term.altWrap = make([]rowFlags, term.rows)
+	term.altWrap[1] = rowWrap
 	term.ClearDirty()
 	term.scratch = make([]byte, 0, 4096)
 	term.osc = []byte("2;completed title")
@@ -37,7 +37,7 @@ func TestCompactKeepsNonzeroCells(t *testing.T) {
 			}
 		}
 	}
-	if !term.altWrap[1] || term.Dirty() {
+	if term.altWrap[1]&rowWrap == 0 || term.Dirty() {
 		t.Fatal("wrap or damage state changed")
 	}
 }
