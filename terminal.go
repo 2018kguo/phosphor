@@ -1582,11 +1582,15 @@ func (t *Terminal) printASCII(p []byte) {
 				scr[t.cur.y] = row
 			}
 		}
-		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.E
 		row = row[x : x+n]
-		for i, b := range p[:n] {
-			c := &row[i]
-			c.R, c.Fg, c.Bg, c.A, c.E = rune(b), fg, bg, attrs, link
+		if asciiVector && n >= 16 {
+			fillASCII8(row, p[:n], t.cur.pen)
+		} else {
+			fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.E
+			for i, b := range p[:n] {
+				c := &row[i]
+				c.R, c.Fg, c.Bg, c.A, c.E = rune(b), fg, bg, attrs, link
+			}
 		}
 		t.lastChar = rune(p[n-1])
 		if x+n > edge {
