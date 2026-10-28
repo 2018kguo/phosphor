@@ -320,11 +320,24 @@ func (t *Terminal) Write(p []byte) (int, error) {
 				continue
 			}
 			if c == 0x1b && i+1 < len(p) && p[i+1] == '[' {
-				// A complete CSI introducer has no intermediate effects.
-				// Enter its parameter state once; split introducers still
-				// take the byte-wise path below.
+				// Dispatch complete short commands without re-entering the
+				// parser for each byte. Longer or split commands still enter
+				// the same parameter state as the byte-wise introducer.
 				t.nparams, t.paramSet, t.marker, t.inter = 0, false, 0, 0
 				t.params[0], t.sub = 0, 0
+				if n, value := shortCSI(p[i+2:]); n != 0 {
+					if n > 1 {
+						t.params[0], t.nparams, t.paramSet = value, 1, true
+					}
+					final := p[i+n+1]
+					if final == 'm' {
+						t.sgr()
+					} else {
+						t.csiDispatch(final)
+					}
+					i += n + 1
+					continue
+				}
 				t.state = stCSI
 				i++
 				continue
@@ -333,6 +346,20 @@ func (t *Terminal) Write(p []byte) (int, error) {
 		t.step(c)
 	}
 	return len(p), nil
+}
+
+// shortCSI recognizes a complete standard final with at most two decimal
+// digits. Private markers, intermediates, longer parameters and split input
+// keep using the canonical parser.
+func shortCSI(p []byte) (n int, value uint32) {
+	for n < len(p) && n < 2 && p[n] >= '0' && p[n] <= '9' {
+		value = value*10 + uint32(p[n]-'0')
+		n++
+	}
+	if n < len(p) && p[n] >= 0x40 && p[n] <= 0x7e {
+		return n + 1, value
+	}
+	return 0, 0
 }
 
 // printable8 reports whether all eight bytes of w are printable ASCII
