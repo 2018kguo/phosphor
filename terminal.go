@@ -1300,6 +1300,10 @@ func (t *Terminal) fillCells(y, from, to int) {
 	if to < len(row) && row[to].R == wideTail {
 		row[to] = blank
 	}
+	if blank.Bg == 0 {
+		clear(row[from:to])
+		return
+	}
 	for x := from; x < to; x++ {
 		row[x] = blank
 	}
@@ -2095,7 +2099,9 @@ func (t *Terminal) resizeTabs(oldCols int) {
 
 func (t *Terminal) sgr() {
 	if t.nparams == 0 {
-		t.setUnderlineColor(0)
+		if t.cur.pen.E != 0 {
+			t.setUnderlineColor(0)
+		}
 		t.cur.pen = cell{A: t.cur.pen.A & AttrProtected, E: t.cur.pen.E}
 		return
 	}
@@ -2115,7 +2121,9 @@ func (t *Terminal) sgr() {
 		}
 		switch {
 		case v == 0:
-			t.setUnderlineColor(0)
+			if p.E != 0 {
+				t.setUnderlineColor(0)
+			}
 			*p = cell{A: p.A & AttrProtected, E: p.E}
 		case v == 1:
 			p.A |= AttrBold
