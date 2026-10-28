@@ -7,10 +7,12 @@ and whole-daemon performance need separate measurements.
 
 ## Read the evidence
 
-The [evidence index](benchmarks.json) records the measured source revisions,
-native optimization, toolchain, library hash, sample ordering and archive checksum.
-[Download the complete evidence bundle](https://github.com/2018kguo/phosphor/releases/download/v0.4.2/phosphor-benchmark-evidence.tar.gz)
-for every raw sample, source manifest, trace failure and rejected experiment.
+The [evidence index](benchmarks.json) records sources, toolchains, library hashes,
+sample ordering and archive checksums. The [balanced throughput audit](https://github.com/2018kguo/phosphor/releases/download/v0.4.2/phosphor-benchmark-audit.tar.gz)
+contains all 360 samples, matched-build records and native verification logs.
+[Download the historical evidence bundle](https://github.com/2018kguo/phosphor/releases/download/v0.4.2/phosphor-benchmark-evidence.tar.gz)
+for the original timing and memory samples, source manifests, trace failures and
+rejected experiments. The two experiments are recorded separately.
 Its `manifest.json` verifies the original paths and SHA-256 of all files.
 Historical reports describe their recorded revisions; this page is the maintained guide.
 
@@ -21,44 +23,45 @@ checksums when updating a measured claim; do not add a directory per experiment.
 ## Throughput
 
 Median MiB per process CPU second; higher is better. The recorded comparison
-uses 120×40 terminals, one Go execution thread and 1 KiB writes. Five samples
-per build and stream run for 750 ms with history or 500 ms without it.
-Inputs are generated before timing. CPU includes GC, native work and the Go-to-C
-boundary. Both engines parse synchronously and format replies into discard sinks.
+uses 120×40 terminals, one Go execution thread and 1 KiB writes. Six samples per
+build, stream and history policy run for one second each. All six build-order
+permutations are used, with repeat and position recorded in every sample.
+Input generation, one warm-up feed, forced pre-run GC, construction and disposal
+are outside timing. Process CPU includes GC within the timed window, native
+work and the Go-to-C boundary. Both engines parse synchronously and format
+replies into discard sinks.
 Native continuation retention is disabled.
 
 | Input | Phosphor, history | Native, history | Phosphor, no history | Native, no history |
 |---|---:|---:|---:|---:|
-| Synthetic agent TUI | 511.3 | 504.3 | 515.9 | 500.4 |
-| Scrolling logs | 769.5 | 932.9 | 1,315.1 | 594.1 |
-| Progress redraws | 2,036.1 | 1,144.9 | 2,101.6 | 1,139.3 |
-| vim recording | 440.1 | 346.5 | 433.3 | 346.3 |
-| less recording | 377.0 | 139.0 | 380.5 | 137.3 |
-| nvim recording | 834.4 | 630.6 | 835.0 | 634.7 |
-| nano recording | 705.7 | 578.6 | 700.1 | 581.7 |
-| man recording | 760.4 | 434.4 | 751.9 | 440.9 |
-| Mixed graphemes | 146.1 | 156.4 | 180.1 | 187.5 |
-| OSC 8 links | 275.0 | 24.3 | 359.1 | 22.4 |
+| Synthetic agent TUI | 491.5 | 483.9 | 520.5 | 510.9 |
+| Scrolling logs | 766.8 | 914.4 | 1,317.9 | 595.0 |
+| Progress redraws | 2,009.7 | 1,124.7 | 2,088.6 | 1,129.5 |
+| vim recording | 424.5 | 336.7 | 433.5 | 346.2 |
+| less recording | 367.7 | 137.8 | 371.5 | 136.7 |
+| nvim recording | 830.6 | 628.7 | 833.9 | 633.7 |
+| nano recording | 705.0 | 578.4 | 706.1 | 579.3 |
+| man recording | 752.0 | 435.5 | 733.9 | 429.2 |
+| Mixed graphemes | 145.6 | 165.2 | 159.4 | 164.5 |
+| OSC 8 links | 261.2 | 24.5 | 297.7 | 16.2 |
 
 Nominal history budgets are 2,000 lines / 256 KiB. They retain different work:
-Phosphor keeps 2,000 logical log lines; native keeps 474–699 physical rows.
-For mixed graphemes those counts are 1,691 and 374–570. The history columns
+Phosphor keeps 2,000 logical log lines; native keeps 387–678 physical rows.
+For mixed graphemes those counts are 1,691 and 539–739. The history columns
 compare each engine's configured policy, not equal retained contents. The
 no-history control explicitly verifies zero retained rows on both engines.
 
-The archive also includes 8 KiB and 64 KiB writes, for 600 timing samples in all.
-Native's measured grapheme lead ranges from 7–20% with history across those sizes,
-and about 4% without history at 1 KiB. These short samples do not establish
-small differences reliably or identify an overall fastest terminal core.
-The historical runner reversed the endpoint order but always put the candidate
-second; its inner `round` field is zero. File order reconstructs the five outer
-repeats. The maintained runner rotates all three positions and records the
-outer repeat and position explicitly. Historical samples remain unchanged.
+The measured native grapheme lead is about 13% with history and 3% without it.
+Small differences remain uncertain on a shared host; six short samples do not
+identify an overall fastest terminal core. The native library was built in
+ReleaseFast from the verified source, with the compiler binary and library
+checksums recorded. Both binaries' loaded library paths were observed before timing.
 
 Relative to the recorded Phosphor baseline, mixed-grapheme throughput increases
-about 6.3×, progress 41% and budgeted logs 13%. A separate Go benchmark with
-1,024 distinct clusters improves about 2.4×. It uses wall time and decimal MB/s;
-do not combine its units with the native table. Distinct clusters still allocate.
+about 6.4×, progress 42% and budgeted logs 17%. The earlier archive includes
+8 KiB/64 KiB writes and a distinct-cluster control. Those runs use different
+sample ordering and durations and are not pooled into this table. The separate
+Go benchmarks use wall time and decimal MB/s. Distinct clusters still allocate.
 
 ## Retained memory
 
@@ -109,6 +112,7 @@ preserve upstream attribution and policy differences.
 
 [Development](development.md) covers Go benchmarks and test suites. The
 [native comparison guide](../oracle/ghostty/README.md) builds the native library,
-then builds the same driver against two explicit core revisions. Run its burst
-witnesses before interpreting timings. Use fresh processes for each memory sample,
+then builds the same driver against two explicit core revisions. The burst
+witnesses include cumulative cursor movement so missing middle input stays
+observable even with no history or collected replies. Run them before interpreting timings. Use fresh processes for each memory sample,
 retain failures and report actual history contents alongside throughput.

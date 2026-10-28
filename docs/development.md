@@ -113,7 +113,8 @@ Go files in the root implement one public package. Related regressions belong
 in the existing subject suite: `history_test.go`, `unicode_test.go`,
 `repaint_test.go`, `modes_test.go` and the other matching files. Conformance
 sources share the runner in `conformance_test.go`; translated Ghostty cases
-live in `conformance_ghostty_test.go`. Preserve case names, upstream expectations,
+live in `conformance_ghostty_test.go`. The optional native tests use shared
+measurement, protocol and repaint suites as well. Preserve case names, upstream expectations,
 source notices and explicit exclusions when extending a suite.
 
 Keep maintained docs in `docs/` and reproducible inputs in `testdata/`.

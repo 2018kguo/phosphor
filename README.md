@@ -89,9 +89,9 @@ Recorded headless workloads show the storage and speed tradeoffs:
 | Prompts after erase and compaction | About **10–26× less incremental RSS**, depending on emulator count and allocator amortization |
 | Completed editors and pagers | **19–51% less RSS**, with inactive editor buffers retained |
 | Exactly 100 styled history rows | About **3.1× less RSS**, with equal retained contents verified |
-| Editor/pager recordings and progress | **1.22–2.71× more bytes per CPU second** under the recorded budgets |
-| Scrolling logs | Native is **21% faster** with budgeted history; Phosphor is **2.2× faster** with history disabled |
-| Grapheme-heavy Unicode | Native is about **7–20% faster** with history, depending on write size; about **4% faster** without it |
+| Editor/pager recordings and progress | **1.22–2.67× more bytes per CPU second** under the recorded budgets |
+| Scrolling logs | Native is **19% faster** with budgeted history; Phosphor is **2.2× faster** with history disabled |
+| Grapheme-heavy Unicode | Native is about **13% faster** with history and **3% faster** without it at the measured write size |
 
 Inputs match, but equal byte budgets keep different amounts of history:
 Phosphor stores serialized logical lines; native prunes physical pages.

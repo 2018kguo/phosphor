@@ -74,8 +74,8 @@ separate zero-retention control. Keep every sample and failure.
 |---|---|
 | `trace -traces ghostty/traces.json` | Cells, replies and future behavior against untouched controls. Nonzero exit on parity failure. Use `-trace-chunk 1` and `7` for byte boundaries. |
 | `throughput -duration 750ms` | Process CPU and wall throughput, including GC and the C boundary. Select input, chunk and policy with `COMPARE_*`. |
-| `memory -count 1024` | Incremental retained heap/RSS for each state; run every sample in a fresh process. |
-| `state-cost` | Snapshot, repaint and restore costs, with checkpoint bookkeeping enabled where required. |
+| `memory -n 1024` | Incremental retained heap/RSS for each state; run every sample in a fresh process. |
+| `state` | Snapshot, repaint and restore costs, with checkpoint bookkeeping enabled where required. |
 | `cursor-replies` | Raw cursor query answers. |
 | `check -probes ghostty/probes.json` | Legacy selected probes. Inspect per-record failure fields; this mode does not fail the process. Prefer `trace`. |
 

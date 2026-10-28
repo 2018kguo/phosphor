@@ -8,7 +8,7 @@
     "manifest": "manifest.json",
     "current_results": "oracle/ghostty/results/2026-10-28-native-mining"
   },
-  "measurement": {
+  "historical_measurement": {
     "baseline_commit": "ecfe310cd6da699df77796d35a091423075b30b3",
     "candidate_commit": "611b81c71c4c1ec030fa32dc1555f30535a2df9f",
     "native_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
@@ -44,5 +44,44 @@
       "prompt-erase-compact",
       "colored-prompt-erase-compact"
     ]
+  },
+  "balanced_throughput": {
+    "candidate_commit": "e706934f1da337140282911de72fd725262f42e3",
+    "baseline_commit": "ecfe310cd6da699df77796d35a091423075b30b3",
+    "native_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+    "go": "go version go1.26.3 darwin/arm64",
+    "native_optimization": "ReleaseFast",
+    "zig": {
+      "version": "0.17.0",
+      "download_url": "https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz",
+      "archive_sha256": "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a",
+      "binary_sha256": "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523"
+    },
+    "native_library_sha256": "204f618460dd686255e815503ef962b83bd240f29d9d38b93455456074f70b14",
+    "samples": 360,
+    "history_policies": [
+      "budgeted",
+      "none"
+    ],
+    "geometry": [
+      120,
+      40
+    ],
+    "chunk_bytes": 1024,
+    "repeats": 6,
+    "sample_duration": "1s",
+    "GOMAXPROCS": 1,
+    "scope": "Synchronous warm feed only, process CPU includes in-window GC and C ABI/native work; construction/warm-up/forced pre-run GC/disposal/capture outside timing.",
+    "orders": "All six permutations; every label twice in each position per stream/policy. Explicit outer_repeat and sample_order.",
+    "summary_path": "throughput/summary.json",
+    "record_files": [
+      "throughput/throughput-budgeted.jsonl",
+      "throughput/throughput-none.jsonl"
+    ],
+    "evidence": {
+      "url": "https://github.com/2018kguo/phosphor/releases/download/v0.4.2/phosphor-benchmark-audit.tar.gz",
+      "sha256": "fea0af59d53350749ef9335ec3f1e06b90575b1ca45d1d88ff377b833fbe0b98",
+      "manifest": "manifest.json"
+    }
   }
 }
