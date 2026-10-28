@@ -25,7 +25,7 @@ type clusterModes [2]uint64
 func (m clusterModes) has(i int) bool { return m[i/64]&(1<<uint(i%64)) != 0 }
 func (m *clusterModes) set(i int)     { m[i/64] |= 1 << uint(i%64) }
 
-// CodepointWidth returns the Unicode 17 terminal width of a single scalar:
+// CodepointWidth returns the terminal width of a single scalar:
 // zero for combining or ignored scalars, two for wide scalars, otherwise one.
 // Invalid scalars have width one. A complete grapheme can have a different
 // width under mode 2027, so summing scalar widths measures mode-off layout.
