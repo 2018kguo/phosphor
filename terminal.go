@@ -1180,11 +1180,10 @@ func (t *Terminal) eraseRows(from, to int) {
 	}
 }
 
-// blank erases row in place with the current background.
+// blank erases row with the current background, retaining its allocation.
 func (t *Terminal) blank(row []cell) []cell {
 	if t.cur.pen.Bg == 0 {
-		clear(row)
-		return row
+		return row[:0]
 	}
 	row = growRow(row, t.cols, t.cols)
 	blank := cell{Bg: t.cur.pen.Bg}
@@ -1240,6 +1239,22 @@ func growRowPrefix(row []cell, end, limit int) []cell {
 		}
 	}
 	return growRow(row, end, capacity)
+}
+
+// ASCII replaces every cell in [from, end). Only a gap before that run
+// needs clearing when an erased or narrowed row reuses its old capacity.
+//
+//go:noinline
+func growASCIIRow(row []cell, from, end, cols int) []cell {
+	if cap(row) < end {
+		return growRowPrefix(row, end, cols)
+	}
+	old := len(row)
+	row = row[:end]
+	if from > old {
+		clear(row[old:from])
+	}
+	return row
 }
 
 func growRow(row []cell, end, capacity int) []cell {
@@ -1522,17 +1537,23 @@ func (t *Terminal) printASCII(p []byte) {
 			edge = t.right
 		}
 		n := min(len(p), edge+1-x)
-		var row []cell
+		scr := t.screen()
+		row := scr[t.cur.y]
+		// Hidden capacity may still contain an erased wide character.
+		// Check the live prefix before exposing cells the run overwrites.
+		if rowCell(row, x).R == wideTail || rowCell(row, x+n).R == wideTail {
+			t.print(rune(p[0]), 1)
+			p = p[1:]
+			continue
+		}
 		if t.altActive {
 			row = t.row(t.cur.y)
 		} else {
 			t.touch(t.cur.y)
-			row = ensureRowPrefix(&t.screen()[t.cur.y], x+n, t.cols)
-		}
-		if row[x].R == wideTail || (x+n < len(row) && row[x+n].R == wideTail) {
-			t.print(rune(p[0]), 1)
-			p = p[1:]
-			continue
+			if len(row) < x+n {
+				row = growASCIIRow(row, x, x+n, t.cols)
+				scr[t.cur.y] = row
+			}
 		}
 		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.E
 		row = row[x : x+n]
