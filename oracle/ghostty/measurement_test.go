@@ -135,7 +135,7 @@ func TestMeasurementBurstParsesEveryChunk(t *testing.T) {
 						t.Fatalf("chunking changed state: %+v", diff)
 					}
 					// Capture and restore the unfinished CSI, then prove it still
-					// applies to future output without repeating prior replies.
+					// applies to future output and the following cursor query.
 					e.replace(e.Snapshot(), measurementCols, measurementRows, true)
 					if diff := differences(state, traceState(t, e)); len(diff) != 0 {
 						t.Fatalf("snapshot changed burst state: %+v", diff)

@@ -146,9 +146,28 @@ func (g *ghost) View() View {
 	}
 	return View{int(i.cols), int(i.rows), lines, int(i.x), int(i.y), bool(i.alt), bool(i.visible), bool(i.pending_wrap), bool(i.bracketed), bool(i.application_cursor), bool(i.origin), bool(i.autowrap), bool(i.insert)}
 }
+
+type historyPolicy string
+
+const (
+	historyBudgeted historyPolicy = "budgeted"
+	historyNone     historyPolicy = "none"
+)
+
 func newEngine(name string, c, r int) Engine {
+	return newEngineWithHistory(name, c, r, historyBudgeted)
+}
+
+func newEngineWithHistory(name string, c, r int, history historyPolicy) Engine {
+	if history != historyBudgeted && history != historyNone {
+		panic("COMPARE_HISTORY must be budgeted or none")
+	}
 	if name == "phosphor" {
-		return &phos{phosphor.New(c, r, phosphor.WithReply(io.Discard))}
+		options := []phosphor.Option{phosphor.WithReply(io.Discard)}
+		if history == historyNone {
+			options = append(options, phosphor.WithScrollback(0))
+		}
+		return &phos{phosphor.New(c, r, options...)}
 	}
 	if name != "ghostty" {
 		panic(name)
@@ -156,6 +175,10 @@ func newEngine(name string, c, r int) Engine {
 	t := C.exp_new(C.int(c), C.int(r))
 	if t == nil {
 		panic("ghostty new")
+	}
+	if history == historyNone {
+		disabled := C.size_t(0)
+		must(C.int(C.ghostty_terminal_set(t, C.GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, unsafe.Pointer(&disabled))))
 	}
 	return &ghost{t}
 }
@@ -240,6 +263,10 @@ func processCPU() time.Duration {
 	return time.Duration(usage.Utime.Nano() + usage.Stime.Nano())
 }
 func throughput(duration time.Duration) {
+	history := historyPolicy(os.Getenv("COMPARE_HISTORY"))
+	if history == "" {
+		history = historyBudgeted
+	}
 	emitted := false
 	rounds := 5
 	if raw := os.Getenv("COMPARE_ROUNDS"); raw != "" {
@@ -266,7 +293,7 @@ func throughput(duration time.Duration) {
 					if selected := os.Getenv("COMPARE_ENGINE"); selected != "" && name != selected {
 						continue
 					}
-					t := newEngine(name, s.Cols, s.Rows)
+					t := newEngineWithHistory(name, s.Cols, s.Rows, history)
 					feed(t, s.Data, chunk)
 					runtime.GC()
 					cpuStart := processCPU()
@@ -278,7 +305,11 @@ func throughput(duration time.Duration) {
 					}
 					elapsed := time.Since(start)
 					cpu := processCPU() - cpuStart
-					emit(map[string]any{"kind": "throughput", "engine": name, "stream": s.Name, "chunk": chunk, "round": round, "iterations": n, "bytes_per_iteration": len(s.Data), "seconds": elapsed.Seconds(), "mib_per_s": float64(n*len(s.Data)) / elapsed.Seconds() / (1 << 20), "cpu_seconds": cpu.Seconds(), "mib_per_cpu_s": float64(n*len(s.Data)) / cpu.Seconds() / (1 << 20), "input_sha256": fmt.Sprintf("%x", sha256.Sum256(s.Data)), "input_bytes": uint64(n) * uint64(len(s.Data)), "reply_policy": "enabled-discard", "native_continuation_bytes": 0, "retention": stats(t)})
+					retained := stats(t)
+					if history == historyNone && retained["history_rows"] != 0 {
+						panic("history-disabled control retained rows")
+					}
+					emit(map[string]any{"kind": "throughput", "engine": name, "stream": s.Name, "chunk": chunk, "round": round, "iterations": n, "bytes_per_iteration": len(s.Data), "seconds": elapsed.Seconds(), "mib_per_s": float64(n*len(s.Data)) / elapsed.Seconds() / (1 << 20), "cpu_seconds": cpu.Seconds(), "mib_per_cpu_s": float64(n*len(s.Data)) / cpu.Seconds() / (1 << 20), "input_sha256": fmt.Sprintf("%x", sha256.Sum256(s.Data)), "input_bytes": uint64(n) * uint64(len(s.Data)), "reply_policy": "enabled-discard", "native_continuation_bytes": 0, "history_policy": history, "retention": retained, "cols": s.Cols, "rows": s.Rows})
 					emitted = true
 					t.Close()
 				}
