@@ -1,0 +1,72 @@
+repeat=0 label=control
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024         	      12	   9406913 ns/op	 111.47 MB/s	   43742 B/op	     160 allocs/op
+BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024             	      18	   6426023 ns/op	 163.18 MB/s	    2295 B/op	      12 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024               	      15	   7157264 ns/op	 146.51 MB/s	   32672 B/op	     147 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024                   	      19	   5762759 ns/op	 181.96 MB/s	    2088 B/op	      10 allocs/op
+BenchmarkWriteGraphemeVariety/16                                    	       8	  13850938 ns/op	  75.71 MB/s	   53639 B/op	     122 allocs/op
+BenchmarkWriteGraphemeVariety/1024                                  	       4	  28050323 ns/op	  37.56 MB/s	45319010 B/op	  175864 allocs/op
+PASS
+repeat=0 label=lookup
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024         	      12	   8734292 ns/op	 120.06 MB/s	   43742 B/op	     160 allocs/op
+BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024             	      18	   6448255 ns/op	 162.62 MB/s	    2295 B/op	      12 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024               	      15	   7202986 ns/op	 145.58 MB/s	   32672 B/op	     147 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024                   	      20	   5589883 ns/op	 187.59 MB/s	    1984 B/op	      10 allocs/op
+BenchmarkWriteGraphemeVariety/16                                    	       8	  13697438 ns/op	  76.56 MB/s	   53639 B/op	     122 allocs/op
+BenchmarkWriteGraphemeVariety/1024                                  	       4	  28406479 ns/op	  37.09 MB/s	45318994 B/op	  175864 allocs/op
+PASS
+repeat=1 label=lookup
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024         	      14	   7956994 ns/op	 131.78 MB/s	   37493 B/op	     137 allocs/op
+BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024             	      18	   6539646 ns/op	 160.35 MB/s	    2295 B/op	      12 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024               	      15	   7259892 ns/op	 144.44 MB/s	   32672 B/op	     147 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024                   	      20	   5618029 ns/op	 186.65 MB/s	    1984 B/op	      10 allocs/op
+BenchmarkWriteGraphemeVariety/16                                    	       8	  13360156 ns/op	  78.49 MB/s	   53639 B/op	     122 allocs/op
+BenchmarkWriteGraphemeVariety/1024                                  	       4	  26399396 ns/op	  39.91 MB/s	45319014 B/op	  175864 allocs/op
+PASS
+repeat=1 label=control
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024         	      13	   8299064 ns/op	 126.35 MB/s	   40377 B/op	     148 allocs/op
+BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024             	      18	   6552609 ns/op	 160.03 MB/s	    2295 B/op	      12 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024               	      15	   7055211 ns/op	 148.63 MB/s	   32672 B/op	     147 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024                   	      21	   5543611 ns/op	 189.16 MB/s	    1889 B/op	       9 allocs/op
+BenchmarkWriteGraphemeVariety/16                                    	       8	  13962781 ns/op	  75.10 MB/s	   53639 B/op	     122 allocs/op
+BenchmarkWriteGraphemeVariety/1024                                  	       4	  28745021 ns/op	  36.66 MB/s	45318994 B/op	  175864 allocs/op
+PASS
+repeat=2 label=control
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024         	      14	   8241658 ns/op	 127.23 MB/s	   37493 B/op	     137 allocs/op
+BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024             	      18	   6522993 ns/op	 160.75 MB/s	    2295 B/op	      12 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024               	      15	   7074161 ns/op	 148.23 MB/s	   32672 B/op	     147 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024                   	      20	   5547269 ns/op	 189.03 MB/s	    1984 B/op	      10 allocs/op
+BenchmarkWriteGraphemeVariety/16                                    	       8	  13823245 ns/op	  75.86 MB/s	   53639 B/op	     122 allocs/op
+BenchmarkWriteGraphemeVariety/1024                                  	       4	  28325240 ns/op	  37.20 MB/s	45319010 B/op	  175864 allocs/op
+PASS
+repeat=2 label=lookup
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor
+cpu: Apple M5 Pro
+BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024         	      14	   7727854 ns/op	 135.69 MB/s	   37493 B/op	     137 allocs/op
+BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024             	      18	   6643005 ns/op	 157.85 MB/s	    2295 B/op	      12 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024               	      15	   7350381 ns/op	 142.66 MB/s	   32672 B/op	     147 allocs/op
+BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024                   	      19	   5773702 ns/op	 181.62 MB/s	    2088 B/op	      10 allocs/op
+BenchmarkWriteGraphemeVariety/16                                    	       8	  13827094 ns/op	  75.84 MB/s	   53639 B/op	     122 allocs/op
+BenchmarkWriteGraphemeVariety/1024                                  	       4	  27617052 ns/op	  38.15 MB/s	45319006 B/op	  175864 allocs/op
+PASS

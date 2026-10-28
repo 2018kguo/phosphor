@@ -1,0 +1,849 @@
+{
+  "throughput-1024.jsonl": {
+    "claude-synthetic": {
+      "baseline": {
+        "mib_per_cpu_s": 464.0715852346406,
+        "history_rows": [
+          1541
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 500.4425143428833,
+        "history_rows": [
+          1541
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 502.2096651397281,
+        "history_rows": [
+          445,
+          577,
+          665,
+          709
+        ]
+      }
+    },
+    "graphemes": {
+      "baseline": {
+        "mib_per_cpu_s": 22.973005006007785,
+        "history_rows": [
+          1691
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 56.956886254366225,
+        "history_rows": [
+          1691
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 168.00593750041017,
+        "history_rows": [
+          468,
+          472,
+          570,
+          715,
+          719
+        ]
+      }
+    },
+    "less-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 355.327887677941,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 379.00083416260134,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 138.70337348598005,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "links": {
+      "baseline": {
+        "mib_per_cpu_s": 261.04707081607984,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 277.2628880466954,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 24.50022758048155,
+        "history_rows": [
+          639,
+          701
+        ]
+      }
+    },
+    "logs": {
+      "baseline": {
+        "mib_per_cpu_s": 676.5332773072553,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 726.870216436835,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 922.4519857320893,
+        "history_rows": [
+          504,
+          579,
+          594,
+          609,
+          654
+        ]
+      }
+    },
+    "progress": {
+      "baseline": {
+        "mib_per_cpu_s": 1457.6504839222482,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 1744.8937001788702,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 1139.1093804611753,
+        "history_rows": [
+          357,
+          381,
+          429,
+          453,
+          609
+        ]
+      }
+    },
+    "rec-man-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 622.3620902814064,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 708.6422900796393,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 438.33155221003267,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nano-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 626.9370519492746,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 661.5967608439781,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 579.6172244521478,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nvim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 771.3926026057785,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 784.3445385401776,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 633.8043271113611,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "vim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 415.0037872730504,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 443.83903390042036,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 345.5999158864999,
+        "history_rows": [
+          0
+        ]
+      }
+    }
+  },
+  "throughput-65536.jsonl": {
+    "claude-synthetic": {
+      "baseline": {
+        "mib_per_cpu_s": 466.12390670262613,
+        "history_rows": [
+          1541
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 497.29260406228616,
+        "history_rows": [
+          1541
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 486.0777436447102,
+        "history_rows": [
+          357,
+          445,
+          577,
+          621,
+          709
+        ]
+      }
+    },
+    "graphemes": {
+      "baseline": {
+        "mib_per_cpu_s": 22.81966373420997,
+        "history_rows": [
+          1691
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 56.866035129347196,
+        "history_rows": [
+          1691
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 167.05757513441154,
+        "history_rows": [
+          491,
+          538,
+          738
+        ]
+      }
+    },
+    "less-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 356.8477398973152,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 382.14392128916995,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 131.19368297551813,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "links": {
+      "baseline": {
+        "mib_per_cpu_s": 283.7858105854524,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 291.9172752077994,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 26.470275464602274,
+        "history_rows": [
+          405,
+          467
+        ]
+      }
+    },
+    "logs": {
+      "baseline": {
+        "mib_per_cpu_s": 683.7033169400415,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 744.2861630409822,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 857.429027134168,
+        "history_rows": [
+          486,
+          516,
+          702,
+          717,
+          732
+        ]
+      }
+    },
+    "progress": {
+      "baseline": {
+        "mib_per_cpu_s": 1466.7281130176561,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 1794.0110349274212,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 1114.6669642935044,
+        "history_rows": [
+          477,
+          711
+        ]
+      }
+    },
+    "rec-man-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 624.1779685862623,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 709.2241070259122,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 441.38508427745285,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nano-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 614.7103641329015,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 665.3332182693532,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 590.0283689792325,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nvim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 780.7790602724021,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 792.7661777473644,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 617.0537604830796,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "vim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 424.54995491736605,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 443.1169300970277,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 344.9923281296756,
+        "history_rows": [
+          0
+        ]
+      }
+    }
+  },
+  "throughput-8192.jsonl": {
+    "claude-synthetic": {
+      "baseline": {
+        "mib_per_cpu_s": 463.26093547007645,
+        "history_rows": [
+          1541
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 492.5270954897291,
+        "history_rows": [
+          1541
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 519.8543365450062,
+        "history_rows": [
+          445,
+          489,
+          665
+        ]
+      }
+    },
+    "graphemes": {
+      "baseline": {
+        "mib_per_cpu_s": 23.065833898999664,
+        "history_rows": [
+          1691
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 57.3734281620285,
+        "history_rows": [
+          1691
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 157.50776331256785,
+        "history_rows": [
+          487,
+          538,
+          589,
+          738
+        ]
+      }
+    },
+    "less-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 356.0177716342753,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 382.87548158297665,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 127.4981602747028,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "links": {
+      "baseline": {
+        "mib_per_cpu_s": 267.8277087709644,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 294.3667618312152,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 25.791281527814206,
+        "history_rows": [
+          405
+        ]
+      }
+    },
+    "logs": {
+      "baseline": {
+        "mib_per_cpu_s": 678.65520720621,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 746.7912281226725,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 963.5596651921139,
+        "history_rows": [
+          447,
+          462,
+          507
+        ]
+      }
+    },
+    "progress": {
+      "baseline": {
+        "mib_per_cpu_s": 1488.1637623569745,
+        "history_rows": [
+          2000
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 1783.9808921383433,
+        "history_rows": [
+          2000
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 1149.511709457588,
+        "history_rows": [
+          363,
+          405,
+          519,
+          597,
+          729
+        ]
+      }
+    },
+    "rec-man-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 618.8132114374778,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 712.2472050209429,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 443.9613696122487,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nano-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 623.3251277903394,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 666.2427909536037,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 584.2142468141598,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nvim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 766.9249812128355,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 790.5921017371863,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 644.2040510387453,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "vim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 419.0272166589183,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 448.12766046752165,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 349.9235355559097,
+        "history_rows": [
+          0
+        ]
+      }
+    }
+  },
+  "throughput-none-1024.jsonl": {
+    "claude-synthetic": {
+      "baseline": {
+        "mib_per_cpu_s": 471.4512970382136,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 512.7577444966103,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 504.94641646208,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "graphemes": {
+      "baseline": {
+        "mib_per_cpu_s": 20.770927174026028,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 65.14247460749839,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 161.5131853239672,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "less-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 343.52932284010996,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 355.7287535922303,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 129.74161455367542,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "links": {
+      "baseline": {
+        "mib_per_cpu_s": 338.39568297536863,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 359.18494483725175,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 19.164878607642766,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "logs": {
+      "baseline": {
+        "mib_per_cpu_s": 1033.086079919757,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 1223.8841982303416,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 590.8827589400157,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "progress": {
+      "baseline": {
+        "mib_per_cpu_s": 1454.1710074934367,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 1763.5021339962252,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 1077.0756605364363,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-man-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 576.9835202295061,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 621.6474867308679,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 394.8655986522717,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nano-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 567.8393763113239,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 627.7261441702606,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 541.9485408846542,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "rec-nvim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 739.0509525073912,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 755.7145720961232,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 556.6395235098307,
+        "history_rows": [
+          0
+        ]
+      }
+    },
+    "vim-recording": {
+      "baseline": {
+        "mib_per_cpu_s": 396.49525513435566,
+        "history_rows": [
+          0
+        ]
+      },
+      "phosphor": {
+        "mib_per_cpu_s": 420.08607269349113,
+        "history_rows": [
+          0
+        ]
+      },
+      "ghostty": {
+        "mib_per_cpu_s": 332.2762087696092,
+        "history_rows": [
+          0
+        ]
+      }
+    }
+  }
+}

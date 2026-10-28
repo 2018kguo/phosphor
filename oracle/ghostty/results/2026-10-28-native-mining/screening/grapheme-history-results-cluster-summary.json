@@ -1,0 +1,114 @@
+{
+  "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+    "samples_ns": {
+      "baseline": [
+        15482250.0,
+        12641677.0,
+        12753573.0
+      ],
+      "literal": [
+        13808312.0,
+        11830843.0,
+        12157593.0
+      ],
+      "bulk": [
+        12830406.0,
+        11308065.0,
+        11608560.0
+      ]
+    },
+    "median_ns": {
+      "baseline": 12753573.0,
+      "literal": 12157593.0,
+      "bulk": 11608560.0
+    },
+    "throughput_change_pct": {
+      "literal": 4.902121661746706,
+      "bulk": 9.863523124315154
+    }
+  },
+  "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-8192": {
+    "samples_ns": {
+      "baseline": [
+        12267602.0,
+        12551302.0,
+        12623644.0
+      ],
+      "literal": [
+        12820823.0,
+        11912662.0,
+        12625964.0
+      ],
+      "bulk": [
+        10915467.0,
+        11234333.0,
+        11028104.0
+      ]
+    },
+    "median_ns": {
+      "baseline": 12551302.0,
+      "literal": 12625964.0,
+      "bulk": 11028104.0
+    },
+    "throughput_change_pct": {
+      "literal": -0.591337025830263,
+      "bulk": 13.811966227376882
+    }
+  },
+  "BenchmarkGraphemeRichHistoryDecode": {
+    "samples_ns": {
+      "baseline": [
+        60045.0,
+        60478.0,
+        60336.0
+      ],
+      "literal": [
+        59631.0,
+        58805.0,
+        59248.0
+      ],
+      "bulk": [
+        60637.0,
+        70661.0,
+        58792.0
+      ]
+    },
+    "median_ns": {
+      "baseline": 60336.0,
+      "literal": 59248.0,
+      "bulk": 60637.0
+    },
+    "throughput_change_pct": {
+      "literal": 1.8363489062921845,
+      "bulk": -0.49639658954103716
+    }
+  },
+  "BenchmarkWriteStreamReply/logs/chunk-8192": {
+    "samples_ns": {
+      "baseline": [
+        1303634.0,
+        1304016.0,
+        1314641.0
+      ],
+      "literal": [
+        1284162.0,
+        1284383.0,
+        1291126.0
+      ],
+      "bulk": [
+        1315150.0,
+        1318795.0,
+        1289890.0
+      ]
+    },
+    "median_ns": {
+      "baseline": 1304016.0,
+      "literal": 1284383.0,
+      "bulk": 1315150.0
+    },
+    "throughput_change_pct": {
+      "literal": 1.5285938851573144,
+      "bulk": -0.8465954453864555
+    }
+  }
+}

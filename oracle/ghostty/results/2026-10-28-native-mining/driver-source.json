@@ -1,0 +1,24 @@
+{
+  "source_commit": "611b81c71c4c1ec030fa32dc1555f30535a2df9f",
+  "files": {
+    "oracle/ghostty/prefix_rows_test.go": "7dc067bf3df443055cfed1c7673c114ba063bbc225480f42021b7d835284e6fe",
+    "oracle/ghostty/trace_test.go": "13f94255980c46aa5f802b078cb168f83f570ac43870ad69310a55665f8e3343",
+    "oracle/ghostty/bridge.h": "7afc909b7eafe0c4f8a048b6b2e515047bfbe7375ecaa41da20fc7bdc766a823",
+    "oracle/ghostty/trace.go": "9ad672bac76c7e200d6e00f81b6d868960a9d4d3d947182db244d794f902001c",
+    "oracle/ghostty/repaint_origin_test.go": "c97dbc54c3330f7379c9359e71c42d1225c689b545218a11b807d3239d1b5520",
+    "oracle/ghostty/measurement_test.go": "92b6b1631cca7631169e060dcd8dd451412d03d5e4c2e4e53f98b4ccb5c2c498",
+    "oracle/ghostty/extended_color_test.go": "9320f0d7cb783b1fad3f2a080e6f51b8742bd7f14d29b86d13a663f342aea8c3",
+    "oracle/ghostty/probes.json": "525ba4e0811a3ce5f0a75870fef9739cd3420e146ff33d6eb6b45953e8b271ee",
+    "oracle/ghostty/repaint_narrow_test.go": "1e2f54c67d0eea0f35edacfdf4363dacd97da3a6475e0552c053eeb1e27c3be0",
+    "oracle/ghostty/kitty_color_test.go": "cb1c702b4d13a31e11fc77c41809bb318e3e793b2e5c3f3b93c5789ae41ba006",
+    "oracle/ghostty/bridge.c": "86ff8b85be9016b9ab8b5067f987f63f61a7b176fd14fa8fec61459ef7b336ca",
+    "oracle/ghostty/repaint_pending_test.go": "36a7a8773fdfb7922349183e95da5ed1c2c4407054cb970de60e120ee41535b4",
+    "oracle/ghostty/traces.json": "f729fa028e2840d727b7df8c125da62926113ff230cc1fecb4fc2449e714a1d3",
+    "oracle/ghostty/cursor_lifetime_test.go": "5fc194a52614d45d32a1da24b95ba2227f265064569243c5c8dd94ee6ec78ed4",
+    "oracle/ghostty/main.go": "01291d0eb589b8a08a4c8cf593cbbd57c9849314a8a41d49cddc53f7e6743cab",
+    "oracle/go.mod": "125b83027f42ccef1def67e377a2ad7d9c2b761ee782e1677ab246d7a052dcb4",
+    "oracle/go.sum": "52ff8caa763e8db02cd4488c56c3aa7ef72392bdc7b404e53a6118fa3e81dac7",
+    "internal/benchdata/benchdata.go": "5f0008e7ec1f7bccf5f0588310615c9d77c7dbb0d36b88a32cae2dd0a2be5037"
+  },
+  "same_timed_driver": "Throughputselectors/inputcreation/reply/historypoliciesunchangedbetweenbinaries; changesrecordUnicodeprovenanceandextendtracecases."
+}

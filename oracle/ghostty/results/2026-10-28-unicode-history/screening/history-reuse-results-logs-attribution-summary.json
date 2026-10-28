@@ -1,0 +1,58 @@
+{
+  "BenchmarkWriteStreamReply/logs/chunk-1024": {
+    "samples_ns": {
+      "baseline": [
+        1769292.0,
+        1713918.0,
+        1836795.0
+      ],
+      "local-only": [
+        1724589.0,
+        1681562.0,
+        1862527.0
+      ],
+      "candidate": [
+        1713905.0,
+        1715833.0,
+        1737112.0
+      ]
+    },
+    "median_ns": {
+      "baseline": 1769292.0,
+      "local-only": 1724589.0,
+      "candidate": 1715833.0
+    },
+    "throughput_change_pct": {
+      "local-only": 2.5920958558821816,
+      "candidate": 3.115629551360777
+    }
+  },
+  "BenchmarkWriteStreamReply/logs/chunk-8192": {
+    "samples_ns": {
+      "baseline": [
+        1866804.0,
+        1730386.0,
+        1745182.0
+      ],
+      "local-only": [
+        1749127.0,
+        1647463.0,
+        1663235.0
+      ],
+      "candidate": [
+        1648509.0,
+        1643792.0,
+        1695891.0
+      ]
+    },
+    "median_ns": {
+      "baseline": 1745182.0,
+      "local-only": 1663235.0,
+      "candidate": 1648509.0
+    },
+    "throughput_change_pct": {
+      "local-only": 4.926964620152896,
+      "candidate": 5.864268863560951
+    }
+  }
+}

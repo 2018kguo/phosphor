@@ -1,0 +1,89 @@
+[
+  {
+    "policy": "17",
+    "chunk": 0,
+    "exit": 1,
+    "actions": 80,
+    "failed_actions": 48,
+    "failed_cases": [
+      "unicode18-linker-through-extend",
+      "unicode18-linker-without-leading-consonant",
+      "unicode18-mode-off-linker-prefix",
+      "unicode18-new-hebrew-extend",
+      "unicode18-new-musical-extend",
+      "unicode18-new-oriya-extend",
+      "unicode18-other-linker",
+      "unicode18-other-linker-supplementary"
+    ],
+    "continuation_failures": 0,
+    "binary_sha256": "bc368296a759afa15a8cdb4fcc39a42f13ea01d767419dd5d729ca5c66280a45"
+  },
+  {
+    "policy": "17",
+    "chunk": 1,
+    "exit": 1,
+    "actions": 80,
+    "failed_actions": 48,
+    "failed_cases": [
+      "unicode18-linker-through-extend",
+      "unicode18-linker-without-leading-consonant",
+      "unicode18-mode-off-linker-prefix",
+      "unicode18-new-hebrew-extend",
+      "unicode18-new-musical-extend",
+      "unicode18-new-oriya-extend",
+      "unicode18-other-linker",
+      "unicode18-other-linker-supplementary"
+    ],
+    "continuation_failures": 0,
+    "binary_sha256": "bc368296a759afa15a8cdb4fcc39a42f13ea01d767419dd5d729ca5c66280a45"
+  },
+  {
+    "policy": "17",
+    "chunk": 7,
+    "exit": 1,
+    "actions": 80,
+    "failed_actions": 48,
+    "failed_cases": [
+      "unicode18-linker-through-extend",
+      "unicode18-linker-without-leading-consonant",
+      "unicode18-mode-off-linker-prefix",
+      "unicode18-new-hebrew-extend",
+      "unicode18-new-musical-extend",
+      "unicode18-new-oriya-extend",
+      "unicode18-other-linker",
+      "unicode18-other-linker-supplementary"
+    ],
+    "continuation_failures": 0,
+    "binary_sha256": "bc368296a759afa15a8cdb4fcc39a42f13ea01d767419dd5d729ca5c66280a45"
+  },
+  {
+    "policy": "18",
+    "chunk": 0,
+    "exit": 0,
+    "actions": 80,
+    "failed_actions": 0,
+    "failed_cases": [],
+    "continuation_failures": 0,
+    "binary_sha256": "d8a0c6edf823ac67e88d4fa22cf921823ca54d2dd387efdfcc39a140f8f84587"
+  },
+  {
+    "policy": "18",
+    "chunk": 1,
+    "exit": 0,
+    "actions": 80,
+    "failed_actions": 0,
+    "failed_cases": [],
+    "continuation_failures": 0,
+    "binary_sha256": "d8a0c6edf823ac67e88d4fa22cf921823ca54d2dd387efdfcc39a140f8f84587"
+  },
+  {
+    "policy": "18",
+    "chunk": 7,
+    "exit": 0,
+    "actions": 80,
+    "failed_actions": 0,
+    "failed_cases": [],
+    "continuation_failures": 0,
+    "binary_sha256": "d8a0c6edf823ac67e88d4fa22cf921823ca54d2dd387efdfcc39a140f8f84587"
+  }
+]

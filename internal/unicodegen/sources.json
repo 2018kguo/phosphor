@@ -1,0 +1,29 @@
+{
+  "unicode_version": "18.0.0",
+  "sources": {
+    "variation": {
+      "url": "https://www.unicode.org/Public/18.0.0/ucd/emoji/emoji-variation-sequences.txt",
+      "sha256": "ff1707564aa1f1b2fcf4ec92d609d4cb26940bc0d4dcf07f5328ad6879e84da3"
+    },
+    "emoji": {
+      "url": "https://www.unicode.org/Public/18.0.0/ucd/emoji/emoji-data.txt",
+      "sha256": "80d00f8e616a0ef27fd6b8de3b758c06383b5d917e2977709578e68baf733bf1"
+    },
+    "grapheme_break": {
+      "url": "https://www.unicode.org/Public/18.0.0/ucd/auxiliary/GraphemeBreakProperty.txt",
+      "sha256": "0839dcb79e4ac639ecd538b1abf7c9d22e3f9dd265b7e182d33627aa4d75b45a"
+    },
+    "conjunct_break": {
+      "url": "https://www.unicode.org/Public/18.0.0/ucd/DerivedCoreProperties.txt",
+      "sha256": "09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9"
+    }
+  },
+  "native_widths": {
+    "path": "internal/unicodegen/data/native-widths.jsonl",
+    "sha256": "08cca19b128258f90588dbee8d4fe36447339e6e48a2db3b6b7e04507cfb9d41",
+    "ghostty_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+    "unicode_source": "uucode-ea62149739404a73c202b48a33bf6dd2af4bd9b0",
+    "api": "ghostty_unicode_codepoint_width",
+    "license": "testdata/conformance/LICENSE.ghostty; testdata/conformance/LICENSE.unicode"
+  }
+}

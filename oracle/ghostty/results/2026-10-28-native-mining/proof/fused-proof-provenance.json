@@ -1,0 +1,30 @@
+{
+  "base_commit": "ff0f231",
+  "sample_file": "../fused-screen.txt",
+  "binaries": {
+    "fused-baseline.test": "e9b0803e382f2df9816d2f0a14a8fae574cfb05973bb6d9f3d8ab5b7ea65ecba",
+    "fused.test": "a4e0f5a19609e47e4ff8019bad150b255d3f27cdf377e4136f2078593a159c5b",
+    "fused-baseline-native": "78ee561b3ffc9939ef18c77ce8d9ee9c2a9719c831fce924a0a937df5f9276b8",
+    "fused-native": "4ba21f28a4d0bd2bbe2fb16d7baf4b4020e257ebaa76bafdfbccbf6a01d708f0"
+  },
+  "source_sha256": {
+    "grapheme.go": "5f88ee83b45062e928ba2d67ea82966a702f4dd52cc00808315af35667bac6d0",
+    "grapheme_boundary.go": "171bd6dc4aa256d48d634309b8d3b3c120f91ff76730131cb0389c47be497baf",
+    "terminal.go": "89526b0ab7a3cd6aae2d4a501357e12ca354d789aa599d34d2f4c879bdeae16a",
+    "codepoint_table.go": "349983d0761788062c2691c67536ff204439febad6acfb578d2d40f7e15bc673",
+    "reply_bench_test.go": "0929becfceb053dc1049efa2d93b071e604151808fc5040bc16ab41e6288d508"
+  },
+  "GOMAXPROCS": 1,
+  "benchtime": "100ms",
+  "rounds": 2,
+  "order": [
+    [
+      "baseline",
+      "fused"
+    ],
+    [
+      "fused",
+      "baseline"
+    ]
+  ]
+}

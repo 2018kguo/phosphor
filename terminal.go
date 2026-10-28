@@ -320,11 +320,24 @@ func (t *Terminal) Write(p []byte) (int, error) {
 				continue
 			}
 			if c == 0x1b && i+1 < len(p) && p[i+1] == '[' {
-				// A complete CSI introducer has no intermediate effects.
-				// Enter its parameter state once; split introducers still
-				// take the byte-wise path below.
+				// Dispatch complete short commands without re-entering the
+				// parser for each byte. Longer or split commands still enter
+				// the same parameter state as the byte-wise introducer.
 				t.nparams, t.paramSet, t.marker, t.inter = 0, false, 0, 0
 				t.params[0], t.sub = 0, 0
+				if n, value := shortCSI(p[i+2:]); n != 0 {
+					if n > 1 {
+						t.params[0], t.nparams, t.paramSet = value, 1, true
+					}
+					final := p[i+n+1]
+					if final == 'm' {
+						t.sgr()
+					} else {
+						t.csiDispatch(final)
+					}
+					i += n + 1
+					continue
+				}
 				t.state = stCSI
 				i++
 				continue
@@ -333,6 +346,20 @@ func (t *Terminal) Write(p []byte) (int, error) {
 		t.step(c)
 	}
 	return len(p), nil
+}
+
+// shortCSI recognizes a complete standard final with at most two decimal
+// digits. Private markers, intermediates, longer parameters and split input
+// keep using the canonical parser.
+func shortCSI(p []byte) (n int, value uint32) {
+	for n < len(p) && n < 2 && p[n] >= '0' && p[n] <= '9' {
+		value = value*10 + uint32(p[n]-'0')
+		n++
+	}
+	if n < len(p) && p[n] >= 0x40 && p[n] <= 0x7e {
+		return n + 1, value
+	}
+	return 0, 0
 }
 
 // printable8 reports whether all eight bytes of w are printable ASCII
@@ -416,10 +443,11 @@ func (t *Terminal) printRune(r rune) {
 	if r > 0x7f {
 		t.cur.ss = 0
 	}
-	if t.grapheme && r > 255 && t.extendGrapheme(r) {
+	info := codepointInfo(r)
+	if t.grapheme && r > 255 && t.extendGrapheme(r, info) {
 		return
 	}
-	w := CodepointWidth(r)
+	w := info.width()
 	if w == 0 {
 		if !t.grapheme {
 			t.combine(r)
@@ -1502,14 +1530,14 @@ func (t *Terminal) combine(r rune) {
 		}
 	}
 	s := t.cellString(*c)
-	if utf8.RuneCountInString(s) >= maxClusterRunes {
+	if t.clusterTail(*c).count >= maxClusterRunes {
 		return
 	}
 	if r == 0xfe0e || r == 0xfe0f {
-		base := firstRune(s)
+		base := codepointInfo(firstRune(s)).grapheme()
 		// Native mode-off filtering uses the tailored grapheme class;
 		// emoji modifier bases are separate from Extended_Pictographic.
-		if !runeInRanges(base, emojiPictographs[:]) || runeInRanges(base, emojiModifierBases[:]) {
+		if base&gpPictographic == 0 || base&gpModifierBase != 0 {
 			return
 		}
 	}
@@ -1517,7 +1545,7 @@ func (t *Terminal) combine(r rune) {
 	if c.R >= clusterBase {
 		modes = t.x.clusters[c.R-clusterBase].joinModes
 	}
-	c.R = t.intern(cluster{text: s + string(r), width: uint8(t.runeWidth(c.R)), joinModes: modes})
+	c.R = t.internAppend(s, r, uint8(t.runeWidth(c.R)), modes)
 	t.touch(y)
 }
 
@@ -1555,11 +1583,15 @@ func (t *Terminal) printASCII(p []byte) {
 				scr[t.cur.y] = row
 			}
 		}
-		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.E
 		row = row[x : x+n]
-		for i, b := range p[:n] {
-			c := &row[i]
-			c.R, c.Fg, c.Bg, c.A, c.E = rune(b), fg, bg, attrs, link
+		if asciiVector && n >= 16 {
+			fillASCII8(row, p[:n], t.cur.pen)
+		} else {
+			fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.E
+			for i, b := range p[:n] {
+				c := &row[i]
+				c.R, c.Fg, c.Bg, c.A, c.E = rune(b), fg, bg, attrs, link
+			}
 		}
 		t.lastChar = rune(p[n-1])
 		if x+n > edge {
@@ -2440,10 +2472,32 @@ func (t *Terminal) runeWidth(r rune) int {
 func (t *Terminal) intern(s cluster) rune {
 	x := t.ext()
 	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
-		if x.clusters[i] == s {
+		old := &x.clusters[i]
+		if old.text == s.text && old.width == s.width && old.joinModes == s.joinModes {
 			return clusterBase + rune(i)
 		}
 	}
+	return t.storeCluster(s)
+}
+
+// internAppend checks recent clusters before allocating the appended text.
+func (t *Terminal) internAppend(prefix string, r rune, width uint8, modes clusterModes) rune {
+	x := t.ext()
+	var storage [utf8.UTFMax]byte
+	suffix := utf8.AppendRune(storage[:0], r)
+	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
+		old := &x.clusters[i]
+		if old.width == width && old.joinModes == modes && len(old.text) == len(prefix)+len(suffix) &&
+			old.text[:len(prefix)] == prefix && old.text[len(prefix):] == string(suffix) {
+			return clusterBase + rune(i)
+		}
+	}
+	return t.storeCluster(cluster{text: prefix + string(r), width: width, joinModes: modes})
+}
+
+func (t *Terminal) storeCluster(s cluster) rune {
+	s.tail = graphemeTailOf(s.text)
+	x := t.ext()
 	if len(x.clusters) >= x.clusterCap {
 		t.compactClusters()
 	}
@@ -2498,6 +2552,7 @@ func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
 	if t.sbMaxLines <= 0 {
 		return
 	}
+	encoded := t.scratch[:0]
 	if wrapped {
 		// A spacer head at the end is left out: it is not text, and the
 		// wide character after it recreates it on replay at this width.
@@ -2505,41 +2560,41 @@ func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
 		if rowCell(row, end-1).R == spacerHead {
 			end--
 		}
-		t.scratch = t.appendRowHistory(t.scratch[:0], row, end, false, true)
+		encoded = t.appendRowHistory(encoded[:0], row, end, false, true)
 	} else {
-		t.scratch = t.appendRowHistory(t.scratch[:0], row, t.cols, true, true)
+		encoded = t.appendRowHistory(encoded[:0], row, t.cols, true, true)
 	}
-	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(encoded) <= maxLogicalLine
 	if semantic := flags & rowSemanticMask; semantic != 0 || join && bytes.Contains(t.sb[len(t.sb)-1], []byte{0, 0, 'P'}) {
 		if semantic != 0 && contentEnd(row) == 0 {
 			// An annotated empty row is meaningful to native reflow.
-			t.scratch = append(t.scratch, 0, 1, ' ')
+			encoded = append(encoded, 0, 1, ' ')
 		}
-		n := len(t.scratch)
-		t.scratch = append(t.scratch, 0, 0, 0, 0)
-		copy(t.scratch[4:], t.scratch[:n])
-		t.scratch[0], t.scratch[1], t.scratch[2], t.scratch[3] = 0, 0, 'P', byte(semantic>>1)
-		join = join && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+		n := len(encoded)
+		encoded = append(encoded, 0, 0, 0, 0)
+		copy(encoded[4:], encoded[:n])
+		encoded[0], encoded[1], encoded[2], encoded[3] = 0, 0, 'P', byte(semantic>>1)
+		join = join && len(t.sb[len(t.sb)-1])+len(encoded) <= maxLogicalLine
 	}
 	putBack := join && t.sbSpacer && !startsWide(row)
 	if join && !wrapped && contentEnd(row) < t.cols {
 		// Replayed, this row starts by wrapping, so something must be
 		// printed, and the wrap may scroll in a row painted in the current
 		// background: clear the rest of it.
-		if len(t.scratch) == 0 {
-			t.scratch = append(t.scratch, 0, 1, ' ')
+		if len(encoded) == 0 {
+			encoded = append(encoded, 0, 1, ' ')
 		}
-		t.scratch = append(t.scratch, "\x1b[K"...)
+		encoded = append(encoded, "\x1b[K"...)
 	}
 	if putBack {
 		// The line left out a spacer head, but this row no longer starts
 		// with the wide character that made it: keep the column.
-		t.scratch = append(t.scratch, 0)
-		copy(t.scratch[1:], t.scratch)
-		t.scratch[0] = ' '
+		encoded = append(encoded, 0)
+		copy(encoded[1:], encoded)
+		encoded[0] = ' '
 	}
 	if n := len(t.sb); join {
-		line := append(t.sb[n-1], t.scratch...)
+		line := append(t.sb[n-1], encoded...)
 		if !wrapped && cap(line) > len(line)+len(line)/4 {
 			line = append([]byte(nil), line...)
 		}
@@ -2547,24 +2602,25 @@ func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
 		t.sb[n-1] = line
 	} else {
 		var reusable []byte
-		if len(t.sb) > t.sbStart && (len(t.sb)-t.sbStart >= t.sbMaxLines || t.sbBytes+len(t.scratch)+24 > t.sbMaxBytes) {
+		if len(t.sb) > t.sbStart && (len(t.sb)-t.sbStart >= t.sbMaxLines || t.sbBytes+len(encoded)+24 > t.sbMaxBytes) {
 			// This line will evict the oldest one. Reuse its storage so
 			// steady scrolling does not allocate for every log line.
 			reusable = t.sb[t.sbStart]
 			t.sbBytes -= len(reusable) + 24
 			t.sb[t.sbStart] = nil
 			t.sbStart++
-			if cap(reusable) > 2*max(len(t.scratch), 64) {
+			if cap(reusable) > 2*max(len(encoded), 64) {
 				reusable = nil // a short line must not pin an old long line
 			}
 		}
-		line := append(reusable[:0], t.scratch...)
+		line := append(reusable[:0], encoded...)
 		t.sb = append(t.sb, line)
 		t.sbBytes += len(line) + 24
 	}
 	t.sbOpen = wrapped
 	t.sbSpacer = wrapped && rowCell(row, t.cols-1).R == spacerHead
-	if len(t.scratch) > 4096 {
+	t.scratch = encoded
+	if len(encoded) > 4096 {
 		t.scratch = nil // do not keep a large buffer on an idle terminal
 	}
 	for n := len(t.sb) - t.sbStart; n > t.sbMaxLines || (t.sbBytes > t.sbMaxBytes && n > 1); n-- {
