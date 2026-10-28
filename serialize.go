@@ -83,18 +83,6 @@ func (t *Terminal) appendRow(b []byte, row []cell, width int, trim bool) []byte 
 // The local tag precedes the spaces the VT formatter already needs, so rows
 // still append in place and ordinary log lines keep their original bytes.
 func (t *Terminal) appendRowHistory(b []byte, row []cell, width int, trim, history bool) []byte {
-	if row == nil {
-		if !trim {
-			if history {
-				b = append(b, 0)
-				b = binary.AppendUvarint(b, uint64(width))
-			}
-			for range width {
-				b = append(b, ' ')
-			}
-		}
-		return b
-	}
 	end := width
 	if trim {
 		end = min(end, contentEnd(row))
@@ -181,8 +169,16 @@ func (t *Terminal) appendRowHistory(b []byte, row []cell, width int, trim, histo
 			b = append(b, 0)
 			b = binary.AppendUvarint(b, uint64(padding))
 		}
-		for range padding {
-			b = append(b, ' ')
+		if t.cols == 1 && !history {
+			// Implicit zero cells need the same clipped-wide print as
+			// stored zero cells to recreate a one-column pending wrap.
+			for range padding {
+				b = utf8.AppendRune(b, '界')
+			}
+		} else {
+			for range padding {
+				b = append(b, ' ')
+			}
 		}
 	}
 	return b
@@ -369,16 +365,8 @@ func (t *Terminal) appendPendingCursor(b []byte, scr [][]cell, c cursor) []byte 
 	}
 	b = appendCUP(b, c.y, x)
 	b = append(b, "\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f"...)
-	if row == nil {
-		if t.cols == 1 {
-			b = utf8.AppendRune(b, '界')
-		} else {
-			b = append(b, ' ')
-		}
-	} else {
-		row = row[min(x, len(row)):min(end, len(row))]
-		b = t.appendRow(b, row, end-x, false)
-	}
+	row = row[min(x, len(row)):min(end, len(row))]
+	b = t.appendRow(b, row, end-x, false)
 	if t.cols > 1 {
 		usedSave := false
 		b = t.appendRepaintHoles(b, row, end-x, x, &usedSave)
@@ -742,15 +730,7 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		}
 		b = appendCUP(b, y, cx)
 		b = append(b, "\x1b[0m"...)
-		if row == nil {
-			if t.cols == 1 {
-				b = utf8.AppendRune(b, '界')
-			} else {
-				b = append(b, ' ')
-			}
-		} else {
-			b = t.appendRow(b, row[min(cx, len(row)):min(end, len(row))], end-cx, false)
-		}
+		b = t.appendRow(b, row[min(cx, len(row)):min(end, len(row))], end-cx, false)
 		if x < edge {
 			count := 1
 			for stop := x + 1; stop < edge; stop++ {

@@ -58,6 +58,53 @@ func assertCompactEquivalent(t *testing.T, original, compacted *Terminal) {
 	}
 }
 
+func TestCompactEmptyWrappedRowRepaint(t *testing.T) {
+	a, b := New(6, 10), New(6, 10)
+	for _, v := range []byte("0\n0") {
+		a.Write([]byte{v})
+		b.Write([]byte{v})
+		b.Compact()
+	}
+	a.Resize(1, 3)
+	b.Resize(1, 3)
+	b.Compact()
+	assertContinuationState(t, a, b, "before repaint")
+	aRepaint, bRepaint := a.Repaint(true), b.Repaint(true)
+	ar, br := New(1, 3), New(1, 3)
+	ar.Write(aRepaint)
+	br.Write(bRepaint)
+	assertContinuationState(t, ar, br, "after repaint")
+	assertContinuationState(t, a, ar, "original repaint")
+	assertContinuationState(t, b, br, "compacted repaint")
+	// ANSI repaint does not export the source's REP register. The two
+	// exports must still agree with each other before another print.
+	repeatA, repeatB := New(1, 3), New(1, 3)
+	repeatA.Write(aRepaint)
+	repeatB.Write(bRepaint)
+	repeatA.Write([]byte("\x1b[3b"))
+	repeatB.Write([]byte("\x1b[3b"))
+	assertContinuationState(t, repeatA, repeatB, "immediate REP")
+	for _, next := range []string{"X\x1b[3b", "\x1b8X", "\r\nnext", "\x1b[?47hALT\x1b[?47l"} {
+		a.Write([]byte(next))
+		b.Write([]byte(next))
+		ar.Write([]byte(next))
+		br.Write([]byte(next))
+		assertContinuationState(t, ar, br, fmt.Sprintf("after %q", next))
+		assertContinuationState(t, a, ar, fmt.Sprintf("original after %q", next))
+		assertContinuationState(t, b, br, fmt.Sprintf("compacted after %q", next))
+	}
+	a.Resize(4, 2)
+	b.Resize(4, 2)
+	ar.Resize(4, 2)
+	br.Resize(4, 2)
+	assertContinuationState(t, ar, br, "after future resize")
+	assertContinuationState(t, a, ar, "original after future resize")
+	assertContinuationState(t, b, br, "compacted after future resize")
+	if !bytes.Equal(aRepaint, bRepaint) {
+		t.Fatalf("equivalent replay futures have different repaint bytes:\n%q\n%q", aRepaint, bRepaint)
+	}
+}
+
 func TestCompactTrace(t *testing.T) {
 	cases := []struct{ name, input string }{
 		{"erase-and-rep", "á\x1b[2J\x1b[H$ \x1b[3b"},
