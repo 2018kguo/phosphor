@@ -181,3 +181,16 @@ national charsets, SGR fonts and super/subscript, OSC 52/7, icon names/title
 stack, and raw 8-bit C1/S8C1T behavior. C1 controls encoded as UTF-8 are handled.
 If a specific command matters, check the [API](https://pkg.go.dev/github.com/2018kguo/phosphor)
 and the [coverage contract](../oracle/ghostty/coverage.md).
+
+## Draw a terminal view
+
+`AppendRowANSI` paints one visible row using the recorded Unicode cluster modes,
+styles and links. Position the cursor at the first column and use the model's
+width. It leaves cursor and input-mode restoration to the viewer. Palette
+changes become RGB colors, so drawing a view does not change the host's palette.
+
+Use `WriteScrollback` once to draw retained history. `WithScrollbackOutput`
+then reports each new row that program output scrolls away, including repeated
+rows and when retention is disabled. These callbacks run during `Write` and
+must not keep the supplied bytes or call back into the terminal. Resize and
+restart rearrange existing content without replaying it to this observer.

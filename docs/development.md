@@ -127,3 +127,9 @@ logs, old charts and per-experiment reports do not belong in the source tree.
 X11 color names can be regenerated with `go run ./internal/colorgen`;
 `-source /path/to/rgb.txt` uses an offline source. The generator checks its
 input checksum. Preserve [the data's notices](../licenses/X11.txt).
+
+Row-rendering tests compare Unicode cells and resolved colors after painting
+into a separate terminal. They cover mixed grapheme modes, Indic text, flags,
+background-only cells and palette changes. Scroll observers must survive
+snapshot restore, report repeated rows past retention limits and avoid replaying
+existing history during resize.

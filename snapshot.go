@@ -275,7 +275,7 @@ func (e *snapshotEncoder) screen(screen [][]cell, wraps []rowFlags) {
 }
 
 // RestoreSnapshot replaces durable state and retains only the receiver's reply
-// writer and bell callback. It also works on a zero Terminal. Constructor
+// writer, bell callback and scrollback output writer. It also works on a zero Terminal. Constructor
 // geometry, palette and scrollback choices are replaced by snapshot state.
 //
 // No callbacks run, no input storage is retained, and an error leaves the
@@ -579,9 +579,9 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 	}
 	if t.cfg != nil {
-		cfg.reply, cfg.bell = t.cfg.reply, t.cfg.bell
+		cfg.reply, cfg.bell, cfg.scrollbackOutput = t.cfg.reply, t.cfg.bell, t.cfg.scrollbackOutput
 	}
-	if cfg.palette != nil || cfg.colors != nil || cfg.reply != nil || cfg.bell != nil {
+	if cfg.palette != nil || cfg.colors != nil || cfg.reply != nil || cfg.bell != nil || cfg.scrollbackOutput != nil {
 		d.charge(1, int(unsafe.Sizeof(config{})))
 		cfg.sbLines, cfg.sbBytes = next.sbMaxLines, next.sbMaxBytes
 	}
@@ -603,7 +603,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if len(d.b) != 0 {
 		return fmt.Errorf("%w: trailing payload", ErrSnapshotMalformed)
 	}
-	if cfg.palette != nil || cfg.colors != nil || cfg.reply != nil || cfg.bell != nil {
+	if cfg.palette != nil || cfg.colors != nil || cfg.reply != nil || cfg.bell != nil || cfg.scrollbackOutput != nil {
 		next.cfg = new(config)
 		*next.cfg = cfg
 	}
