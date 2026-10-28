@@ -19,9 +19,24 @@ var sgrAttributeCodes = [...]struct {
 	{AttrInverse, ";7"}, {AttrHidden, ";8"}, {AttrStrikethrough, ";9"}, {AttrOverline, ";53"},
 }
 
+var sgrBasicForeground = [...]string{
+	"\x1b[0;30m", "\x1b[0;31m", "\x1b[0;32m", "\x1b[0;33m",
+	"\x1b[0;34m", "\x1b[0;35m", "\x1b[0;36m", "\x1b[0;37m",
+	"\x1b[0;90m", "\x1b[0;91m", "\x1b[0;92m", "\x1b[0;93m",
+	"\x1b[0;94m", "\x1b[0;95m", "\x1b[0;96m", "\x1b[0;97m",
+}
+
 // appendSGR appends the escape sequence that sets exactly c's style,
 // starting from a reset.
 func (t *Terminal) appendSGR(b []byte, c cell) []byte {
+	if c.A&^AttrProtected == 0 && c.E == 0 && c.Bg == 0 {
+		if c.Fg == 0 {
+			return append(b, "\x1b[0m"...)
+		}
+		if index := c.Fg ^ colorIndexed; index < 16 {
+			return append(b, sgrBasicForeground[index]...)
+		}
+	}
 	b = append(b, "\x1b[0"...)
 	// Range by reference so each style does not copy the encoding table.
 	for _, a := range &sgrAttributeCodes {

@@ -1,0 +1,141 @@
+{
+  "baseline_commit": "26c6ef1f0a07e36077b36d99165c64166314b37c",
+  "candidate_commit": "43271f30a8388d2edfea0d04138275d1a77a03be",
+  "native_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+  "native_clean": true,
+  "native_build": "Zig 0.17.0, ReleaseFast; official Zig archive verified by parent",
+  "go": "go version go1.26.3 darwin/arm64",
+  "host": "macOS-26.6.1-arm64-arm-64bit",
+  "binary_sha256": {
+    "baseline-audited": "2b5cd50b3e8ce744f5f52ef58557e48e4990eb3fcfc94f0dbb778d901b742540",
+    "candidate-audited": "7c0b648c687b0a847673dc52dfe135ef10c76da9fd1ea18ec15b3055e74c7424",
+    "baseline-control": "ab242c78eecf4a1aa754d47b8cee1835f49fbb3b5d6a3b0d5d0e53b09d240b00",
+    "candidate-control": "e6fceb91f513a7ca68b6e3d09a5fc733f84a43b7a6821d1c6a9cae7273a4640e"
+  },
+  "native_library_sha256": "eff43f8a5576afa8181e3ed1d9868c884dad4489e40179b2a189e8a8628e9d8d",
+  "throughput": {
+    "raw_sample_count": 600,
+    "rounds": 5,
+    "geometry": "120x40",
+    "GOMAXPROCS": 1,
+    "phases": {
+      "throughput-1024.jsonl": {
+        "chunk": 1024,
+        "duration": "750ms",
+        "history": "budgeted"
+      },
+      "throughput-8192.jsonl": {
+        "chunk": 8192,
+        "duration": "400ms",
+        "history": "budgeted"
+      },
+      "throughput-65536.jsonl": {
+        "chunk": 65536,
+        "duration": "400ms",
+        "history": "budgeted"
+      },
+      "throughput-none-1024.jsonl": {
+        "chunk": 1024,
+        "duration": "500ms",
+        "history": "disabled and verified zero rows"
+      }
+    },
+    "reply_policy": "both enabled, discard replies without capture allocation",
+    "native_continuation_max_bytes": 0,
+    "grapheme_mode": "both C/Go defaults off; graphemes fixture explicitly enables 2027 on both",
+    "history": "budgeted uses same nominal2000lines/256KiB, NOT equal retained state; Phosphorserializedlogical lines vsnativephysical/page accounting. Record actual retained row counts per sample. none is the matched zero-history control.",
+    "all_samples_retained": true,
+    "inputs": "pre-generated before timing; SHA256 identical across builds, phases and chunk sizes",
+    "engine_order": "baseline/phosphor/native, reversed on odd rounds"
+  },
+  "memory": {
+    "count": null,
+    "repeats": 3,
+    "fresh_process": true,
+    "raw_sample_count": 126,
+    "compaction": "Phosphor Compact, libghostty FULL",
+    "metrics": "Go HeapAlloc delta and process RSS delta, divided by terminal count; native Go-wrapper heap excludes native allocations",
+    "GC": "same two collections before baseline and after all terminal initialization, no forced scavenging",
+    "counts": [
+      128,
+      1024
+    ],
+    "native_continuation_max_bytes": 0,
+    "reply_policy": "enabled-discard on both",
+    "equal_history_validation": "TestEqualHistoryMemoryFixture compares all 100 retained physical rows plus screen/styles/modes before and after both compactions",
+    "notes": "Different terminal counts expose allocator/RSS amortization. Heap stable across baseline/candidate; no forced page scavenging."
+  },
+  "go_core_pins": {
+    "github.com/charmbracelet/x/vt": {
+      "Path": "github.com/charmbracelet/x/vt",
+      "Version": "v0.1.0",
+      "Time": "2026-10-12T12:19:18Z",
+      "Dir": "/Users/kevinguo/go/pkg/mod/github.com/charmbracelet/x/vt@v0.1.0",
+      "GoMod": "/Users/kevinguo/go/pkg/mod/cache/download/github.com/charmbracelet/x/vt/@v/v0.1.0.mod",
+      "GoVersion": "1.24.2",
+      "Sum": "h1:oVueL3dwH/DlY/z6R6XHA9PQ/w3LdCCq99600Vs48vA=",
+      "GoModSum": "h1:u1LOIABor9JqY54oZdktK3TCRrgzP6tzHrDYx1nd3wY="
+    },
+    "github.com/hinshun/vt10x": {
+      "Path": "github.com/hinshun/vt10x",
+      "Version": "v0.0.0-20220301184237-5011da428d02",
+      "Time": "2022-03-01T18:42:37Z",
+      "Dir": "/Users/kevinguo/go/pkg/mod/github.com/hinshun/vt10x@v0.0.0-20220301184237-5011da428d02",
+      "GoMod": "/Users/kevinguo/go/pkg/mod/cache/download/github.com/hinshun/vt10x/@v/v0.0.0-20220301184237-5011da428d02.mod",
+      "GoVersion": "1.14",
+      "Sum": "h1:AgcIVYPa6XJnU3phs104wLj8l5GEththEw6+F79YsIY=",
+      "GoModSum": "h1:Q48J4R4DvxnHolD5P8pOtXigYlRuPLGl6moFx3ulM68="
+    }
+  },
+  "go_idle": {
+    "count": 200,
+    "repeats": 5,
+    "fresh_process": true,
+    "metric": "Go HeapInuse delta per terminal",
+    "geometry": "80x24",
+    "compaction": false,
+    "policy": "library defaults; charm uses 4MiB parser buffer and two 10,000-line scrollback buffers; policies and feature sets differ from Phosphor and vt10x"
+  },
+  "correctness": {
+    "trace_chunks": [
+      0,
+      1,
+      7
+    ],
+    "baseline_candidate_observations_identical": true,
+    "chunk_observations_identical": true,
+    "native_abi_tests": "passed",
+    "scalar_widths_equal": 1112064,
+    "remaining_parity_failures_retained": true,
+    "baseline_candidate_trace_bytes_identical": true,
+    "burst_test": "TestMeasurementBurstParsesEveryChunk:86420bytes,128numberedlines/DSRs,129physicalrows;whole/7/1024/65536; last64KiB negativecontrol rejected onboth",
+    "source_pin_verified_remote_head": true
+  },
+  "go_throughput": {
+    "rounds": 3,
+    "sample": "300ms",
+    "chunk_bytes": 8192,
+    "geometry": "120x40",
+    "GOMAXPROCS": 1,
+    "engine_order": "Phosphor/charm/vt10x, reversed on odd rounds",
+    "raw_sample_count": 45,
+    "all_samples_retained": true,
+    "metric": "wall MB/s, decimal megabytes as reported by Go benchmarks",
+    "policy": "library defaults; different history limits, protocol bounds and feature coverage; measured throughput is not proof of feature equivalence"
+  },
+  "driver_budget_commit": "21b508549fcacd366a9ffa6061b24b59b6012d0b",
+  "driver_history_control_commit": "dbbfe6886dd2a62d264aa5f70b14259876998626",
+  "source_manifest_note": "Production hash is shared by all candidate samples; driver phases are recorded separately. Final driver also adds the equal-history fixture validation and helpers without changing timed Write paths.",
+  "audit_time_utc": "2026-10-28T04:58:45.986803+00:00",
+  "audit_corrections": [
+    "Native optional continuation tracking was64KiB; default0 is now used outside checkpoint tests. Trackerinit reserves4KiB, so previous RSS ratios included optional checkpoint storage.",
+    "Phosphor now uses WithReply(io.Discard) in timed paths; native has equivalent discard callback.",
+    "Retained rows reported; additional history-disabled control disambiguates equal budgets from equal work.",
+    "Inputs, byte totals and geometry recorded; no empty selector result may exit successfully.",
+    "Native source provenance constant updated to verified6ba HEAD.",
+    "Graphics/GUI and long oversized OSC/DCS payloads are excluded; no universal compatibility or overall-fastest claim."
+  ],
+  "go_comparison_note": "Separate library-default Go harness; reply, history, parser bounds and feature coverage differ. No equal-feature or cross-engine RSS inference.",
+  "go_core_binary_sha256": "e281d26a25618b282f996da9a9f2da7684c4ff626fad2bbc859abc34dad2faa3",
+  "go_core_production_commit": "43271f30a8388d2edfea0d04138275d1a77a03be"
+}

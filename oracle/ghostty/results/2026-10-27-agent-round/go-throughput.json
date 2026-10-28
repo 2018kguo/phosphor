@@ -1,0 +1,407 @@
+[
+  {
+    "round": 0,
+    "engine": "phosphor",
+    "stream": "vim",
+    "ns_op": 14377.0,
+    "mb_s": 477.98,
+    "bytes_op": 2,
+    "allocs_op": 0
+  },
+  {
+    "round": 0,
+    "engine": "phosphor",
+    "stream": "less",
+    "ns_op": 13561.0,
+    "mb_s": 381.61,
+    "bytes_op": 3,
+    "allocs_op": 0
+  },
+  {
+    "round": 0,
+    "engine": "phosphor",
+    "stream": "claude",
+    "ns_op": 2064227.0,
+    "mb_s": 508.44,
+    "bytes_op": 19725,
+    "allocs_op": 94
+  },
+  {
+    "round": 0,
+    "engine": "phosphor",
+    "stream": "logs",
+    "ns_op": 1442226.0,
+    "mb_s": 727.08,
+    "bytes_op": 2866,
+    "allocs_op": 8
+  },
+  {
+    "round": 0,
+    "engine": "phosphor",
+    "stream": "progress",
+    "ns_op": 643926.0,
+    "mb_s": 1628.76,
+    "bytes_op": 1309,
+    "allocs_op": 3
+  },
+  {
+    "round": 0,
+    "engine": "charmbracelet-x-vt",
+    "stream": "vim",
+    "ns_op": 345830.0,
+    "mb_s": 19.87,
+    "bytes_op": 252477,
+    "allocs_op": 1790
+  },
+  {
+    "round": 0,
+    "engine": "charmbracelet-x-vt",
+    "stream": "less",
+    "ns_op": 2606171.0,
+    "mb_s": 1.99,
+    "bytes_op": 260265,
+    "allocs_op": 3128
+  },
+  {
+    "round": 0,
+    "engine": "charmbracelet-x-vt",
+    "stream": "claude",
+    "ns_op": 30376743.0,
+    "mb_s": 34.55,
+    "bytes_op": 2883509,
+    "allocs_op": 430321
+  },
+  {
+    "round": 0,
+    "engine": "charmbracelet-x-vt",
+    "stream": "logs",
+    "ns_op": 232925542.0,
+    "mb_s": 4.5,
+    "bytes_op": 110947528,
+    "allocs_op": 914853
+  },
+  {
+    "round": 0,
+    "engine": "charmbracelet-x-vt",
+    "stream": "progress",
+    "ns_op": 40609542.0,
+    "mb_s": 25.83,
+    "bytes_op": 5797011,
+    "allocs_op": 919960
+  },
+  {
+    "round": 0,
+    "engine": "vt10x",
+    "stream": "vim",
+    "ns_op": 220544.0,
+    "mb_s": 31.16,
+    "bytes_op": 205814,
+    "allocs_op": 17814
+  },
+  {
+    "round": 0,
+    "engine": "vt10x",
+    "stream": "less",
+    "ns_op": 201793.0,
+    "mb_s": 25.65,
+    "bytes_op": 128304,
+    "allocs_op": 11936
+  },
+  {
+    "round": 0,
+    "engine": "vt10x",
+    "stream": "claude",
+    "ns_op": 23397867.0,
+    "mb_s": 44.86,
+    "bytes_op": 20746864,
+    "allocs_op": 1884466
+  },
+  {
+    "round": 0,
+    "engine": "vt10x",
+    "stream": "logs",
+    "ns_op": 27640830.0,
+    "mb_s": 37.94,
+    "bytes_op": 22699465,
+    "allocs_op": 2220594
+  },
+  {
+    "round": 0,
+    "engine": "vt10x",
+    "stream": "progress",
+    "ns_op": 24798711.0,
+    "mb_s": 42.29,
+    "bytes_op": 22775314,
+    "allocs_op": 2226120
+  },
+  {
+    "round": 1,
+    "engine": "vt10x",
+    "stream": "vim",
+    "ns_op": 224314.0,
+    "mb_s": 30.64,
+    "bytes_op": 205814,
+    "allocs_op": 17814
+  },
+  {
+    "round": 1,
+    "engine": "vt10x",
+    "stream": "less",
+    "ns_op": 196089.0,
+    "mb_s": 26.39,
+    "bytes_op": 128304,
+    "allocs_op": 11936
+  },
+  {
+    "round": 1,
+    "engine": "vt10x",
+    "stream": "claude",
+    "ns_op": 23557756.0,
+    "mb_s": 44.55,
+    "bytes_op": 20746861,
+    "allocs_op": 1884466
+  },
+  {
+    "round": 1,
+    "engine": "vt10x",
+    "stream": "logs",
+    "ns_op": 27361641.0,
+    "mb_s": 38.32,
+    "bytes_op": 22699462,
+    "allocs_op": 2220594
+  },
+  {
+    "round": 1,
+    "engine": "vt10x",
+    "stream": "progress",
+    "ns_op": 24405622.0,
+    "mb_s": 42.97,
+    "bytes_op": 22775321,
+    "allocs_op": 2226120
+  },
+  {
+    "round": 1,
+    "engine": "charmbracelet-x-vt",
+    "stream": "vim",
+    "ns_op": 344839.0,
+    "mb_s": 19.93,
+    "bytes_op": 252468,
+    "allocs_op": 1790
+  },
+  {
+    "round": 1,
+    "engine": "charmbracelet-x-vt",
+    "stream": "less",
+    "ns_op": 2690089.0,
+    "mb_s": 1.92,
+    "bytes_op": 260644,
+    "allocs_op": 3128
+  },
+  {
+    "round": 1,
+    "engine": "charmbracelet-x-vt",
+    "stream": "claude",
+    "ns_op": 29455160.0,
+    "mb_s": 35.63,
+    "bytes_op": 2883510,
+    "allocs_op": 430321
+  },
+  {
+    "round": 1,
+    "engine": "charmbracelet-x-vt",
+    "stream": "logs",
+    "ns_op": 231181812.0,
+    "mb_s": 4.54,
+    "bytes_op": 110947528,
+    "allocs_op": 914853
+  },
+  {
+    "round": 1,
+    "engine": "charmbracelet-x-vt",
+    "stream": "progress",
+    "ns_op": 39258102.0,
+    "mb_s": 26.72,
+    "bytes_op": 5797011,
+    "allocs_op": 919960
+  },
+  {
+    "round": 1,
+    "engine": "phosphor",
+    "stream": "vim",
+    "ns_op": 14418.0,
+    "mb_s": 476.64,
+    "bytes_op": 2,
+    "allocs_op": 0
+  },
+  {
+    "round": 1,
+    "engine": "phosphor",
+    "stream": "less",
+    "ns_op": 13386.0,
+    "mb_s": 386.59,
+    "bytes_op": 3,
+    "allocs_op": 0
+  },
+  {
+    "round": 1,
+    "engine": "phosphor",
+    "stream": "claude",
+    "ns_op": 2149622.0,
+    "mb_s": 488.25,
+    "bytes_op": 19851,
+    "allocs_op": 94
+  },
+  {
+    "round": 1,
+    "engine": "phosphor",
+    "stream": "logs",
+    "ns_op": 1426790.0,
+    "mb_s": 734.94,
+    "bytes_op": 2831,
+    "allocs_op": 8
+  },
+  {
+    "round": 1,
+    "engine": "phosphor",
+    "stream": "progress",
+    "ns_op": 653898.0,
+    "mb_s": 1603.92,
+    "bytes_op": 1324,
+    "allocs_op": 3
+  },
+  {
+    "round": 2,
+    "engine": "phosphor",
+    "stream": "vim",
+    "ns_op": 14030.0,
+    "mb_s": 489.81,
+    "bytes_op": 2,
+    "allocs_op": 0
+  },
+  {
+    "round": 2,
+    "engine": "phosphor",
+    "stream": "less",
+    "ns_op": 13574.0,
+    "mb_s": 381.23,
+    "bytes_op": 3,
+    "allocs_op": 0
+  },
+  {
+    "round": 2,
+    "engine": "phosphor",
+    "stream": "claude",
+    "ns_op": 2111106.0,
+    "mb_s": 497.15,
+    "bytes_op": 19745,
+    "allocs_op": 94
+  },
+  {
+    "round": 2,
+    "engine": "phosphor",
+    "stream": "logs",
+    "ns_op": 1434790.0,
+    "mb_s": 730.85,
+    "bytes_op": 2843,
+    "allocs_op": 8
+  },
+  {
+    "round": 2,
+    "engine": "phosphor",
+    "stream": "progress",
+    "ns_op": 649111.0,
+    "mb_s": 1615.75,
+    "bytes_op": 1321,
+    "allocs_op": 3
+  },
+  {
+    "round": 2,
+    "engine": "charmbracelet-x-vt",
+    "stream": "vim",
+    "ns_op": 339222.0,
+    "mb_s": 20.26,
+    "bytes_op": 252462,
+    "allocs_op": 1790
+  },
+  {
+    "round": 2,
+    "engine": "charmbracelet-x-vt",
+    "stream": "less",
+    "ns_op": 2659829.0,
+    "mb_s": 1.95,
+    "bytes_op": 260644,
+    "allocs_op": 3128
+  },
+  {
+    "round": 2,
+    "engine": "charmbracelet-x-vt",
+    "stream": "claude",
+    "ns_op": 28618080.0,
+    "mb_s": 36.67,
+    "bytes_op": 2883513,
+    "allocs_op": 430321
+  },
+  {
+    "round": 2,
+    "engine": "charmbracelet-x-vt",
+    "stream": "logs",
+    "ns_op": 234899729.0,
+    "mb_s": 4.46,
+    "bytes_op": 110947536,
+    "allocs_op": 914853
+  },
+  {
+    "round": 2,
+    "engine": "charmbracelet-x-vt",
+    "stream": "progress",
+    "ns_op": 40435301.0,
+    "mb_s": 25.94,
+    "bytes_op": 5797009,
+    "allocs_op": 919960
+  },
+  {
+    "round": 2,
+    "engine": "vt10x",
+    "stream": "vim",
+    "ns_op": 223136.0,
+    "mb_s": 30.8,
+    "bytes_op": 205814,
+    "allocs_op": 17814
+  },
+  {
+    "round": 2,
+    "engine": "vt10x",
+    "stream": "less",
+    "ns_op": 201074.0,
+    "mb_s": 25.74,
+    "bytes_op": 128304,
+    "allocs_op": 11936
+  },
+  {
+    "round": 2,
+    "engine": "vt10x",
+    "stream": "claude",
+    "ns_op": 23281033.0,
+    "mb_s": 45.08,
+    "bytes_op": 20746859,
+    "allocs_op": 1884466
+  },
+  {
+    "round": 2,
+    "engine": "vt10x",
+    "stream": "logs",
+    "ns_op": 28464920.0,
+    "mb_s": 36.84,
+    "bytes_op": 22699463,
+    "allocs_op": 2220594
+  },
+  {
+    "round": 2,
+    "engine": "vt10x",
+    "stream": "progress",
+    "ns_op": 24701717.0,
+    "mb_s": 42.46,
+    "bytes_op": 22775316,
+    "allocs_op": 2226120
+  }
+]

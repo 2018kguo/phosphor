@@ -1,0 +1,244 @@
+{
+  "memory-128.jsonl": {
+    "prompt-erase-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 1512.125,
+        "rss_B_per_terminal": 3200,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 1512.125,
+        "rss_B_per_terminal": 2688,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.125,
+        "rss_B_per_terminal": 25472,
+        "samples": 3
+      }
+    },
+    "colored-prompt-erase-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 1512.125,
+        "rss_B_per_terminal": 2688,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 1512.125,
+        "rss_B_per_terminal": 2688,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.125,
+        "rss_B_per_terminal": 41984,
+        "samples": 3
+      }
+    },
+    "equal-100-history-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 36952,
+        "rss_B_per_terminal": 34176,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 36952,
+        "rss_B_per_terminal": 33152,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.125,
+        "rss_B_per_terminal": 124160,
+        "samples": 3
+      }
+    },
+    "closed-vim-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 47000,
+        "rss_B_per_terminal": 54528,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 47000,
+        "rss_B_per_terminal": 55040,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.125,
+        "rss_B_per_terminal": 78464,
+        "samples": 3
+      }
+    }
+  },
+  "memory-1024.jsonl": {
+    "prompt-erase-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 1512,
+        "rss_B_per_terminal": 1120,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 1512.046875,
+        "rss_B_per_terminal": 1184,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 23968,
+        "samples": 3
+      }
+    },
+    "colored-prompt-erase-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 1512,
+        "rss_B_per_terminal": 1552,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 1512.046875,
+        "rss_B_per_terminal": 1680,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 40400,
+        "samples": 3
+      }
+    },
+    "cleared-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 1512.015625,
+        "rss_B_per_terminal": 3888,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 1512.015625,
+        "rss_B_per_terminal": 3904,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 56784,
+        "samples": 3
+      }
+    },
+    "rich-cleared-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 1512.0625,
+        "rss_B_per_terminal": 3984,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 1512.0625,
+        "rss_B_per_terminal": 3968,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 73296,
+        "samples": 3
+      }
+    },
+    "equal-100-history-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 36952,
+        "rss_B_per_terminal": 39648,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 36952,
+        "rss_B_per_terminal": 39648,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 122288,
+        "samples": 3
+      }
+    },
+    "closed-vim-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 47000,
+        "rss_B_per_terminal": 57824,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 47000.046875,
+        "rss_B_per_terminal": 60384,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 75040,
+        "samples": 3
+      }
+    },
+    "closed-nvim-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 47352.046875,
+        "rss_B_per_terminal": 63216,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 47352,
+        "rss_B_per_terminal": 62528,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 75216,
+        "samples": 3
+      }
+    },
+    "closed-nano-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 37848.0625,
+        "rss_B_per_terminal": 58864,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 37848.046875,
+        "rss_B_per_terminal": 58880,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 75008,
+        "samples": 3
+      }
+    },
+    "closed-less-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 30184.046875,
+        "rss_B_per_terminal": 47376,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 30184.046875,
+        "rss_B_per_terminal": 47408,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 75104,
+        "samples": 3
+      }
+    },
+    "closed-man-compact": {
+      "baseline": {
+        "heap_B_per_terminal": 22472.015625,
+        "rss_B_per_terminal": 40864,
+        "samples": 3
+      },
+      "phosphor": {
+        "heap_B_per_terminal": 22472,
+        "rss_B_per_terminal": 38528,
+        "samples": 3
+      },
+      "ghostty": {
+        "heap_B_per_terminal": 16.015625,
+        "rss_B_per_terminal": 74976,
+        "samples": 3
+      }
+    }
+  }
+}

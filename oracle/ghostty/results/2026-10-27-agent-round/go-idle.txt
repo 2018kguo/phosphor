@@ -1,0 +1,90 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/phosphor         	       1	    586958 ns/op	      1556 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/vt10x         	       1	   3405166 ns/op	     67543 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/charmbracelet-x-vt         	       1	  51850417 ns/op	   4731576 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/phosphor         	       1	    424458 ns/op	      1556 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/vt10x         	       1	   3194250 ns/op	     67543 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/charmbracelet-x-vt         	       1	  49806250 ns/op	   4731576 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/phosphor         	       1	    513167 ns/op	      1556 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/vt10x         	       1	   3175625 ns/op	     67543 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/charmbracelet-x-vt         	       1	  50439750 ns/op	   4731576 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/phosphor         	       1	    300458 ns/op	      1556 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/vt10x         	       1	   3048333 ns/op	     67543 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/charmbracelet-x-vt         	       1	  50239625 ns/op	   4731576 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/phosphor         	       1	    490541 ns/op	      1556 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/vt10x         	       1	   3105875 ns/op	     67543 heap-B/term
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareIdle/charmbracelet-x-vt         	       1	  50169792 ns/op	   4731576 heap-B/term
+PASS

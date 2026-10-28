@@ -14,12 +14,27 @@ func (t *Terminal) touch(y int) {
 
 // touchRows marks rows [from, to) dirty.
 func (t *Terminal) touchRows(from, to int) {
-	if t.dirty == nil {
+	if d := t.dirty; d != nil && from < to {
+		d.markRows(from, to)
+	}
+}
+
+// Keep word-mask work out of the inline headless damage check.
+//
+//go:noinline
+func (d *dirtySet) markRows(from, to int) {
+	first, last := from>>6, (to-1)>>6
+	start := ^uint64(0) << (from & 63)
+	end := ^uint64(0) >> (63 - ((to - 1) & 63))
+	if first == last {
+		d.bits[first] |= start & end
 		return
 	}
-	for y := from; y < to; y++ {
-		t.touch(y)
+	d.bits[first] |= start
+	for i := first + 1; i < last; i++ {
+		d.bits[i] = ^uint64(0)
 	}
+	d.bits[last] |= end
 }
 
 // touchAll marks every row dirty.

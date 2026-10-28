@@ -10,13 +10,19 @@
 #include <unistd.h>
 #endif
 
+// Timed engines process reply queries without retaining reply buffers.
+static void exp_discard_reply(GhosttyTerminal t, void *userdata, const uint8_t *data, size_t len) {
+  (void)t; (void)userdata; (void)data; (void)len;
+}
+
 GhosttyTerminal exp_new(int cols, int rows) {
   GhosttyTerminal t = NULL;
   if (ghostty_terminal_new(NULL, &t, cols, rows)) return NULL;
-  size_t bytes = 256 * 1024, lines = 2000, continuation = 64 * 1024;
+  size_t bytes = 256 * 1024, lines = 2000, continuation = 0;
   if (ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &bytes) ||
       ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &lines) ||
-      ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES, &continuation)) {
+      ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES, &continuation) ||
+      ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_WRITE_PTY, exp_discard_reply)) {
     ghostty_terminal_free(t); return NULL;
   }
   return t;

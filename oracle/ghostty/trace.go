@@ -66,7 +66,7 @@ func newTracedEngine(name string, cols, rows int) *tracedEngine {
 	if name == "phosphor" {
 		t.Engine = &phos{phosphor.New(cols, rows, phosphor.WithReply(&t.replies))}
 	} else {
-		t.Engine = newEngine(name, cols, rows)
+		t.Engine = newCheckpointEngine(name, cols, rows)
 		t.native = C.exp_replies_new(t.Engine.(*ghost).t)
 		if t.native == nil {
 			t.Engine.Close()
@@ -279,13 +279,13 @@ func decodeTraces(r io.Reader) ([]traceCase, error) {
 }
 func traceDimensions(c, r int) bool { return c >= 1 && c <= 256 && r >= 1 && r <= 128 && c*r <= 32768 }
 
-const pinnedGhosttyCommit = "46e9dc9a927b2e7e7cba79e6902c176127dbdf2c"
+const pinnedGhosttyCommit = "6ba144158577d033ccb6ed4b574e4013957c9161"
 
 func nativeBuildInfo() map[string]any {
 	var version, build C.GhosttyString
 	must(C.int(C.ghostty_build_info(C.GHOSTTY_BUILD_INFO_VERSION_STRING, unsafe.Pointer(&version))))
 	must(C.int(C.ghostty_build_info(C.GHOSTTY_BUILD_INFO_VERSION_BUILD, unsafe.Pointer(&build))))
-	return map[string]any{"version": string(C.GoBytes(unsafe.Pointer(version.ptr), C.int(version.len))), "build": string(C.GoBytes(unsafe.Pointer(build.ptr), C.int(build.len)))}
+	return map[string]any{"source_commit": pinnedGhosttyCommit, "version": string(C.GoBytes(unsafe.Pointer(version.ptr), C.int(version.len))), "build": string(C.GoBytes(unsafe.Pointer(build.ptr), C.int(build.len)))}
 }
 
 type modelDifference struct {
@@ -354,7 +354,7 @@ func (t *tracedEngine) replace(data []byte, cols, rows int, snapshot bool) {
 		if snapshot {
 			engine = restore(name, data, cols, rows)
 		} else {
-			engine = newEngine(name, cols, rows)
+			engine = newCheckpointEngine(name, cols, rows)
 			if t.sharedPalette {
 				engine.(*ghost).sharedHostPalette()
 			}

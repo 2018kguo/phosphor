@@ -1,0 +1,27 @@
+{
+  "vim": {
+    "phosphor": 477.98,
+    "charmbracelet-x-vt": 19.93,
+    "vt10x": 30.8
+  },
+  "less": {
+    "phosphor": 381.61,
+    "charmbracelet-x-vt": 1.95,
+    "vt10x": 25.74
+  },
+  "claude": {
+    "phosphor": 497.15,
+    "charmbracelet-x-vt": 35.63,
+    "vt10x": 44.86
+  },
+  "logs": {
+    "phosphor": 730.85,
+    "charmbracelet-x-vt": 4.5,
+    "vt10x": 37.94
+  },
+  "progress": {
+    "phosphor": 1615.75,
+    "charmbracelet-x-vt": 25.94,
+    "vt10x": 42.46
+  }
+}
