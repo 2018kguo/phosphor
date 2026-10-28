@@ -40,7 +40,7 @@ The Go-translated Ghostty suite comes from `521cf2c`; attribution/license: [NOTI
 
 The current translation passes 524, has zero known failures and excludes 25:15 palette,6 reply,2 image,2 charset. Five former link cases now check text/URIs and seven prompt cases check text/cursor/history/raw row marks. Native fixtures exercise every non-image group with raw replies and continuation, without turning unsupported commands into passes.
 
-Prompt/wrap flags share one byte per annotated row. Private history markers are NUL +canonical zero uvarint +`P` +kind 0/1/2; positive uvarints remain sparse-hole runs. Unknown/truncated/noncanonical/out-of-range markers and markers in released v1 snapshots are rejected; unannotated history gains no bytes.
+Prompt/wrap flags share one byte per annotated row. Private history markers are NUL +canonical zero uvarint +`P` +kind 0/1/2; positive uvarints remain sparse-hole runs. Unknown/truncated/noncanonical/out-of-range markers and markers in legacy snapshots are rejected; unannotated history gains no bytes.
 
 Width changes reset tabs to the default eight-column interval; height changes retain custom stops. Five unchanged WezTerm expectations preserve tabs across width changes and remain explicit policy conflicts.
 

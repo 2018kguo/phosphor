@@ -1,12 +1,14 @@
-# v0.4 comparison: cheaper prompts, fuller terminal state
+# Idle-state comparison: cheaper prompts, fuller terminal state
 
 Prompt heap fell about 42%; several editor/pager streams became faster. Native still led logs, synthetic TUI and nano. Compatibility expanded, with explicit policy/ANSI failures retained. These measurements do not establish a win on every workload or universal compatibility.
 
-Measured performance/prompt memory: `7a2e8f2f76e4b85a342ee87241e9738c7a39fad3`. Final correctness includes `2c459f56413b5497b1391cd1898508f2d1295994`, which canonicalizes empty-row repaint without changing Write. Baseline v0.3.0: `3a732c18eee88e55977b233eb25b905633a669f7`. Native: `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, Zig 0.17.0 ReleaseFast, build-info 0.1.0-dev. Apple M5 Pro, macOS/arm64, Go 1.26.3; Linux checks: Docker/arm64, Go 1.26.10. Production stays pure Go.
+Measured performance/prompt memory: `7a2e8f2f76e4b85a342ee87241e9738c7a39fad3`. Final correctness includes `2c459f56413b5497b1391cd1898508f2d1295994`, which canonicalizes empty-row repaint without changing Write. Baseline: `3a732c18eee88e55977b233eb25b905633a669f7`. Native: `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c` ReleaseFast; build-info omits the commit. Apple M5 Pro, macOS/arm64; Linux checks: Docker/arm64. Production stays pure Go.
+
+Build toolchains are recorded in [environment metadata](../environments.json).
 
 ## Compatibility
 
-The original 72-case corpus improved 150/174→174/174 direct and Phosphor continuation. The additional historical cluster-capacity case also matches: [raw](final-original-corpus.jsonl). Expanded 208-case/773-action results:
+In the original 72-case corpus, direct input and Phosphor continuation each passed 174/174 actions; the baseline passed 150/174. The additional historical cluster-capacity case also matches: [raw](final-original-corpus.jsonl). Expanded 208-case/773-action results:
 
 | Comparison | Pass / actions |
 |---|---:|
@@ -28,7 +30,7 @@ Translated Ghostty:524 passing/0 known failures/25 exclusions; seven former prom
 
 Five alternating 500 ms rounds,120×40,1 KiB writes; median MiB/s. Identical selectors/data, no discarded outliers; wall/process CPU: [raw](throughput.jsonl).
 
-| Stream | v0.3.0 | v0.4.0 candidate | Ghostty |
+| Stream | Baseline | Candidate | Ghostty |
 |---|---:|---:|---:|
 | claude-synthetic | 441.8 | 427.4 | 467.7 |
 | logs | 521.8 | 537.9 | 884.7 |
@@ -39,13 +41,13 @@ Five alternating 500 ms rounds,120×40,1 KiB writes; median MiB/s. Identical sel
 | rec-nano-recording | 499.2 | 508.9 | 563.5 |
 | rec-man-recording | 409.7 | 519.9 | 407.8 |
 
-Versus v0.3, recordings improve unevenly while TUI/progress/vim medians are about 3–6% lower. Clock/scheduling scatter prevents small universal claims. [Performance followup](performance-followup.md) explains the accepted bulk-clear/SGR 0 repair (about 8% Claude CPU/4% progress recovery versus an intermediate build), rejected row probe and all raw samples. `cursor-throughput.jsonl` /`cursor-controlled.jsonl` measure earlier 8d1511, not this candidate.
+Versus the baseline, recordings improve unevenly while TUI/progress/vim medians are about 3–6% lower. Clock/scheduling scatter prevents small universal claims. [Performance followup](performance-followup.md) explains the accepted bulk-clear/SGR 0 repair (about 8% Claude CPU/4% progress recovery versus an intermediate build), rejected row probe and all raw samples. `cursor-throughput.jsonl` /`cursor-controlled.jsonl` measure earlier 8d1511, not this candidate.
 
 ## Idle memory
 
 Three fresh processes per engine/workload,1,024 live terminals, medians in B/terminal. Compact/native FULL both applied; shared initialization and GC procedure identical. Use RSS for native memory, not wrapper heap: [raw](memory.jsonl).
 
-| Workload | v0.3 heap | Candidate heap | v0.3 RSS delta | Candidate RSS delta | Native RSS delta |
+| Workload | Baseline heap | Candidate heap | Baseline RSS delta | Candidate RSS delta | Native RSS delta |
 |---|---:|---:|---:|---:|---:|
 | prompt-erase-compact | 2,521 | 1,449 | 2,432 | 1,264 | 31,280 |
 | colored-prompt-erase-compact | 2,515 | 1,443 | 2,576 | 1,760 | 47,840 |
@@ -56,9 +58,9 @@ Terminal 560 B/cell 16 B; no production GC/scavenging change. Heap can fall whil
 
 ## Persistence and validation
 
-Inner Snapshot 2 preserves new state and reads actual released v0.3 format 1 fixtures; they were not regenerated. Ptyd's outer header stays 2; tests cross old/new checkpoints, tail replay, resize and future output. New inner snapshots require the documented newer reader.
+Inner Snapshot 2 preserves new state and reads the archived earlier-format fixtures; they were not regenerated. Ptyd's outer header stays 2; tests cross old/new checkpoints, tail replay, resize and future output. New inner snapshots require the documented newer reader.
 
-Go 1.24/current-Go tests, race/vet, examples, oracle/native ABI and bounded fuzz passed. Reviews fixed wrapped-row repair and reported no final cursor/snapshot findings. Native tests cover 216 screen-mode sequences plus futures. Release fuzz separately fixed a test's storage-dependent ALT comparison, named the forced 1047 background expectation (only zero padding gains erase BG; all other observations/snapshot/futures stay strict), and canonicalized one-column dummy selection without weakening Compact byte equality. Width-only 80/132 near misses retain strict ANSI checks. Linux daemon-crash tests needed Docker `--init` to reap children; sleep-as-PID 1 caused the first environment failure. No installed daemon changed.
+Minimum-supported/current-Go tests, race/vet, examples, oracle/native ABI and bounded fuzz passed. Reviews fixed wrapped-row repair and reported no final cursor/snapshot findings. Native tests cover 216 screen-mode sequences plus futures. Release fuzz separately fixed a test's storage-dependent ALT comparison, named the forced 1047 background expectation (only zero padding gains erase BG; all other observations/snapshot/futures stay strict), and canonicalized one-column dummy selection without weakening Compact byte equality. Width-only 80/132 near misses retain strict ANSI checks. Linux daemon-crash tests needed Docker `--init` to reap children; sleep-as-PID 1 caused the first environment failure. No installed daemon changed.
 
 Reproduce with the [driver](../../README.md): `COMPARE_DURATION=500ms bash oracle/ghostty/ab.sh BASELINE CANDIDATE OUTPUT`; set PHOSPHOR_DIR. Run table workload names with `-mode memory -engine phosphor` /`ghostty -n 1024`, repeating fresh processes in alternating order. Baseline overlay changes only benchmark selectors, not released production code.
 

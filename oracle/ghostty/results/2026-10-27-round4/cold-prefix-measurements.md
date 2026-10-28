@@ -1,8 +1,10 @@
 # Cold prefixes: reduce real prompt memory
 
-Could avoiding the initial full row lower RSS as well as Compact's retained heap? Yes: plain prompt RSS fell 2528→1056 B/terminal; colored 2544→1648. Shell-style default-background EL kept the saving. Active performance was approximately flat in longer checks, not universally faster.
+Avoiding the initial full row reduced RSS as well as Compact's retained heap. Plain prompt RSS fell from 2528 to 1056 B/terminal; colored prompt RSS fell from 2544 to 1648. Shell-style default-background EL kept the saving. Active performance was approximately flat in longer checks, not universally faster.
 
-Before `b4637e58a4145035f980116a3ba38d5c8927abb0`; after adds cold MAIN prefixes, geometric capacity growth, dense ALT allocation and erasure within owned cells. Same driver/recordings; baseline overlay changes only selectors/test benchmark. Apple M5 Pro, macOS/arm64, Go 1.26.3. No production GC/scavenging policy changed.
+Before `b4637e58a4145035f980116a3ba38d5c8927abb0`; after adds cold MAIN prefixes, geometric capacity growth, dense ALT allocation and erasure within owned cells. Same driver/recordings; baseline overlay changes only selectors/test benchmark. Apple M5 Pro, macOS/arm64. No production GC/scavenging policy changed.
+
+Build toolchains are recorded in [environment metadata](../environments.json).
 
 ## Throughput
 

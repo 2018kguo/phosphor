@@ -2,17 +2,19 @@
 
 Correct 1049 exit keeps inactive ALT for later 47 re-entry. After Compact these completed recordings retained 22–47 KB of Go heap per terminal, versus 54–56 KB before. This is a larger state than a fresh prompt; no cold-screen codec or extra compression was added.
 
+Build toolchains are recorded in [environment metadata](../environments.json).
+
 ## Build and method
 
 | Provenance | Value |
 |---|---|
 | Phosphor/driver source |`8d1511ce4f0d5b5951f4506818c4da14b4f4a3bc` (before the later parsing repair) |
-| Native source |`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, Zig 0.17.0, `zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4` |
+| Native source |`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, `zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4` |
 | Driver SHA256 |`bb7cd704d558ed4d0c7b374284af079a582623f5a1a6e8f0de75fbd1d94745bb` |
 | Linked dylib SHA256 |`7700d7817d5c3c7107e5efb9cd165a1d9f16e877fe9f2cf886c528bfb707acbe` |
 | Source manifest SHA256 |`5880bcd622156f80410cce12b6fd3bb75918e6526b86261a088326d4ce4973b4` |
 
-The manifest hashes production root/internal Go, driver Go/C/header and both modules' go.mod/go.sum (no tests); sorted path→SHA256 JSON, compact separators, then SHA256. Files matched committed source before/after sampling; no uncommitted production bytes entered the build. macOS/arm64, Go 1.26.3, cgo/ghostty tag. Absolute native include/library/rpath was `/private/tmp/phosphor-gaps.ro32ng/ghostty`; another build path can change the binary hash.
+The manifest hashes production root/internal Go, driver Go/C/header and both modules' go.mod/go.sum (no tests); sorted JSON mapping each path to its SHA256, compact separators, then SHA256. Files matched committed source before/after sampling; no uncommitted production bytes entered the build. macOS/arm64, cgo/ghostty tag. Absolute native include/library/rpath was `/private/tmp/phosphor-gaps.ro32ng/ghostty`; another build path can change the binary hash.
 
 [1024-terminal raw](closed-memory-1024.jsonl) /[256-terminal raw](closed-memory-256.jsonl):120 fresh-process samples =five recordings×two engines×plain/compacted×three repeats×two counts. Only a repeat label was added; order alternates and no samples/cells/replies were normalized or discarded.
 
