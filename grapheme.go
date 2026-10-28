@@ -191,27 +191,6 @@ func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
 	return width, true
 }
 
-func graphemeContinues(s string, r rune) bool {
-	// Terminal controls have already been executed. Ghostty treats any
-	// zero-width grapheme Control left in a mode-off cell as Other when
-	// clustering is later enabled. Replace only those properties for the
-	// boundary test; the original UTF-8 is retained in the stored cell.
-	var state graphemeBreakState
-	var last graphemeProperty
-	first := true
-	for _, cp := range s {
-		property := graphemeProps(cp)
-		if !first && !state.continues(last, property) {
-			state = graphemeBreakState{}
-		}
-		last, first = property, false
-	}
-	if first {
-		return false
-	}
-	return state.continues(last, graphemeProps(r))
-}
-
 func emojiVariationBase(r rune) bool {
 	return runeInRanges(r, emojiVariationBases[:])
 }

@@ -8,10 +8,21 @@ import (
 	"strings"
 )
 
-var graphemeKinds = [...]struct{ ucd, goName string }{
-	{"Other", "Other"}, {"CR", "CR"}, {"LF", "LF"}, {"Extend", "Extend"},
-	{"Regional_Indicator", "RI"}, {"Prepend", "Prepend"}, {"SpacingMark", "Spacing"},
-	{"L", "L"}, {"V", "V"}, {"T", "T"}, {"LV", "LV"}, {"LVT", "LVT"}, {"ZWJ", "ZWJ"},
+var graphemeKinds = [...]struct {
+	ucd, goName string
+	value       graphemeProperty
+}{
+	{"Other", "Other", gpOther}, {"CR", "CR", gpCR}, {"LF", "LF", gpLF}, {"Extend", "Extend", gpExtend},
+	{"Regional_Indicator", "RI", gpRI}, {"Prepend", "Prepend", gpPrepend}, {"SpacingMark", "Spacing", gpSpacing},
+	{"L", "L", gpL}, {"V", "V", gpV}, {"T", "T", gpT}, {"LV", "LV", gpLV}, {"LVT", "LVT", gpLVT}, {"ZWJ", "ZWJ", gpZWJ},
+}
+
+var graphemeFlags = [...]struct {
+	name  string
+	value graphemeProperty
+}{
+	{"KindMask", gpKindMask}, {"Pictographic", gpPictographic}, {"Consonant", gpConsonant},
+	{"InCBExtend", gpInCBExtend}, {"Linker", gpLinker}, {"InCBMask", gpInCBMask},
 }
 
 // The low nibble is Grapheme_Cluster_Break, followed by Extended_Pictographic
@@ -52,17 +63,17 @@ func graphemeProperties(breaks, emoji, derived []byte) (pages [0x1100][256]uint8
 	}
 	visit(breaks, func(fields []string) (uint8, bool) {
 		if fields[1] == "Control" {
-			return 128, true // cleared after the independent properties merge
+			return gpControlMarker, true // cleared after the independent properties merge
 		}
-		for i, kind := range graphemeKinds {
+		for _, kind := range graphemeKinds {
 			if kind.ucd == fields[1] {
-				return uint8(i), true
+				return kind.value, true
 			}
 		}
 		panic("unknown grapheme break property: " + fields[1])
 	})
 	visit(emoji, func(fields []string) (uint8, bool) {
-		return 16, fields[1] == "Extended_Pictographic"
+		return gpPictographic, fields[1] == "Extended_Pictographic"
 	})
 	visit(derived, func(fields []string) (uint8, bool) {
 		if fields[1] != "InCB" {
@@ -73,18 +84,18 @@ func graphemeProperties(breaks, emoji, derived []byte) (pages [0x1100][256]uint8
 		}
 		switch fields[2] {
 		case "Consonant":
-			return 32, true
+			return gpConsonant, true
 		case "Extend":
-			return 64, true
+			return gpInCBExtend, true
 		case "Linker":
-			return 96, true
+			return gpLinker, true
 		default:
 			panic("unknown Indic conjunct property: " + fields[2])
 		}
 	})
 	for i := range pages {
 		for j, property := range pages[i] {
-			if property&128 != 0 {
+			if property&gpControlMarker != 0 {
 				// Normalization replaces the whole scalar with private-use
 				// Other, discarding its EP and InCB properties as well.
 				pages[i][j] = 0
@@ -97,10 +108,13 @@ func graphemeProperties(breaks, emoji, derived []byte) (pages [0x1100][256]uint8
 func emitGraphemeProperties(out *bytes.Buffer, breaks, emoji, derived []byte) {
 	pages := graphemeProperties(breaks, emoji, derived)
 	fmt.Fprintln(out, "type graphemeProperty uint8\n\nconst (")
-	for i, kind := range graphemeKinds {
-		fmt.Fprintf(out, "gp%s graphemeProperty = %d\n", kind.goName, i)
+	for _, kind := range graphemeKinds {
+		fmt.Fprintf(out, "gp%s graphemeProperty = %d\n", kind.goName, kind.value)
 	}
-	fmt.Fprintln(out, "gpKindMask graphemeProperty = 15\ngpPictographic graphemeProperty = 16\ngpConsonant graphemeProperty = 32\ngpInCBExtend graphemeProperty = 64\ngpLinker graphemeProperty = 96\ngpInCBMask graphemeProperty = 96\n)")
+	for _, flag := range graphemeFlags {
+		fmt.Fprintf(out, "gp%s graphemeProperty = %d\n", flag.name, flag.value)
+	}
+	out.WriteString(")\n")
 	index := make(map[[256]uint8]int)
 	var unique [][256]uint8
 	var ids [0x1100]int
@@ -134,6 +148,64 @@ func emitGraphemeProperties(out *bytes.Buffer, breaks, emoji, derived []byte) {
 			}
 		}
 		out.WriteString("},\n")
+	}
+	out.WriteString("}\n")
+	emitGraphemeTransitions(out, pages)
+}
+
+func emitGraphemeTransitions(out *bytes.Buffer, pages [0x1100][256]uint8) {
+	var used [128]bool
+	for _, page := range pages {
+		for _, property := range page {
+			used[property] = true
+		}
+	}
+	var classes []uint8
+	var classIDs [128]uint8
+	for property, keep := range used {
+		if keep {
+			classIDs[property] = uint8(len(classes))
+			classes = append(classes, uint8(property))
+		}
+	}
+	if len(classes) > 32 {
+		panic("grapheme classes exceed five bits")
+	}
+	var transitions [16 << 10]uint8
+	for state := range 16 {
+		for i, last := range classes {
+			for j, current := range classes {
+				s := graphemeBreakState{indic: uint8(state & 3), lastNonExtendPictographic: state&4 != 0, regionalPairOdd: state&8 != 0}
+				continues := s.continues(last, current)
+				next := s.indic
+				if s.lastNonExtendPictographic {
+					next |= 4
+				}
+				if s.regionalPairOdd {
+					next |= 8
+				}
+				if continues {
+					next |= 16
+				}
+				transitions[state<<10|i<<5|j] = next
+			}
+		}
+	}
+	fmt.Fprintln(out, "// Boundary transitions use 16 state encodings and five-bit property classes.")
+	fmt.Fprintln(out, "// Rules adapted from Copyright (c) 2020 Matt Sherman; see licenses/uax29.txt.")
+	out.WriteString("var graphemePropertyClasses = [128]uint8{\n")
+	for i, id := range classIDs {
+		fmt.Fprintf(out, "%d,", id)
+		if i%32 == 31 {
+			out.WriteByte('\n')
+		}
+	}
+	out.WriteString("}\n\nvar graphemeTransitions = [16 << 10]uint8{\n")
+	for i, transition := range transitions {
+		fmt.Fprintf(out, "%d,", transition)
+		if i%32 == 31 {
+			out.WriteByte('\n')
+		}
 	}
 	out.WriteString("}\n")
 }
