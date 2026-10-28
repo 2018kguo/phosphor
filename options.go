@@ -10,7 +10,7 @@ type Option func(*config)
 type config struct {
 	sbLines, sbBytes int
 	reply            io.Writer
-	scrollbackOutput io.Writer
+	scrollbackOutput *scrollbackOutput
 	bell             func()
 	palette          *Palette // the base palette, nil for DefaultPalette
 	colors           []colorSet
@@ -79,4 +79,15 @@ func WithPalette(p Palette) Option {
 // the writer must not retain bytes or mutate this Terminal. Size is safe to read. Errors are ignored.
 // Resize and Restart only rearrange existing content and do not emit rows.
 // This does not replay existing history; use WriteScrollback for initial state.
-func WithScrollbackOutput(w io.Writer) Option { return func(c *config) { c.scrollbackOutput = w } }
+func WithScrollbackOutput(w io.Writer) Option {
+	return func(c *config) {
+		if w == nil {
+			c.scrollbackOutput = nil
+		} else {
+			c.scrollbackOutput = &scrollbackOutput{writer: w}
+		}
+	}
+}
+
+// Keep observer storage out of the idle config allocation class.
+type scrollbackOutput struct{ writer io.Writer }

@@ -2549,7 +2549,7 @@ func (t *Terminal) visitClusterRefs(ref func(*rune)) {
 // is appended to its line.
 func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
 	if t.cfg != nil && t.cfg.scrollbackOutput != nil {
-		t.cfg.scrollbackOutput.Write(t.appendDisplayRow(nil, row))
+		t.cfg.scrollbackOutput.writer.Write(t.appendDisplayRow(nil, row))
 	}
 	wrapped := flags&rowWrap != 0
 	if t.sbMaxLines <= 0 {
