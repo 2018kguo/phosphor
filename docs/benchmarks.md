@@ -102,6 +102,12 @@ lose mixed alternate-screen backgrounds after resize and forced 1047 exit.
 Exact snapshots retain those cells. Failures stay in the evidence, and these
 counts are not a percentage of universal terminal compatibility.
 
+Known ANSI limits have explicit mechanism tests. For the forced-1047 background
+case, fuzzing checks the declared background projection and keeps all other
+state assertions active. Exact snapshots must retain the original cells and
+future behavior. A passing limit test does not count as passing native parity;
+the native trace comparison retains the raw differing cells.
+
 Ordinary tests also run translated Ghostty/WezTerm tables, libvterm scripts,
 Alacritty references, the pinned Unicode corpus and independent xterm-style cases.
 The [comparison contract](../oracle/ghostty/coverage.md) defines bounds,

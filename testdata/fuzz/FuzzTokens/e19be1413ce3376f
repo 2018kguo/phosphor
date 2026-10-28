@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\x830])\xfd<$:00?000\xf4")
+byte('A')
+byte('\u0083')
