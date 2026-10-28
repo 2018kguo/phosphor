@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
-
-	"github.com/clipperhouse/uax29/v2/graphemes"
 )
 
 func TestGraphemeSegmentationKeepsByteBoundaries(t *testing.T) {
@@ -22,42 +20,81 @@ func TestGraphemeSegmentationKeepsByteBoundaries(t *testing.T) {
 	}
 	for _, prefix := range prefixes {
 		for _, next := range []rune{0, 'A', '中', 0xad, 0x301, 0x200d, 0xfe0e, 0xfe0f, 0x1f3ff, 0x1f469, 0x1f1fa, 0x1100, 0x1161, 0x11a8, 0x61c, -1, utf8.MaxRune + 1} {
-			want := byteIteratorContinues(prefix, next)
+			want := referenceGraphemeContinues(prefix, next)
 			got := graphemeContinues(prefix, next)
 			if got != want {
-				t.Fatalf("%q + %U joins %v, byte iterator %v", prefix, next, got, want)
+				t.Fatalf("%q + %U joins %v, lookback reference %v", prefix, next, got, want)
 			}
 		}
 	}
 }
 
-// Keep the byte-backed segmenter as an independent control, including the
-// original scalar replacement used when mode-off text contains controls.
-func byteIteratorContinues(prefix string, next rune) bool {
-	var normalized []byte
+// Use suffix lookback instead of the generated forward-state table. The
+// official corpus independently checks the properties and Unicode rules;
+// this control checks table replay over arbitrary mode-off cell contents.
+func referenceGraphemeContinues(prefix string, next rune) bool {
+	var cluster []graphemeProperty
 	for _, cp := range prefix {
-		if runeInRanges(cp, graphemeControls[:]) {
-			cp = 0xe000
+		property := graphemeProps(cp)
+		if !referenceGraphemeBoundary(cluster, property) {
+			cluster = cluster[:0]
 		}
-		normalized = utf8.AppendRune(normalized, cp)
+		cluster = append(cluster, property)
 	}
-	boundary := len(normalized)
-	if runeInRanges(next, graphemeControls[:]) {
-		next = 0xe000
+	return referenceGraphemeBoundary(cluster, graphemeProps(next))
+}
+
+func referenceGraphemeBoundary(prefix []graphemeProperty, next graphemeProperty) bool {
+	if len(prefix) == 0 {
+		return false
 	}
-	normalized = utf8.AppendRune(normalized, next)
-	iter := graphemes.FromBytes(normalized)
-	for iter.Next() {
-		if iter.End() > boundary {
-			return iter.Start() < boundary
+	last := prefix[len(prefix)-1]
+	a, b := last&gpKindMask, next&gpKindMask
+	if a == gpCR && b == gpLF {
+		return true
+	}
+	if a == gpCR || a == gpLF || b == gpCR || b == gpLF {
+		return false
+	}
+	if a == gpL && (b == gpL || b == gpV || b == gpLV || b == gpLVT) ||
+		(a == gpLV || a == gpV) && (b == gpV || b == gpT) ||
+		(a == gpLVT || a == gpT) && b == gpT {
+		return true
+	}
+	if b == gpExtend || b == gpZWJ || b == gpSpacing || a == gpPrepend {
+		return true
+	}
+	if next&gpInCBMask == gpConsonant {
+		for i := len(prefix) - 1; i >= 0; i-- {
+			switch prefix[i] & gpInCBMask {
+			case gpLinker:
+				return true
+			case gpInCBExtend:
+			default:
+				i = -1
+			}
 		}
+	}
+	if next&gpPictographic != 0 && a == gpZWJ {
+		for i := len(prefix) - 2; i >= 0; i-- {
+			if prefix[i]&gpKindMask != gpExtend {
+				return prefix[i]&gpPictographic != 0
+			}
+		}
+	}
+	if a == gpRI && b == gpRI {
+		count := 0
+		for i := len(prefix) - 1; i >= 0 && prefix[i]&gpKindMask == gpRI; i-- {
+			count++
+		}
+		return count%2 == 1
 	}
 	return false
 }
 
-func TestGraphemeClassPrefixesMatchByteIterator(t *testing.T) {
+func TestGraphemeClassPrefixesMatchLookback(t *testing.T) {
 	tokens := []rune{'a', '中', 0, '\r', '\n', 0xad, 0x200b, 0x0300, 0x094d, 0x0915, 0x0903, 0x0600,
-		0x1100, 0x1161, 0x11a8, 0xac00, 0xac01, 0x200d, 0x200c, 0x1f3ff, 0x1f469, 0x1f1fa, 0x1f1f8, 0xfe0e, 0xfe0f}
+		0x1100, 0x1161, 0x11a8, 0xac00, 0xac01, 0x1cf5, 0x11a3a, 0x05c8, 0x200d, 0x200c, 0x1f3ff, 0x1f469, 0x1f1fa, 0x1f1f8, 0xfe0e, 0xfe0f}
 	rng := rand.New(rand.NewPCG(347, 991))
 	for trial := range 10000 {
 		var prefix strings.Builder
@@ -74,14 +111,14 @@ func TestGraphemeClassPrefixesMatchByteIterator(t *testing.T) {
 		}
 		s := prefix.String()
 		got := graphemeContinues(s, next)
-		if want := byteIteratorContinues(s, next); got != want {
-			t.Fatalf("trial %d: %q + %U joins %v, byte iterator %v", trial, s, next, got, want)
+		if want := referenceGraphemeContinues(s, next); got != want {
+			t.Fatalf("trial %d: %q + %U joins %v, lookback reference %v", trial, s, next, got, want)
 		}
 	}
 }
 
-func FuzzGraphemeBoundaryMatchesByteIterator(f *testing.F) {
-	for _, prefix := range []string{"क्", "a्", "क\u200b्", "👩\u200d", "🇺🇸🇨", "\xff\xfe"} {
+func FuzzGraphemeBoundaryMatchesLookback(f *testing.F) {
+	for _, prefix := range []string{"क्", "a्", "क\u200b्", "a\u1cf5", "A\u05c8", "👩\u200d", "🇺🇸🇨", "\xff\xfe"} {
 		f.Add(prefix, rune(0x0915))
 	}
 	f.Fuzz(func(t *testing.T, prefix string, next rune) {
@@ -89,8 +126,8 @@ func FuzzGraphemeBoundaryMatchesByteIterator(f *testing.F) {
 			prefix = prefix[:maxCluster]
 		}
 		got := graphemeContinues(prefix, next)
-		if want := byteIteratorContinues(prefix, next); got != want {
-			t.Fatalf("%q + %U joins %v, byte iterator %v", prefix, next, got, want)
+		if want := referenceGraphemeContinues(prefix, next); got != want {
+			t.Fatalf("%q + %U joins %v, lookback reference %v", prefix, next, got, want)
 		}
 	})
 }

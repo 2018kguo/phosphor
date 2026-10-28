@@ -2,7 +2,7 @@ package phosphor
 
 import "unicode/utf8"
 
-// Unicode 17 boundary rules are generated from the UAX29 implementation
+// Unicode boundary rules are generated from the UAX29 implementation
 // adapted from Copyright (c) 2020 Matt Sherman; see licenses/uax29.txt.
 func graphemeProps(r rune) graphemeProperty {
 	u := uint32(r)

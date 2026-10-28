@@ -28,7 +28,7 @@ const (
 	gpControlMarker graphemeProperty = 128
 )
 
-// Unicode 17 boundary rules adapted from github.com/clipperhouse/uax29/v2,
+// Boundary rules adapted from github.com/clipperhouse/uax29/v2,
 // Copyright (c) 2020 Matt Sherman. See licenses/uax29.txt.
 // These rules generate bounded transition entries. Runtime replay restarts
 // that context at earlier boundaries in stored mode-off text.
@@ -45,14 +45,8 @@ func (s *graphemeBreakState) continues(last, current graphemeProperty) bool {
 		s.lastNonExtendPictographic = last&gpPictographic != 0
 	}
 	switch last & gpInCBMask {
-	case gpConsonant:
-		if s.indic != 2 {
-			s.indic = 1
-		}
 	case gpLinker:
-		if s.indic >= 1 {
-			s.indic = 2
-		}
+		s.indic = 2
 	case gpInCBExtend:
 	default:
 		s.indic = 0
@@ -75,8 +69,8 @@ func (s *graphemeBreakState) continues(last, current graphemeProperty) bool {
 	if currentKind == gpExtend || currentKind == gpZWJ || currentKind == gpSpacing || lastKind == gpPrepend { // GB9/9a/9b
 		return true
 	}
-	if s.indic == 2 && current&gpInCBMask == gpConsonant { // GB9c
-		s.indic = 1
+	if s.indic == 2 && current&gpInCBMask == gpConsonant { // Unicode 18 GB9c: Linker Extend* × Consonant
+		s.indic = 0
 		return true
 	}
 	if current&gpPictographic != 0 && lastKind == gpZWJ && beforeZWJ { // GB11

@@ -71,7 +71,7 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 	if row[x].R <= 0 {
 		return false
 	}
-	// A scalar Other followed by another Other always starts a new cell.
+	// Two simple scalar properties always start separate cells.
 	// Stored clusters still need replay: earlier mode-off text may contain
 	// boundaries that affect the suffix's state.
 	if graphemeSimpleScalar(row[x].R) && graphemeSimpleScalar(r) {
@@ -170,7 +170,9 @@ func graphemeSimpleScalar(r rune) bool {
 	if u > utf8.MaxRune {
 		return false
 	}
-	return graphemeProps(r)&gpKindMask == gpOther
+	property := graphemeProps(r)
+	// Unicode 18 permits a GCB Other linker to join a later consonant.
+	return property&gpKindMask == gpOther && property&gpInCBMask != gpLinker
 }
 
 func graphemeWidthEffect(width int, prev, r rune) (int, bool) {
