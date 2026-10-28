@@ -144,7 +144,10 @@ Use Snapshot for exact persistence. ANSI cannot express every retained state:
   screen as scratch space; other combinations can move the resumed cursor.
 - Very narrow screens with VS15-narrowed graphemes have replay limits.
 - A forced 1047 exit can erase mixed old/new alternate-screen backgrounds
-  after a resize; exact snapshots retain those cells.
+  after a resize. Preserving the stored screen-mode bits can require that
+  exit, which paints unprotected cells with one background. ISO-protected
+  text can survive while blank resize padding changes color. Exact snapshots
+  retain every original cell; ANSI cannot reproduce this combination.
 - An unmarked prompt cursor may be reproduced with explicit input state.
   Headless text effects match, while per-cell GUI semantic classification
   can differ. Binary snapshots preserve the original enum.

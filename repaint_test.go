@@ -171,64 +171,83 @@ func FuzzRepaintContinuation(f *testing.F) {
 // A final MAIN with only 1047 reset must leave ALT through an erasing
 // transition. It cannot retain uniformly erased old rows plus default rows
 // introduced by height or width growth. The allowed shape is one top-left
-// erased rectangle with zero padding. Text, protection, other styles, and row flags
-// are excluded; those still require repaint equality. Width-only growth at 80/132 remains strict: DECCOLM may stage
-// those widths. Native Terminal.zig deccolm only reaches 80/132 and cannot
+// erased rectangle with zero padding. ISO-protected cells may survive as
+// holes in that rectangle; every protected cell must remain exact. Other
+// unprotected styles and row flags remain strict. Width-only growth at 80/132
+// remains strict: DECCOLM may stage those widths. Native Terminal.zig deccolm
+// only reaches 80/132 and cannot
 // restore other host widths; switchScreenMode 1047 erases the entire ALT.
 // The raw native fixture cursor-1047-resize-background-limit records
-// the ANSI failure. FuzzSnapshotContinuation is the universal exact checkpoint
-// oracle, including states outside portable ANSI's reconstruction contract.
-func repaintRectangleGrowthLimit(src *Terminal) bool {
+// the ANSI failure. FuzzSnapshotContinuation checks exact checkpoints, including these states
+// outside portable ANSI's reconstruction contract.
+func repaintRectangleGrowthBackground(src *Terminal) (Color, bool) {
 	if src.altActive || src.privateModes()&(privateMode47|privateMode1047|privateMode1049) != privateMode47|privateMode1049 || len(src.alt) != src.rows || src.rows < 1 {
-		return false
+		return 0, false
 	}
-	bg := rowCell(src.alt[0], 0).Bg
-	if bg == 0 {
-		return false
-	}
-	width := 0
-	for width < src.cols && rowCell(src.alt[0], width) == (cell{Bg: bg}) {
-		width++
-	}
-	if width == 0 {
-		return false
-	}
-	height := 0
-	for height < src.rows && rowCell(src.alt[height], 0) == (cell{Bg: bg}) {
-		height++
-	}
-	if width == src.cols && height == src.rows {
-		return false
-	}
-	if height == src.rows && (src.cols == 80 || src.cols == 132) {
-		return false
-	}
+	var bg, first Color
+	width, height := 0, 0
+	seen, padding := false, false
 	for y, row := range src.alt {
 		if rowFlagsAt(src.altWrap, y) != 0 {
-			return false
+			return 0, false
 		}
 		for x := range src.cols {
+			c := rowCell(row, x)
+			if c.A&AttrProtected != 0 {
+				if !src.protISO {
+					return 0, false
+				}
+				continue
+			}
+			if c != (cell{Bg: c.Bg}) {
+				return 0, false
+			}
+			if !seen {
+				first, seen = c.Bg, true
+			}
+			if c.Bg == 0 {
+				padding = true
+				continue
+			}
+			if bg != 0 && c.Bg != bg {
+				return 0, false
+			}
+			bg = c.Bg
+			width, height = max(width, x+1), max(height, y+1)
+		}
+	}
+	// Derive the erase color from the source rectangle, never the exporter.
+	// If padding precedes the first colored cell, an exporter which chooses
+	// that padding's background loses old colored cells instead; keep strict.
+	if bg == 0 || !padding || first != bg || height == src.rows && (src.cols == 80 || src.cols == 132) {
+		return 0, false
+	}
+	for y, row := range src.alt {
+		for x := range src.cols {
+			c := rowCell(row, x)
+			if c.A&AttrProtected != 0 {
+				continue
+			}
 			want := cell{}
 			if x < width && y < height {
 				want.Bg = bg
 			}
-			if rowCell(row, x) != want {
-				return false
+			if c != want {
+				return 0, false
 			}
 		}
 	}
-	return true
+	return bg, true
 }
 
 // Portable repaint's declared loss is only the default background in zero
 // ALT padding. Keep every other assertion active against this explicit export.
-func repaintRectangleGrowthExpectation(t *testing.T, src *Terminal) *Terminal {
+func repaintRectangleGrowthExpectation(t *testing.T, src *Terminal, bg Color) *Terminal {
 	t.Helper()
 	expected := New(1, 1)
 	if err := expected.RestoreSnapshot(src.Snapshot(), SnapshotLimits{}); err != nil {
 		t.Fatal(err)
 	}
-	bg := rowCell(src.alt[0], 0).Bg
 	for y, row := range expected.alt {
 		full := make([]cell, src.cols)
 		copy(full, row)
@@ -245,20 +264,34 @@ func repaintRectangleGrowthExpectation(t *testing.T, src *Terminal) *Terminal {
 func checkRectangleGrowthSnapshot(t *testing.T, src *Terminal) {
 	t.Helper()
 	before := src.Snapshot()
+	var aReply, bReply bytes.Buffer
+	originalConfig := src.cfg
+	var cfg config
+	if originalConfig != nil {
+		cfg = *originalConfig
+	}
+	cfg.reply = &aReply
+	src.cfg = &cfg
 	defer func() {
-		if err := src.RestoreSnapshot(before, SnapshotLimits{}); err != nil {
+		err := src.RestoreSnapshot(before, SnapshotLimits{})
+		src.cfg = originalConfig
+		if err != nil {
 			t.Fatal(err)
 		}
 	}()
-	a, b := src, New(1, 1)
+	a := src
+	b := New(1, 1, WithReply(&bReply))
 	if err := b.RestoreSnapshot(before, SnapshotLimits{}); err != nil {
 		t.Fatal(err)
 	}
 	assertSnapshotState(t, a, b)
-	for _, suffix := range []string{"\x1b[?47h", "\x1b8X\r\n\x1b[31mY", "\x1b[?1049l\x1b8Z"} {
+	for _, suffix := range []string{"\x1b[?47h", "\x1b8X\r\n\x1b[31mY", "\x1b[?1049l\x1b8Z", "\x1b[6n\x1b[?47$p\x1b[?1047$p\x1b[?1049$p\x1bP$qm\x1b\\"} {
 		a.Write([]byte(suffix))
 		b.Write([]byte(suffix))
 		assertSnapshotState(t, a, b)
+		if !bytes.Equal(aReply.Bytes(), bReply.Bytes()) {
+			t.Fatalf("snapshot future replies differ: %q / %q", aReply.Bytes(), bReply.Bytes())
+		}
 	}
 	cols, rows := src.cols+1, src.rows+1
 	a.Resize(cols, rows)
@@ -268,11 +301,63 @@ func checkRectangleGrowthSnapshot(t *testing.T, src *Terminal) {
 	assertSnapshotState(t, a, b)
 }
 
+func assertRectangleGrowthRepaintState(t *testing.T, expected, replay *Terminal) {
+	t.Helper()
+	if got, want := stateOf(replay, false), stateOf(expected, false); got != want {
+		t.Fatalf("projected repaint state differs: %s", lineDiff(got, want))
+	}
+	if replay.Modes() != expected.Modes() || !bytes.Equal(replay.appendContinuation(nil), expected.appendContinuation(nil)) {
+		t.Fatal("projected repaint changed modes or parser continuation")
+	}
+	for slot := range 2 {
+		var got, want savedCursor
+		if replay.saved != nil {
+			got = replay.saved.screen[slot]
+		}
+		if expected.saved != nil {
+			want = expected.saved.screen[slot]
+		}
+		if got.valid != want.valid || got.valid && !snapshotCursorsEqual(replay, expected, got.cursor, want.cursor) {
+			t.Fatalf("projected repaint changed saved cursor %d", slot)
+		}
+	}
+	for y := range expected.rows {
+		if rowFlagsAt(replay.mainWrap, y) != rowFlagsAt(expected.mainWrap, y) || rowFlagsAt(replay.altWrap, y) != rowFlagsAt(expected.altWrap, y) {
+			t.Fatalf("projected repaint changed row %d flags", y)
+		}
+		for x := range expected.cols {
+			if replay.publicCell(replay.alt[y], x) != expected.publicCell(expected.alt[y], x) {
+				t.Fatalf("projected repaint changed ALT cell %d,%d beyond expected background", x, y)
+			}
+		}
+	}
+}
+
+func checkRectangleGrowthRepaintFuture(t *testing.T, expected, replay *Terminal) {
+	t.Helper()
+	var aReply, bReply bytes.Buffer
+	a := New(1, 1, WithReply(&aReply))
+	b := New(1, 1, WithReply(&bReply))
+	for _, pair := range [][2]*Terminal{{expected, a}, {replay, b}} {
+		if err := pair[1].RestoreSnapshot(pair[0].Snapshot(), SnapshotLimits{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, suffix := range []string{"\x1b[?47h", "\x1b8X\r\n\x1b[31mY", "\x1b[?47l\x1b8Z", "\x1b[?1049h\x1b8Q\x1b[?1049l", "\x1b[6n\x1b[?47$p\x1b[?1047$p\x1b[?1049$p\x1bP$qm\x1b\\"} {
+		a.Write([]byte(suffix))
+		b.Write([]byte(suffix))
+		assertRectangleGrowthRepaintState(t, a, b)
+		if !bytes.Equal(aReply.Bytes(), bReply.Bytes()) {
+			t.Fatalf("projected repaint future replies differ: %q / %q", aReply.Bytes(), bReply.Bytes())
+		}
+	}
+}
+
 func TestRepaintHeightGrowthLimit(t *testing.T) {
 	source := New(3, 11, WithScrollback(20))
 	source.Write([]byte("\x1b[?1049h\x1b[?47h\x1b[48;2;1;2;3m\x1b[?1047l"))
 	source.Resize(3, 12)
-	if !repaintRectangleGrowthLimit(source) {
+	if _, ok := repaintRectangleGrowthBackground(source); !ok {
 		t.Fatal("height growth not recognized")
 	}
 	checkRectangleGrowthSnapshot(t, source)
@@ -283,7 +368,7 @@ func TestRepaintHeightGrowthLimit(t *testing.T) {
 	}
 	checkRepaint(t, source)       // all facts except the declared ALT background loss
 	source.Write([]byte("\x1bV")) // live protection does not protect existing ALT cells
-	if !repaintRectangleGrowthLimit(source) {
+	if _, ok := repaintRectangleGrowthBackground(source); !ok {
 		t.Fatal("live ISO protection changed rectangle classification")
 	}
 	checkRepaint(t, source)
@@ -292,7 +377,7 @@ func TestRepaintHeightGrowthLimit(t *testing.T) {
 		"active alternate":       func(s *Terminal) { s.Write([]byte("\x1b[?47h")) },
 		"non-erasing exit":       func(s *Terminal) { s.Write([]byte("\x1b[?47l")) },
 		"text":                   func(s *Terminal) { s.alt[0][0].R = 'X' },
-		"protected cell":         func(s *Terminal) { s.alt[0][0].A = AttrProtected },
+		"protection without ISO": func(s *Terminal) { s.alt[0][0].A = AttrProtected; s.protISO = false },
 		"foreground":             func(s *Terminal) { s.alt[0][0].Fg = IndexedColor(1) },
 		"row flags":              func(s *Terminal) { s.altWrap = make([]rowFlags, s.rows); s.altWrap[0] = rowWrap },
 		"uneven row widths":      func(s *Terminal) { s.alt[0] = s.alt[0][:2] },
@@ -305,8 +390,144 @@ func TestRepaintHeightGrowthLimit(t *testing.T) {
 				t.Fatal(err)
 			}
 			change(&s)
-			if repaintRectangleGrowthLimit(&s) {
+			if _, ok := repaintRectangleGrowthBackground(&s); ok {
 				t.Fatal("near miss excluded from strict repaint checks")
+			}
+		})
+	}
+}
+
+// ISO protection preserves characters, but a forced 1047 exit still gives
+// every unprotected cell the same background. After host growth, resetting
+// the pen before that exit cannot retain both old erased cells and new zeros.
+func TestRepaintForcedAlternateExitBackgrounds(t *testing.T) {
+	for _, size := range [][2]int{{3, 3}, {4, 2}, {4, 3}} {
+		for _, bg := range []Color{0, RGBColor(1, 2, 3)} {
+			t.Run(fmt.Sprintf("%dx%d/background%x", size[0], size[1], bg), func(t *testing.T) {
+				source := New(3, 2)
+				source.Write([]byte("\x1b[?47h\x1b[?1049h\x1b[48;2;1;2;3m\x1bVX\x1bW\x1b[?1047l"))
+				source.Resize(size[0], size[1])
+				protected := rowCell(source.alt[0], 0)
+				if protected.R != 'X' || protected.A&AttrProtected == 0 || protected.Bg != RGBColor(1, 2, 3) {
+					t.Fatal("fixture did not retain protected colored text")
+				}
+				if rowCell(source.alt[1], 1) != (cell{Bg: RGBColor(1, 2, 3)}) || rowCell(source.alt[size[1]-1], size[0]-1) != (cell{}) {
+					t.Fatal("fixture needs an old erased cell and new default padding")
+				}
+				checkRepaint(t, source)
+				replay := New(1, 1)
+				if err := replay.RestoreSnapshot(source.Snapshot(), SnapshotLimits{}); err != nil {
+					t.Fatal(err)
+				}
+				assertSnapshotState(t, source, replay)
+				// Re-enter without changing the required mode bits, then take
+				// the only exit which leaves 47 and 1049 set and 1047 reset.
+				out := []byte("\x1b[?47h\x1b[0m")
+				out = replay.appendSGR(out, cell{Bg: bg})
+				out = append(out, "\x1bV\x1bW\x1b[?1047l"...)
+				replay.Write(out)
+				if replay.altActive || replay.Modes().AltScreenModes != source.Modes().AltScreenModes {
+					t.Fatal("exit changed the final screen or mode bits")
+				}
+				for y, row := range replay.alt {
+					for x := range replay.cols {
+						want := cell{Bg: bg}
+						if x == 0 && y == 0 {
+							want = protected
+						}
+						if rowCell(row, x) != want {
+							t.Fatalf("exit cell %d,%d = %+v, want %+v", x, y, rowCell(row, x), want)
+						}
+					}
+				}
+				if stateOf(replay, false) == stateOf(source, false) {
+					t.Fatal("one erase background reproduced both original backgrounds")
+				}
+				// The exact checkpoint retains both backgrounds and their
+				// later observation, including a write into the grown area.
+				if err := replay.RestoreSnapshot(source.Snapshot(), SnapshotLimits{}); err != nil {
+					t.Fatal(err)
+				}
+				for _, suffix := range []string{"\x1b[?47h", fmt.Sprintf("\x1b[%d;%dHY", size[1], size[0]), "\x1b[?47l\x1b8Z"} {
+					source.Write([]byte(suffix))
+					replay.Write([]byte(suffix))
+					assertSnapshotState(t, source, replay)
+				}
+			})
+		}
+	}
+}
+
+func TestRepaintProtectedGrowthBoundary(t *testing.T) {
+	newSource := func(content string, cols, rows int) *Terminal {
+		source := New(6, 2)
+		source.Write([]byte("\x1b[?47h\x1b[?1049h\x1bV" + content + "\x1bW\x1b[0m\x1b[48;2;1;2;3m\x1b[?1047l"))
+		source.Resize(cols, rows)
+		return source
+	}
+	for _, content := range []string{
+		"X", "漢字", "\x1b[1;38;5;9;48;5;10;4:3;58;2;10;20;30mX",
+		"\x1b]8;id=protected;https://example.com\x1b\\X\x1b]8;;\x1b\\",
+	} {
+		for _, size := range [][2]int{{6, 3}, {7, 2}, {7, 3}} {
+			t.Run(fmt.Sprintf("%q/%dx%d", content, size[0], size[1]), func(t *testing.T) {
+				source := newSource(content, size[0], size[1])
+				bg, ok := repaintRectangleGrowthBackground(source)
+				if !ok || bg != RGBColor(1, 2, 3) {
+					t.Fatal("protected cells obscured the erased rectangle's background")
+				}
+				projected := repaintRectangleGrowthExpectation(t, source, bg)
+				for y, row := range source.alt {
+					for x := range source.cols {
+						want := source.publicCell(row, x)
+						if rowCell(row, x) == (cell{}) {
+							want.Style.Bg = bg
+						}
+						if got := projected.publicCell(projected.alt[y], x); got != want {
+							t.Fatalf("projection changed more than padding background at %d,%d", x, y)
+						}
+					}
+				}
+				checkRepaint(t, source)
+			})
+		}
+	}
+	for name, change := range map[string]func(*Terminal){
+		"active ALT":             func(s *Terminal) { s.Write([]byte("\x1b[?47h")) },
+		"47 reset":               func(s *Terminal) { s.Write([]byte("\x1b[?47l")) },
+		"1049 reset":             func(s *Terminal) { s.Write([]byte("\x1b[?1049l")) },
+		"1047 set":               func(s *Terminal) { s.x.privateModes |= privateMode1047 },
+		"DEC protection":         func(s *Terminal) { s.protISO = false },
+		"unprotected text":       func(s *Terminal) { s.alt[0][2].R = 'Y' },
+		"unprotected foreground": func(s *Terminal) { s.alt[0][2].Fg = IndexedColor(9) },
+		"unprotected attributes": func(s *Terminal) { s.alt[0][2].A = AttrBold },
+		"unprotected link": func(s *Terminal) {
+			s.alt[0][2].E = s.internExtra(cellExtra{link: ";https://example.com"})
+		},
+		"multiple erased colors": func(s *Terminal) { s.alt[0][2].Bg = IndexedColor(9) },
+		"interior zero":          func(s *Terminal) { s.alt[1][1] = cell{} },
+		"nonrectangle": func(s *Terminal) {
+			s.alt[2] = []cell{{Bg: RGBColor(1, 2, 3)}}
+		},
+		"wrap flag": func(s *Terminal) {
+			s.altWrap = make([]rowFlags, s.rows)
+			s.altWrap[0] = rowWrap
+		},
+		"prompt flag": func(s *Terminal) {
+			s.altWrap = make([]rowFlags, s.rows)
+			s.altWrap[0] = rowPrompt
+		},
+		"padding precedes erased cell": func(s *Terminal) {
+			for x := range 6 {
+				s.alt[0][x] = s.alt[0][0]
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := newSource("X", 7, 3)
+			change(source)
+			if _, ok := repaintRectangleGrowthBackground(source); ok {
+				t.Fatal("near miss escaped strict repaint equality")
 			}
 		})
 	}
@@ -318,7 +539,7 @@ func TestRepaintWidthGrowthLimit(t *testing.T) {
 		source.Write([]byte("\x1b[?47h\x1b[?1049h\x1b[48;2;1;2;3m\x1b[?1047l"))
 		source.Resize(dims[1], dims[2])
 		want := dims[1] != 80 && dims[1] != 132
-		if repaintRectangleGrowthLimit(source) != want {
+		if _, ok := repaintRectangleGrowthBackground(source); ok != want {
 			t.Fatalf("width %d to%d boundary", dims[0], dims[1])
 		}
 		if want {

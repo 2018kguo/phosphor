@@ -194,13 +194,13 @@ func FuzzTokens(f *testing.F) {
 
 // checkRepaint checks that Repaint, with and without the scrollback,
 // reproduces src on a fresh terminal of its size, except the explicitly
-// checked erased-rectangle export loss in repaint_limits_test.go.
+// checked erased-rectangle export loss in repaint_test.go.
 func checkRepaint(t *testing.T, src *Terminal) {
 	t.Helper()
 	expected := src
-	if repaintRectangleGrowthLimit(src) {
+	if bg, ok := repaintRectangleGrowthBackground(src); ok {
 		checkRectangleGrowthSnapshot(t, src)
-		expected = repaintRectangleGrowthExpectation(t, src)
+		expected = repaintRectangleGrowthExpectation(t, src, bg)
 	}
 	cols, rows := src.Size()
 	{
@@ -212,31 +212,8 @@ func checkRepaint(t *testing.T, src *Terminal) {
 				t.Fatalf("repaint(%v) state differs:\n%s\nrepaint %q", sb, lineDiff(got, want), rep)
 			}
 			if expected != src {
-				for slot := range 2 {
-					var got, want savedCursor
-					if dst.saved != nil {
-						got = dst.saved.screen[slot]
-					}
-					if expected.saved != nil {
-						want = expected.saved.screen[slot]
-					}
-					if got.valid != want.valid || got.valid && !snapshotCursorsEqual(dst, expected, got.cursor, want.cursor) {
-						t.Fatalf("lossy repaint changed saved cursor %d", slot)
-					}
-				}
-				if dst.Modes() != expected.Modes() {
-					t.Fatal("lossy repaint changed modes")
-				}
-				for y := range rows {
-					if rowFlagsAt(dst.mainWrap, y) != rowFlagsAt(expected.mainWrap, y) || rowFlagsAt(dst.altWrap, y) != rowFlagsAt(expected.altWrap, y) {
-						t.Fatalf("lossy repaint changed row %d flags", y)
-					}
-					for x := range cols {
-						if dst.publicCell(dst.alt[y], x) != expected.publicCell(expected.alt[y], x) {
-							t.Fatalf("lossy repaint changed ALT cell %d,%d beyond expected background", x, y)
-						}
-					}
-				}
+				assertRectangleGrowthRepaintState(t, expected, dst)
+				checkRectangleGrowthRepaintFuture(t, expected, dst)
 			}
 			// (A one-column terminal cannot show the wide characters of
 			// lines it scrolled away when wider.)

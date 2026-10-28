@@ -56,7 +56,9 @@ Other targets cover raw bytes, chunking, replies, Unicode, repaint, damage,
 compaction and sparse rows. [CI](../.github/workflows/test.yml) lists the
 maintained targets and tests the minimum supported and current Go toolchains.
 A change to storage or persistence should preserve future writes and resize, not just a
-restored first frame. Checkpoints from an earlier writer are kept under
+restored first frame. ANSI export has [declared limits](reference.md#attach-a-client):
+mechanism tests assert those losses explicitly and keep exact Snapshot checks
+separate. Do not skip a failing input or treat a known loss as native parity. Checkpoints from an earlier writer are kept under
 [`testdata/snapshot-v1`](../testdata/snapshot-v1/README.md).
 
 ## Measure your workload
