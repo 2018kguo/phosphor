@@ -102,12 +102,11 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 		}
 	}
 	flags |= uint64(t.privateModes()) << 18
-	flags |= uint64(t.semantic[0])<<21 | uint64(t.semantic[1])<<23 | uint64(t.promptRedraw)<<25
+	flags |= uint64(t.semantic[0])<<(18+privateModeCount) | uint64(t.semantic[1])<<(20+privateModeCount) | uint64(t.promptRedraw)<<(22+privateModeCount)
 	e.u(flags)
 	for _, n := range []int{t.top, t.bot, t.left, t.right, t.sbMaxLines, t.sbMaxBytes} {
 		e.u(uint64(n))
 	}
-	e.u(uint64(t.ss))
 	e.u(uint64(t.mouse))
 	e.u(uint64(t.mouseEnc))
 	e.u(uint64(t.cursorStyle.shape))
@@ -150,9 +149,9 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 		e.boolean(x.inactivePrimary.pending)
 	}
 	e.cursor(t.cur)
-	var saves [3]savedCursor
+	var saves [2]savedCursor
 	if t.saved != nil {
-		saves = [3]savedCursor{t.saved.screen[0], t.saved.screen[1], t.saved.alternate}
+		saves = t.saved.screen
 	}
 	var valid uint64
 	for i, c := range saves {
@@ -237,6 +236,7 @@ func (e *snapshotEncoder) cursor(c cursor) {
 	for i, g := range c.g {
 		flags |= uint64(g) << uint(2+2*i)
 	}
+	flags |= uint64(c.ss) << 10
 	e.u(flags)
 	e.u(uint64(c.gl))
 }
@@ -315,7 +315,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	} else if next.rows > limits.MaxCells/next.cols {
 		d.fail(ErrSnapshotLimit, "screen cells")
 	}
-	flagMask := uint64((1 << 27) - 1)
+	flagMask := uint64((1 << (24 + privateModeCount)) - 1)
 	if version == 1 {
 		flagMask = (1 << 18) - 1
 	}
@@ -331,9 +331,12 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		!next.lrmm && (next.left != 0 || next.right != next.cols-1) || next.sbMaxBytes < 1 {
 		d.fail(ErrSnapshotMalformed, "margins or scrollback policy")
 	}
-	next.ss = uint8(d.number(3))
-	if next.ss == 1 {
-		d.fail(ErrSnapshotMalformed, "single shift")
+	var legacySS uint8
+	if version == 1 {
+		legacySS = uint8(d.number(3))
+		if legacySS == 1 {
+			d.fail(ErrSnapshotMalformed, "single shift")
+		}
 	}
 	if version == 1 {
 		tracking, encoding := int(d.number(1015)), int(d.number(1015))
@@ -368,9 +371,15 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 	}
 	d.section = "lookup tables"
-	x := extra{privateModes: uint8(flags>>18) & 7}
-	next.semantic = [2]semanticContent{semanticContent(flags>>21) & 3, semanticContent(flags>>23) & 3}
-	next.promptRedraw = promptRedraw(flags>>25) & 3
+	x := extra{privateModes: uint8(flags>>18) & privateModeMask}
+	if version >= 2 {
+		screenBits := x.privateModes & (privateMode47 | privateMode1047 | privateMode1049)
+		if next.altActive && screenBits == 0 || !next.altActive && screenBits == privateMode47|privateMode1047|privateMode1049 {
+			d.fail(ErrSnapshotMalformed, "screen mode selection")
+		}
+	}
+	next.semantic = [2]semanticContent{semanticContent(flags>>(18+privateModeCount)) & 3, semanticContent(flags>>(20+privateModeCount)) & 3}
+	next.promptRedraw = promptRedraw(flags>>(22+privateModeCount)) & 3
 	if next.promptRedraw > promptRedrawLast {
 		d.fail(ErrSnapshotMalformed, "prompt redraw mode")
 	}
@@ -435,7 +444,11 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 			x.tabs[i] = d.u()
 		}
 	}
-	n = d.count(16, int(unsafe.Sizeof(savedMode{})))
+	modeLimit := len(savedModeNumbers)
+	if version == 1 {
+		modeLimit = 16
+	}
+	n = d.count(modeLimit, int(unsafe.Sizeof(savedMode{})))
 	if n > 0 {
 		x.savedModes = make([]savedMode, n)
 		for i := range x.savedModes {
@@ -462,24 +475,53 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	}
 	d.section = "cursors"
 	next.cur = d.cursor(&next)
-	valid := d.number(7)
+	var legacyAlternate savedCursor
+	validMask := uint64(3)
+	if version == 1 {
+		validMask = 7
+		next.cur.ss = legacySS
+	}
+	valid := d.number(validMask)
 	if valid != 0 && d.charge(1, int(unsafe.Sizeof(savedCursors{}))) {
 		next.saved = &savedCursors{}
-		for i, c := range []*savedCursor{&next.saved.screen[0], &next.saved.screen[1], &next.saved.alternate} {
-			if valid&(1<<uint(i)) != 0 {
-				*c = savedCursor{cursor: d.cursor(&next), valid: true}
+		count := 2
+		if version == 1 {
+			count = 3
+		}
+		for i := 0; i < count; i++ {
+			if valid&(1<<uint(i)) == 0 {
+				continue
+			}
+			c := savedCursor{cursor: d.cursor(&next), valid: true}
+			if version == 1 {
+				c.pen.E = 0
+			} else if d.err == nil && next.link(c.pen.E) != "" {
+				d.fail(ErrSnapshotMalformed, "saved hyperlink")
+			}
+			if i == 2 {
+				legacyAlternate = c
+			} else {
+				next.saved.screen[i] = c
 			}
 		}
 	}
-	if version == 1 && next.altActive && next.x != nil {
-		// Released v1 did not retain the inactive primary position. A valid
-		// 1049 save is the only known primary point; DECSC may be unrelated.
-		c := next.cur
-		if next.saved != nil && next.saved.alternate.valid {
-			c = next.saved.alternate.cursor
+	if version == 1 {
+		if next.altActive && next.x != nil {
+			// V1 only retained primary geometry when its separate 1049 save existed.
+			c := next.cur
+			if legacyAlternate.valid {
+				c = legacyAlternate.cursor
+			}
+			next.x.inactivePrimary = point{c.x, c.y, c.wrapPending}
+			next.x.privateModes |= privateMode47
 		}
-		next.x.inactivePrimary = point{c.x, c.y, c.wrapPending}
+		// Native 1049 and DECSC share the primary save. The legacy third record
+		// is newer than the primary record when it exists; no third authority lives on.
+		if legacyAlternate.valid {
+			next.saved.screen[0] = legacyAlternate
+		}
 	}
+
 	d.section = "screens"
 	next.main, next.mainWrap = d.screen(&next)
 	if d.boolean() {
@@ -662,7 +704,7 @@ func snapshotColor(c Color) bool {
 }
 func (d *snapshotDecoder) cursor(t *Terminal) cursor {
 	c := cursor{x: d.integer(), y: d.integer(), pen: d.style(t)}
-	maximum := uint64(1023)
+	maximum := uint64(4095)
 	if d.version == 1 {
 		maximum = 63
 	}
@@ -676,6 +718,12 @@ func (d *snapshotDecoder) cursor(t *Terminal) cursor {
 			if c.g[i] > charsetBritish {
 				d.fail(ErrSnapshotMalformed, "character set")
 			}
+		}
+	}
+	if d.version >= 2 {
+		c.ss = uint8(flags >> 10)
+		if c.ss == 1 {
+			d.fail(ErrSnapshotMalformed, "single shift")
 		}
 	}
 	c.gl = uint8(d.number(3))

@@ -39,13 +39,13 @@ func TestRepaintSavedPendingWrap(t *testing.T) {
 
 func assertRepaintSavedSlots(t *testing.T, a, b *Terminal) {
 	t.Helper()
-	for i := range 3 {
+	for i := range 2 {
 		var left, right savedCursor
 		if a.saved != nil {
-			left = [3]savedCursor{a.saved.screen[0], a.saved.screen[1], a.saved.alternate}[i]
+			left = a.saved.screen[i]
 		}
 		if b.saved != nil {
-			right = [3]savedCursor{b.saved.screen[0], b.saved.screen[1], b.saved.alternate}[i]
+			right = b.saved.screen[i]
 		}
 		if left.valid != right.valid || left.valid && !snapshotCursorsEqual(a, b, left.cursor, right.cursor) {
 			t.Fatalf("saved cursor %d changed: %+v / %+v", i, left, right)

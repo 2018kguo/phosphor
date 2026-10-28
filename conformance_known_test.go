@@ -70,11 +70,9 @@ var knownFailures = map[string]string{
 	"alacritty/decaln_reset":             "divergent: alacritty's DECALN leaves the cursor where it was; xterm homes it",
 	"alacritty/vttest_cursor_movement_1": "divergent: ghostty DECCOLM selects80 columns when enabled; this recording expects the105-column host width",
 	"alacritty/vttest_insert":            "divergent: as above",
-	"alacritty/deccolm_reset":            "gap: DECCOLM (132-column mode) is not modeled",
+	"alacritty/deccolm_reset":            "divergent: DECCOLM is ignored unless mode40 enables it; this recording expects mode3 alone to clear the screen",
 	"alacritty/erase_in_line":            "divergent: alacritty's EL keeps a pending wrap; xterm and ghostty clear it",
 	"alacritty/grid_reset":               "divergent: alacritty's RIS blanks the scrollback; this emulator keeps it",
-	"alacritty/saved_cursor":             "divergent: alacritty does not save the character sets with the cursor (DECSC, 1049); xterm does",
-	"alacritty/saved_cursor_alt":         "divergent: alacritty keeps a pending wrap across switching to the alternate screen",
 	"alacritty/selective_erasure":        "divergent: alacritty ignores DECSED; with nothing protected it erases like ED",
 	"alacritty/underline":                "divergent: alacritty ignores SGR 21; xterm and ECMA-48 make it double underline",
 }

@@ -36,6 +36,7 @@ func (c cursorAppearance) parameter() int {
 func (t *Terminal) Modes() Modes {
 	m := Modes{
 		AltScreen:             t.altActive,
+		AltScreenModes:        AltScreenModes(t.privateModes() / privateMode47),
 		ApplicationCursorKeys: t.appCursor,
 		ApplicationKeypad:     t.appKeypad,
 		BracketedPaste:        t.bracketed,

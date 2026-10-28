@@ -4,7 +4,27 @@ const (
 	privateMode132 uint8 = 1 << iota
 	privateModeAllowColumns
 	privateModeSlowScroll
+	privateMode47
+	privateMode1047
+	privateMode1049
+	privateModeCount = iota
 )
+
+const privateModeMask uint8 = 1<<privateModeCount - 1
+
+var savedModeNumbers = [...]int{1, 3, 4, 5, 6, 7, 9, 12, 25, 40, 45, 47, 69, 1000, 1002, 1003, 1004, 1005, 1006, 1015, 1016, 1045, 1047, 1049, 2004, 2027}
+
+func screenModeBit(mode int) uint8 {
+	switch mode {
+	case 47:
+		return privateMode47
+	case 1047:
+		return privateMode1047
+	case 1049:
+		return privateMode1049
+	}
+	return 0
+}
 
 func (t *Terminal) privateModes() uint8 {
 	if t.x != nil {

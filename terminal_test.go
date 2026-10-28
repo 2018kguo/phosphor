@@ -133,7 +133,7 @@ func TestRestart(t *testing.T) {
 }
 
 // Idle and lightly used terminals cost little: rows exist only once drawn
-// on, and the alternate screen only while active.
+// on; a previously used alternate screen keeps its contents.
 func TestLazyAllocation(t *testing.T) {
 	term := New(200, 50)
 	term.Write([]byte("$ "))
@@ -147,8 +147,8 @@ func TestLazyAllocation(t *testing.T) {
 		t.Fatalf("%d rows allocated, alt %v", allocated, term.alt != nil)
 	}
 	term.Write([]byte("\x1b[?1049hx\x1b[?1049l"))
-	if term.alt != nil {
-		t.Fatal("alternate screen kept after exit")
+	if term.alt == nil {
+		t.Fatal("1049 exit discarded alternate contents")
 	}
 }
 
@@ -212,9 +212,6 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	if t.alt != nil {
 		dump("alt", t.alt, t.altWrap)
 	}
-	if t.altActive && t.saved != nil && t.saved.alternate.valid {
-		fmt.Fprintf(&b, "saved1049 %d,%d\n", t.saved.alternate.x, t.saved.alternate.y)
-	}
 	cur := t.cur
 	if cur.origin {
 		// Repaint positions the cursor with origin mode on, which cannot
@@ -225,7 +222,7 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	}
 	cur.pen.E = 0
 	fmt.Fprintf(&b, "pen extra %+v\n", t.extraAt(t.cur.pen.E))
-	fmt.Fprintf(&b, "cur %+v region %d-%d margins %v %d-%d ss %d iso %v\n", cur, t.top, t.bot, t.lrmm, t.left, t.right, t.ss, t.protISO)
+	fmt.Fprintf(&b, "cur %+v region %d-%d margins %v %d-%d ss %d iso %v\n", cur, t.top, t.bot, t.lrmm, t.left, t.right, t.cur.ss, t.protISO)
 	slot := 0
 	if t.altActive {
 		slot = 1

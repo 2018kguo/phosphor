@@ -175,31 +175,31 @@ func TestCompactPoolsKeepsTabsAndSavedModes(t *testing.T) {
 	}
 }
 
-func TestCompactDropsInvalidSavedLink(t *testing.T) {
+func TestCompactDropsLinksFromSavedStyle(t *testing.T) {
 	term := New(12, 4)
 	term.Write([]byte("\x1b]8;;https://old\x1b\\\x1b[?1049h\x1b[?1049l\x1b]8;;\x1b\\$ "))
 	term.Compact()
-	if term.x != nil || term.saved != nil {
-		t.Fatal("invalid 1049 slot retained cursor or hyperlink storage")
+	if term.x != nil || term.saved == nil || !term.saved.screen[0].valid {
+		t.Fatal("1049 must retain its primary save without retaining the hyperlink")
 	}
 	// A subsequent table must not revisit the invalid slot's old index.
 	for i := range 40 {
 		term.Write(fmt.Appendf(nil, "\x1b]8;;https://new/%d\x1b\\", i))
 	}
 	term.Write([]byte("\x1b[?1049h\x1b[?1049lX"))
-	if got := term.Cell(2, 0).Link.URI; got != "https://new/39" {
+	if got := term.Cell(2, 0).Link.URI; got != "" {
 		t.Fatalf("new hyperlink table restored %q", got)
 	}
 }
 
-func TestCompactDiscardedSaveRestoresAsUnset(t *testing.T) {
+func TestCompactRetainsShared1049Save(t *testing.T) {
 	original, compacted := New(12, 4), New(12, 4)
 	for _, term := range []*Terminal{original, compacted} {
 		term.Write([]byte("\x1b[2;3H\x1b[31m\x1b[?1049hALT\x1b[?1049l"))
 	}
 	compacted.Compact()
-	if compacted.saved != nil {
-		t.Fatal("trace did not release its invalid cursor slots")
+	if compacted.saved == nil || !compacted.saved.screen[0].valid {
+		t.Fatal("compaction lost the primary DECSC slot written by 1049")
 	}
 	for _, next := range []string{"\x1b8X", "\x1b[2b", "\x1b[?47h\x1b[Hkept á\x1b[?47l", "\x1b[?47hX\x1b[?47l"} {
 		original.Write([]byte(next))

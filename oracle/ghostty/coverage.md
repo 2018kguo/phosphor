@@ -61,6 +61,27 @@ Scope is fixed in fixture metadata, with these meanings:
 Changing a scope requires a contract explanation. A newly found failure
 does not become an exclusion merely to improve the passing count.
 
+The cursor-lifetime fixtures retain two raw failures in `parity`:
+
+- `dec-graphics-underscore-policy`: phosphor follows xterm's DEC graphics
+  mapping of underscore to a blank; the pinned native engine leaves an
+  underscore. This is a deliberate policy conflict, still included in the
+  direct comparison denominator. See xterm's
+  [character-set mapping](https://raw.githubusercontent.com/ThomasDickey/xterm-snapshots/master/charsets.c).
+- `cursor-1047-resize-background-limit`: after a 1047 exit and height growth,
+  inactive alternate rows can have different old/new backgrounds. When only
+  mode1047 is disabled, returning to primary while retaining all three mode
+  bits necessarily erases alternate with one background. Repaint therefore
+  loses the mixed backgrounds; Snapshot preserves them and their future use.
+
+The bridge captures all three independent 47/1047/1049 bits on every step,
+separately from the active screen. DECSC has exactly one slot per screen,
+shared by 1049. It saves single shift and underline style, not the live
+hyperlink. A real screen transition ends the live hyperlink; 1049 exit
+retains alternate contents. The native cursor tests compare subsequent
+output against an untouched native terminal, including 216 combinations
+of three set/reset operations and explicit saved-mode restoration.
+
 The old Go-translated Ghostty suite comes from `521cf2c`, with license
 and attribution in `testdata/conformance/NOTICE.md`. At the `7bc614a`
 baseline, its 549 cases report 459 passing, 6 known failures and 84

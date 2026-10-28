@@ -81,9 +81,9 @@ func TestUnderlineColorSavedPensAndCheckpoint(t *testing.T) {
 		color Color
 		uri   string
 	}{
-		{"\x1b8A", 3, 2, IndexedColor(3), "https://alt"},
-		{"\x1b[?1049lB", 2, 1, IndexedColor(2), "https://1049"},
-		{"\x1b8M", 2, 1, IndexedColor(1), "https://main"},
+		{"\x1b8A", 3, 2, IndexedColor(3), "https://dead/99"},
+		{"\x1b[?1049lB", 2, 1, IndexedColor(2), ""},
+		{"\x1b8M", 2, 1, IndexedColor(2), ""},
 	} {
 		for _, emu := range []*Terminal{term, &restored} {
 			emu.Write([]byte(trace.in))

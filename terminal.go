@@ -55,6 +55,7 @@ type cursor struct {
 	origin      bool
 	g           [4]charset // G0-G3 designated character sets
 	gl          uint8      // which of G0-G3 is invoked into GL
+	ss          uint8      // pending single shift (2 or 3)
 }
 
 type savedCursor struct {
@@ -64,10 +65,9 @@ type savedCursor struct {
 
 // savedCursors is allocated on the first save and reused until a full
 // reset or Compact finds every slot invalid. A shell prompt pays for none
-// of the three slots; repeated active saves and screen switches reuse it.
+// of the two slots; repeated active saves and screen switches reuse it.
 type savedCursors struct {
-	screen    [2]savedCursor // DECSC slots: main, alternate
-	alternate savedCursor    // cursor saved by ?1049h
+	screen [2]savedCursor // DECSC slots: main, alternate
 }
 
 // Terminal is a VT/xterm screen model: write a program's output to it and
@@ -79,19 +79,18 @@ type savedCursors struct {
 // not call back into the Terminal.
 type Terminal struct {
 	cols, rows int
-	main, alt  [][]cell // alt is nil unless the alternate screen is in use
+	main, alt  [][]cell // alt is allocated on first entry and retained for later switches
 	// Canonical row metadata, nil until a row wraps or a shell annotates it.
 	// rowWrap means row y continues on row y+1.
 	mainWrap, altWrap []rowFlags
 	altActive         bool
 	cur               cursor
 	saved             *savedCursors
-	top, bot          int   // scroll region, inclusive
-	left, right       int   // left and right margins, inclusive
-	lrmm              bool  // DECLRMM: left and right margins enabled
-	protISO           bool  // protection was last set by SPA (ISO), not DECSCA
-	ss                uint8 // pending single shift (2 or 3)
-	grapheme          bool  // 2027: Unicode grapheme clustering
+	top, bot          int  // scroll region, inclusive
+	left, right       int  // left and right margins, inclusive
+	lrmm              bool // DECLRMM: left and right margins enabled
+	protISO           bool // protection was last set by SPA (ISO), not DECSCA
+	grapheme          bool // 2027: Unicode grapheme clustering
 	// These bytes occupy existing padding before x; Terminal stays560 bytes.
 	semantic     [2]semanticContent // screen content state, independent of DECSC
 	promptRedraw promptRedraw
@@ -149,7 +148,7 @@ type Terminal struct {
 type extra struct {
 	tabs         []uint64    // tab stops, nil for every 8 columns
 	savedModes   []savedMode // XTSAVE
-	privateModes uint8       // rare DEC private modes: columns3/40 and smooth scrolling4
+	privateModes uint8       // column, scroll and independent alternate-screen mode bits
 	// The primary screen's actual cursor while the alternate is active.
 	// A DECSC slot can name a different position and cannot replace this fact.
 	inactivePrimary point
@@ -405,7 +404,7 @@ func (t *Terminal) printRune(r rune) {
 	// A single shift applies to the next character, including a Unicode
 	// combining mark. National character sets only translate GL bytes.
 	if r > 0x7f {
-		t.ss = 0
+		t.cur.ss = 0
 	}
 	if t.grapheme && r > 255 && t.extendGrapheme(r) {
 		return
@@ -623,9 +622,9 @@ func (t *Terminal) escDispatch(c byte) {
 	case 'W': // EPA
 		t.protect(false, true)
 	case 'N':
-		t.ss = 2
+		t.cur.ss = 2
 	case 'O':
-		t.ss = 3
+		t.cur.ss = 3
 	case 'n':
 		t.cur.gl = 2
 	case 'o':
@@ -684,7 +683,9 @@ func (t *Terminal) saveCursor() {
 	if t.altActive {
 		i = 1
 	}
-	t.cursorSaves().screen[i] = savedCursor{cursor: t.cur, valid: true}
+	c := t.cur
+	c.pen.E = t.internExtra(cellExtra{underline: t.extraAt(c.pen.E).underline})
+	t.cursorSaves().screen[i] = savedCursor{cursor: c, valid: true}
 }
 
 func (t *Terminal) cursorSaves() *savedCursors {
@@ -699,11 +700,13 @@ func (t *Terminal) restoreCursor() {
 	if t.altActive {
 		i = 1
 	}
+	link := t.link(t.cur.pen.E)
 	if t.saved == nil || !t.saved.screen[i].valid {
 		t.cur = cursor{}
-		return
+	} else {
+		t.setCursor(t.saved.screen[i].cursor)
 	}
-	t.setCursor(t.saved.screen[i].cursor)
+	t.setLink(link)
 }
 
 // setCursor installs a saved cursor, clamping it to the current size.
@@ -937,7 +940,7 @@ func (t *Terminal) softReset() {
 	t.lrmm = false
 	t.top, t.bot, t.left, t.right = 0, t.rows-1, 0, t.cols-1
 	t.cur.pen = cell{}
-	t.cur.g, t.cur.gl, t.ss = [4]charset{}, 0, 0
+	t.cur.g, t.cur.gl, t.cur.ss = [4]charset{}, 0, 0
 	if t.saved != nil {
 		slot := 0
 		if t.altActive {
@@ -957,6 +960,8 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 		return t.privateModes()&privateMode132 != 0, true
 	case 4:
 		return t.privateModes()&privateModeSlowScroll != 0, true
+	case 47, 1047, 1049:
+		return t.privateModes()&screenModeBit(mode) != 0, true
 	case 40:
 		return t.privateModes()&privateModeAllowColumns != 0, true
 	case 5:
@@ -1003,8 +1008,12 @@ func (t *Terminal) xtSaveMode(mode int, save bool) {
 		}
 		return
 	}
-	if on, ok := t.modeValue(mode); ok && save && len(x.savedModes) < 16 {
-		x.savedModes = append(x.savedModes, savedMode{mode, on})
+	if on, ok := t.modeValue(mode); ok {
+		if save && len(x.savedModes) < len(savedModeNumbers) {
+			x.savedModes = append(x.savedModes, savedMode{mode, on})
+		} else if !save {
+			t.decMode(mode, mode == 7 || mode == 25)
+		}
 	}
 }
 
@@ -1069,41 +1078,52 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.sync = on
 	case 2027:
 		t.grapheme = on
-	case 47, 1047:
-		t.setAlt(on, mode)
+	case 47, 1047, 1049:
+		t.setScreenMode(mode, on)
 	case 1048:
 		if on {
 			t.saveCursor()
 		} else {
 			t.restoreCursor()
 		}
-	case 1049:
+	}
+}
+
+// setScreenMode separates each reported mode bit from the active screen.
+func (t *Terminal) setScreenMode(mode int, on bool) {
+	bit := screenModeBit(mode)
+	if on {
+		t.ext().privateModes |= bit
+	} else if t.x != nil {
+		t.x.privateModes &^= bit
+	}
+	if mode == 1049 && on {
+		t.saveCursor()
+	}
+	if mode == 1047 && !on && t.altActive {
+		t.eraseDisplay(2, false)
+	}
+	changed, pending := on != t.altActive, t.cur.wrapPending
+	t.switchScreen(on, mode)
+	if mode == 1049 {
 		if on {
-			if !t.altActive {
-				t.cursorSaves().alternate = savedCursor{cursor: t.cur, valid: true}
+			t.eraseDisplay(2, false)
+			if changed {
+				t.cur.wrapPending = pending
 			}
-			t.setAlt(true, 1049)
-			t.clearScreen()
-		} else if t.altActive {
-			var saved savedCursor
-			if t.saved != nil {
-				saved = t.saved.alternate
-			}
-			t.setAlt(false, 1049)
-			if saved.valid {
-				t.setCursor(saved.cursor)
-			}
+		} else {
+			t.restoreCursor()
 		}
 	}
 }
 
-// setAlt switches screens. Leaving the alternate screen frees it, unless
-// it was left with mode 47 (which keeps its contents for the next switch)
-// and holds something.
-func (t *Terminal) setAlt(on bool, mode int) {
+// switchScreen ends the live hyperlink only when the screen changes.
+// Charset and ordinary pen state travel with the cursor; DECSC does not.
+func (t *Terminal) switchScreen(on bool, mode int) {
 	if on == t.altActive {
 		return
 	}
+	t.setLink("")
 	t.touchAll()
 	content := t.semanticContent()
 	if on {
@@ -1115,23 +1135,8 @@ func (t *Terminal) setAlt(on bool, mode int) {
 	if on || mode != 1049 {
 		t.setSemanticContent(content)
 	}
-	clearOnExit := mode != 47
-	if on {
-		if t.alt == nil {
-			t.alt = make([][]cell, t.rows)
-		}
-	} else {
-		if t.saved != nil {
-			t.saved.alternate.valid = false
-		}
-		if clearOnExit || t.altBlank() {
-			t.alt, t.altWrap = nil, nil
-		}
-	}
-	if !on && clearOnExit {
-		// Native1047 erases the alternate screen before copying its cursor
-		// back to main; that erase consumes a pending wrap.
-		t.cur.wrapPending = false
+	if on && t.alt == nil {
+		t.alt = make([][]cell, t.rows)
 	}
 }
 
@@ -1308,9 +1313,9 @@ var decGraphics = [...]rune{
 // characterSet consumes a single shift when choosing the next character's
 // mapping. REP uses the designation in effect when the repeat runs.
 func (t *Terminal) characterSet() charset {
-	if t.ss != 0 {
-		g := t.cur.g[t.ss]
-		t.ss = 0
+	if t.cur.ss != 0 {
+		g := t.cur.g[t.cur.ss]
+		t.cur.ss = 0
 		return g
 	}
 	return t.cur.g[t.cur.gl]
@@ -1492,7 +1497,7 @@ func (t *Terminal) combine(r rune) {
 // cells directly; anything else goes through print.
 func (t *Terminal) printASCII(p []byte) {
 	for len(p) > 0 {
-		if t.cur.g[t.cur.gl] != charsetASCII || t.ss != 0 || t.insert || t.cur.wrapPending || !t.autowrap {
+		if t.cur.g[t.cur.gl] != charsetASCII || t.cur.ss != 0 || t.insert || t.cur.wrapPending || !t.autowrap {
 			t.print(rune(p[0]), 1)
 			p = p[1:]
 			continue
@@ -2333,7 +2338,7 @@ func (t *Terminal) visitExtraRefs(ref func(*uint16)) {
 	}
 	ref(&t.cur.pen.E)
 	if t.saved != nil {
-		for _, saved := range [...]*savedCursor{&t.saved.screen[0], &t.saved.screen[1], &t.saved.alternate} {
+		for _, saved := range [...]*savedCursor{&t.saved.screen[0], &t.saved.screen[1]} {
 			if saved.valid {
 				ref(&saved.pen.E)
 			} else {

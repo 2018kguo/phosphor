@@ -79,9 +79,6 @@ func (t *Terminal) checkInvariants() string {
 				inBounds(fmt.Sprintf("saved[%d]", i), s.cursor)
 			}
 		}
-		if t.saved.alternate.valid {
-			inBounds("saved1049", t.saved.alternate.cursor)
-		}
 	}
 	if t.top < 0 || t.top > t.bot || t.bot >= t.rows {
 		fail("region %d-%d", t.top, t.bot)

@@ -21,7 +21,7 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 		t.Fatalf("terminal observations changed: size %dx%d/%dx%d cursor %+v/%+v modes %+v/%+v", ac, ar, bc, br, a.Cursor(), b.Cursor(), a.Modes(), b.Modes())
 	}
 	if !snapshotCursorsEqual(a, b, a.cur, b.cur) || a.lastChar != b.lastChar || a.top != b.top || a.bot != b.bot || a.left != b.left || a.right != b.right ||
-		a.lrmm != b.lrmm || a.protISO != b.protISO || a.ss != b.ss || a.revWrap != b.revWrap || a.revWrapExt != b.revWrapExt ||
+		a.lrmm != b.lrmm || a.protISO != b.protISO || a.cur.ss != b.cur.ss || a.revWrap != b.revWrap || a.revWrapExt != b.revWrapExt ||
 		a.grapheme != b.grapheme || a.sbOpen != b.sbOpen || a.sbSpacer != b.sbSpacer || a.sbMaxLines != b.sbMaxLines || a.sbMaxBytes != b.sbMaxBytes ||
 		!slices.Equal(a.kitty, b.kitty) || !bytes.Equal(a.appendContinuation(nil), b.appendContinuation(nil)) {
 		t.Fatal("future-output state changed")
@@ -32,13 +32,13 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 	if a.altActive && a.x.inactivePrimary != b.x.inactivePrimary {
 		t.Fatal("actual inactive primary cursor changed")
 	}
-	for i := range 3 {
+	for i := range 2 {
 		var left, right savedCursor
 		if a.saved != nil {
-			left = [3]savedCursor{a.saved.screen[0], a.saved.screen[1], a.saved.alternate}[i]
+			left = a.saved.screen[i]
 		}
 		if b.saved != nil {
-			right = [3]savedCursor{b.saved.screen[0], b.saved.screen[1], b.saved.alternate}[i]
+			right = b.saved.screen[i]
 		}
 		if left.valid != right.valid || left.valid && !snapshotCursorsEqual(a, b, left.cursor, right.cursor) {
 			t.Fatalf("saved cursor %d changed", i)
@@ -258,24 +258,33 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 	check("geometry", valid, SnapshotLimits{MaxCells: 7}, ErrSnapshotLimit)
 	check("negative", valid, SnapshotLimits{MaxCells: -1}, ErrSnapshotLimit)
 	for name, mutate := range map[string]func(*Terminal){
-		"cursor":            func(t *Terminal) { t.cur.x = t.cols },
-		"margin":            func(t *Terminal) { t.bot = t.rows },
-		"REP":               func(t *Terminal) { t.lastChar = clusterBase },
-		"alternate":         func(t *Terminal) { t.altActive = true },
-		"tail":              func(t *Terminal) { t.row(0)[0].R = wideTail },
-		"wide-head":         func(t *Terminal) { t.row(0)[0].R = '漢' },
-		"cell-scalar":       func(t *Terminal) { t.row(0)[0].R = 0xd800 },
-		"cluster-reference": func(t *Terminal) { t.row(0)[0].R = clusterBase },
-		"link-reference":    func(t *Terminal) { t.cur.pen.E = 1 },
-		"color":             func(t *Terminal) { t.cur.pen.Fg = Color(0x1000100) },
-		"attribute":         func(t *Terminal) { t.cur.pen.A = 1 << 10 },
-		"tabs":              func(t *Terminal) { t.ext().tabs = []uint64{0, 0} },
-		"saved-mode":        func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 999}} },
-		"duplicate-mode":    func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 7}, {mode: 7}} },
-		"cluster-text":      func(t *Terminal) { t.ext().clusters = []cluster{{text: "\xff", width: 1}} },
-		"cluster-control":   func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\x1b[cXY", width: 1}} },
-		"cluster-C1":        func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\u009b", width: 1}} },
-		"cluster-width":     func(t *Terminal) { t.ext().clusters = []cluster{{text: "á", width: 0}} },
+		"cursor":             func(t *Terminal) { t.cur.x = t.cols },
+		"margin":             func(t *Terminal) { t.bot = t.rows },
+		"REP":                func(t *Terminal) { t.lastChar = clusterBase },
+		"alternate":          func(t *Terminal) { t.altActive = true },
+		"tail":               func(t *Terminal) { t.row(0)[0].R = wideTail },
+		"wide-head":          func(t *Terminal) { t.row(0)[0].R = '漢' },
+		"cell-scalar":        func(t *Terminal) { t.row(0)[0].R = 0xd800 },
+		"cluster-reference":  func(t *Terminal) { t.row(0)[0].R = clusterBase },
+		"link-reference":     func(t *Terminal) { t.cur.pen.E = 1 },
+		"color":              func(t *Terminal) { t.cur.pen.Fg = Color(0x1000100) },
+		"attribute":          func(t *Terminal) { t.cur.pen.A = 1 << 10 },
+		"tabs":               func(t *Terminal) { t.ext().tabs = []uint64{0, 0} },
+		"saved-mode":         func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 999}} },
+		"duplicate-mode":     func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 7}, {mode: 7}} },
+		"saved-single-shift": func(t *Terminal) { t.cursorSaves().screen[0] = savedCursor{cursor: cursor{ss: 1}, valid: true} },
+		"saved-extra-index": func(t *Terminal) {
+			t.cursorSaves().screen[0] = savedCursor{cursor: cursor{pen: cell{E: 1}}, valid: true}
+		},
+		"saved-hyperlink": func(t *Terminal) {
+			t.setLink(";https://old")
+			t.cursorSaves().screen[0] = savedCursor{cursor: t.cur, valid: true}
+		},
+		"screen-mode-selection": func(t *Terminal) { t.ext().privateModes = privateMode47 | privateMode1047 | privateMode1049 },
+		"cluster-text":          func(t *Terminal) { t.ext().clusters = []cluster{{text: "\xff", width: 1}} },
+		"cluster-control":       func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\x1b[cXY", width: 1}} },
+		"cluster-C1":            func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\u009b", width: 1}} },
+		"cluster-width":         func(t *Terminal) { t.ext().clusters = []cluster{{text: "á", width: 0}} },
 		"cluster-join": func(t *Terminal) {
 			t.ext().clusters = []cluster{{text: "á", width: 1, joinModes: clusterModes{1 << 2}}}
 		},

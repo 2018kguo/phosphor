@@ -137,16 +137,17 @@ func gunzip(t *testing.T, path string) []byte {
 // run-length encoded styles of the same cells.
 func (t *Terminal) alacrittyRow(y int) (string, string) {
 	row := t.screen()[y]
-	if row == nil {
-		return "", ""
-	}
 	end := len(row)
-	for end > 0 && (row[end-1] == cell{} || row[end-1] == cell{R: ' '}) && !(y < t.rows-1 && t.wrapped(y+1)) {
+	if y < t.rows-1 && t.wrapped(y+1) {
+		end = t.cols
+	}
+	for end > 0 && (rowCell(row, end-1) == cell{} || rowCell(row, end-1) == cell{R: ' '}) && !(y < t.rows-1 && t.wrapped(y+1)) {
 		end--
 	}
 	var text strings.Builder
 	var styles []string
-	for _, c := range row[:end] {
+	for x := range end {
+		c := rowCell(row, x)
 		if c.R == wideTail {
 			continue
 		}

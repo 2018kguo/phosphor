@@ -131,8 +131,6 @@ func (t *Terminal) decModeState(mode int) int {
 	on, ok := t.modeValue(mode)
 	if !ok {
 		switch mode {
-		case 47, 1047, 1049:
-			on = t.altActive
 		case 66: // DECNKM, the keypad mode DECKPAM sets
 			on = t.appKeypad
 		case 2026:

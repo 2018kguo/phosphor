@@ -319,10 +319,22 @@ const (
 	MouseEncodingModeSGRPixels
 )
 
+// AltScreenModes records independently enabled DEC alternate-screen modes.
+// Their bits may differ from the screen currently shown; the last set or
+// reset switches screens even when other mode bits remain enabled.
+type AltScreenModes uint8
+
+const (
+	AltScreenMode47 AltScreenModes = 1 << iota
+	AltScreenMode1047
+	AltScreenMode1049
+)
+
 // Modes are the terminal modes a program sets, mostly to say how input
 // should be encoded for it and how the screen should be drawn.
 type Modes struct {
 	AltScreen             bool               // the alternate screen is shown (47, 1047, 1049)
+	AltScreenModes        AltScreenModes     // independent 47/1047/1049 bits
 	ApplicationCursorKeys bool               // DECCKM: cursor keys send ESC O A...
 	ApplicationKeypad     bool               // DECKPAM: the keypad sends application sequences
 	BracketedPaste        bool               // 2004: pasted text is wrapped in ESC [200~ ... ESC [201~

@@ -49,6 +49,15 @@ func TestReleasedSnapshotV1(t *testing.T) {
 				want.Modes.MouseTrackingModes = MouseTrackingAnyEvent
 				want.Modes.MouseEncodingModes = MouseEncodingModeURXVT
 			}
+			if filepath.Base(stem) == "saved-state" {
+				// The suffix writes Z after DECRC and T after a tab. Neither
+				// restore nor returning from 1049 resurrects an old hyperlink.
+				// V1 did not retain the independent mode bits; active-alt
+				// snapshots conservatively infer mode47, which remains set.
+				want.Modes.AltScreenModes = AltScreenMode47
+				want.Cells[1][1].Link = Hyperlink{}
+				want.Cells[1][9].Link = Hyperlink{}
+			}
 			var replies bytes.Buffer
 			term := New(1, 1, WithReply(&replies))
 			if err := term.RestoreSnapshot(read(file), SnapshotLimits{}); err != nil {

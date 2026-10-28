@@ -436,17 +436,19 @@ func (t *Terminal) appendSavedCursor(b []byte, slot int, originOn bool) []byte {
 	}
 	b = t.appendSGR(b, s.pen)
 	b = appendProtect(b, s.pen.A&AttrProtected != 0)
-	if t.link(s.pen.E) != "" {
-		b = t.appendLink(b, s.pen.E)
-	}
 	b = appendCharsets(b, s.cursor)
+	if s.ss != 0 {
+		b = append(b, 0x1b, 'L'+s.ss)
+	}
 	b = append(b, "\x1b7"...)
 	b = appendProtect(b, false)
-	if t.link(s.pen.E) != "" {
-		b = t.appendLink(b, 0)
-	}
-	if s.origin {
+	if s.origin || s.ss != 0 {
 		b = append(b, "\x1b[?6l"...)
+	}
+	if s.ss != 0 {
+		// At column zero this combining mark has no base. It consumes the
+		// temporary single shift without changing cells or the saved slot.
+		b = append(b, "\x1b[H\u0300"...)
 	}
 	return append(b, "\x1b[0m\x1b(B\x1b)B\x1b*B\x1b+B\x0f"...)
 }
@@ -563,6 +565,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		savedModes = t.x.savedModes
 	}
 	b = t.appendColumnModes(b, savedModes)
+	b, entryMode, exitMode := t.appendScreenModes(b, savedModes)
+	b = append(b, "\x1b[!p\x1b[?25l"...)
 	b = t.appendPromptRedraw(b)
 	sbOpen := false
 	usedSave := false
@@ -600,42 +604,34 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			b = t.appendSavedCursor(b, 0, false)
 			usedSave = false
 		}
-		// Enter the alternate screen from the main screen's saved cursor so
-		// leaving it later restores the right position.
-		if t.saved != nil && t.saved.alternate.valid {
-			s := t.saved.alternate.cursor
-			b = appendMode(b, 6, s.origin)
-			if s.wrapPending {
-				b = t.appendPendingCursor(b, t.main, s)
-			} else {
-				b = appendCUP(b, s.y, s.x)
-			}
-			b = t.appendSGR(b, s.pen)
-			b = appendProtect(b, s.pen.A&AttrProtected != 0)
-			if t.link(s.pen.E) != "" {
-				b = t.appendLink(b, s.pen.E)
-			}
-			b = appendCharsets(b, s)
-			b = t.appendSemanticCursor(b, 0, s.y)
-			b = append(b, "\x1b[?1049h"...)
+		p := t.x.inactivePrimary
+		b = t.appendSemanticCursor(b, 0, p.y)
+		if p.pending {
+			c := t.cur
+			c.x, c.y, c.wrapPending, c.origin = p.x, p.y, p.pending, false
+			b = t.appendPendingCursor(b, t.main, c)
 		} else {
-			p := t.x.inactivePrimary
-			b = t.appendSemanticCursor(b, 0, p.y)
-			if p.pending {
-				c := t.cur
-				c.x, c.y, c.wrapPending, c.origin = p.x, p.y, p.pending, false
-				b = t.appendPendingCursor(b, t.main, c)
-			} else {
-				b = appendCUP(b, p.y, p.x)
-			}
-			b = append(b, "\x1b[?1047h"...)
+			b = appendCUP(b, p.y, p.x)
 		}
-		b = append(b, "\x1b[?6l\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[H\x1b[2J"...)
+		if entryMode == 1049 && t.saved != nil && t.saved.screen[0].valid {
+			c := t.saved.screen[0].cursor
+			b = t.appendSGR(b, c.pen)
+			b = appendProtect(b, c.pen.A&AttrProtected != 0)
+			b = appendCharsets(b, c)
+			if c.ss != 0 {
+				b = append(b, 0x1b, 'L'+c.ss)
+			}
+		}
+		b = appendMode(b, entryMode, true)
+
+		b = append(b, "\x1b[!p\x1b[?25l\x1b[?6l\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[H\x1b[2J"...)
 		b = t.appendScreen(b, t.alt, t.altWrap, false, true, &usedSave)
 		b = t.appendRowSemantics(b, t.altWrap)
 	} else if t.alt != nil || t.saved != nil && t.saved.screen[1].valid {
-		// An alternate screen left with mode 47 keeps its contents.
-		b = append(b, "\x1b[?47h\x1b[H\x1b[2J"...)
+		// A kept alternate screen must remain available to the next switch.
+		usedSave = usedSave || entryMode == 1049
+		b = appendMode(b, entryMode, true)
+		b = append(b, "\x1b[!p\x1b[?25l\x1b[H\x1b[2J"...)
 		altUsedSave := false
 		b = t.appendScreen(b, t.alt, t.altWrap, false, true, &altUsedSave)
 		b = t.appendRowSemantics(b, t.altWrap)
@@ -643,11 +639,17 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			b = t.appendSavedCursor(b, 1, false)
 		}
 		b = t.appendSemanticCursor(b, 1, 0)
-		b = append(b, "\x1b[?47l"...)
+		if exitMode == 1047 {
+			b = t.appendSGR(b, cell{Bg: t.alternateEraseBackground()})
+			if t.protISO {
+				b = append(b, "\x1bV"...)
+			}
+		}
+		b = appendMode(b, exitMode, false)
 	}
 
 	for _, m := range savedModes {
-		if m.mode == 3 || m.mode == 40 {
+		if m.mode == 3 || m.mode == 40 || screenModeBit(m.mode) != 0 {
 			continue
 		}
 		b = appendMode(b, m.mode, m.on)
@@ -657,7 +659,7 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	}
 	originOn := false // whether the restored modes left origin mode on
 	for _, m := range savedModes {
-		if m.mode == 3 || m.mode == 40 {
+		if m.mode == 3 || m.mode == 40 || screenModeBit(m.mode) != 0 {
 			continue
 		}
 		on, _ := t.modeValue(m.mode)
@@ -784,7 +786,11 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			b = strconv.AppendInt(b, int64(x), 10)
 			b = append(b, 'C')
 		}
-		b = append(b, "\x1b[?47l"...)
+		mode := 47
+		if t.privateModes()&privateMode47 != 0 {
+			mode = 1047
+		}
+		b = appendMode(b, mode, false)
 	} else if t.cur.origin {
 		b = append(b, "\x1b[?6h"...)
 		b = appendCUP(b, y-t.top, x-t.left)
@@ -804,8 +810,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = appendProtect(b, true)
 	}
 	b = appendCharsets(b, t.cur)
-	if t.ss != 0 {
-		b = append(b, 0x1b, 'L'+t.ss) // SS2 is ESC N, SS3 ESC O
+	if t.cur.ss != 0 {
+		b = append(b, 0x1b, 'L'+t.cur.ss) // SS2 is ESC N, SS3 ESC O
 	}
 	if !t.autowrap {
 		b = appendMode(b, 7, false)
@@ -873,6 +879,7 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 
 func (t *Terminal) canStageOriginCursor() bool {
 	return t.cur.origin && !t.cur.wrapPending && !t.altActive && t.altBlank() &&
+		t.privateModes()&(privateMode47|privateMode1047) != privateMode47|privateMode1047 &&
 		(t.cur.x < t.left || t.cur.y < t.top) && t.cur.x <= t.right && t.cur.y <= t.bot
 }
 

@@ -35,7 +35,7 @@ func (t *Terminal) Compact() {
 	if t.state < stOSC {
 		t.osc = nil
 	}
-	if saved := t.saved; saved != nil && !saved.screen[0].valid && !saved.screen[1].valid && !saved.alternate.valid {
+	if saved := t.saved; saved != nil && !saved.screen[0].valid && !saved.screen[1].valid {
 		t.saved = nil
 	}
 	t.compactPools()
