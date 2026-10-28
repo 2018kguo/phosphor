@@ -55,6 +55,10 @@ func verifyMeasurementBurst(s modelState) error {
 	if s.Replies != wantReplies {
 		return fmt.Errorf("reply bytes = %d, want %d with all %d DSR responses", len(s.Replies), len(wantReplies), measurementLines)
 	}
+	return verifyMeasurementBurstModel(s, historyBudgeted)
+}
+
+func verifyMeasurementBurstModel(s modelState, history historyPolicy) error {
 	if s.Cols != measurementCols || s.Rows != measurementRows || s.Alt || s.Title != measurementTitle(measurementLines-1) {
 		return fmt.Errorf("geometry, alternate screen or final title changed")
 	}
@@ -64,11 +68,16 @@ func verifyMeasurementBurst(s modelState) error {
 	if s.Modes != ([24]bool{2: true, 4: true}) {
 		return fmt.Errorf("final modes = %v", s.Modes)
 	}
-	if len(s.History) != measurementLines+1-measurementRows || len(s.Screen) != measurementRows {
-		return fmt.Errorf("history/screen rows = %d/%d, want %d/%d; output was lost or pruned", len(s.History), len(s.Screen), measurementLines+1-measurementRows, measurementRows)
+	wantHistory, firstRow := measurementLines+1-measurementRows, 0
+	if history == historyNone {
+		wantHistory, firstRow = 0, measurementLines+1-measurementRows
+	}
+	if len(s.History) != wantHistory || len(s.Screen) != measurementRows {
+		return fmt.Errorf("history/screen rows = %d/%d, want %d/%d; output was lost or pruned", len(s.History), len(s.Screen), wantHistory, measurementRows)
 	}
 	rows := append(slices.Clone(s.History), s.Screen...)
-	for i, row := range rows {
+	for offset, row := range rows {
+		i := firstRow + offset
 		if len(row) != measurementCols {
 			return fmt.Errorf("row %d has %d cells", i, len(row))
 		}
@@ -109,6 +118,56 @@ func verifyMeasurementBurst(s modelState) error {
 		}
 	}
 	return nil
+}
+
+func TestMeasurementTimedConstructorParsesEveryChunk(t *testing.T) {
+	input := measurementBurst()
+	for _, engine := range []string{"phosphor", "ghostty"} {
+		for _, history := range []historyPolicy{historyBudgeted, historyNone} {
+			t.Run(fmt.Sprintf("%s/%s", engine, history), func(t *testing.T) {
+				for _, chunk := range []int{0, 7, 1024, 64 << 10} {
+					t.Run(fmt.Sprintf("chunk=%d", chunk), func(t *testing.T) {
+						e := newEngineWithHistory(engine, measurementCols, measurementRows, history)
+						defer e.Close()
+						// This wrapper only reads the existing engine. It installs no
+						// reply collector and enables no continuation bookkeeping.
+						observed := &tracedEngine{Engine: e}
+						traceWrite(observed, input, chunk)
+						state := traceState(t, observed)
+						if state.Replies != "" {
+							t.Fatal("timed constructor unexpectedly retained replies")
+						}
+						if err := verifyMeasurementBurstModel(state, history); err != nil {
+							t.Fatal(err)
+						}
+						// Complete the CSI left unfinished by the large Write. A
+						// correct final picture alone cannot prove parser state survived.
+						e.Write([]byte("1mTAIL\x1b[0m\x1b[6n"))
+						want := state
+						want.Screen = slices.Clone(state.Screen)
+						want.Screen[measurementRows-1] = slices.Clone(state.Screen[measurementRows-1])
+						for x, c := range "TAIL" {
+							want.Screen[measurementRows-1][x] = modelCell{Text: string(c), Width: 1, Fg: uint32(phosphor.IndexedColor(1))}
+						}
+						want.Cursor.X = 4
+						if diff := differences(want, traceState(t, observed)); len(diff) != 0 {
+							t.Fatalf("timed constructor lost unfinished input: %+v", diff)
+						}
+					})
+				}
+				t.Run("discarded-prefix-is-rejected", func(t *testing.T) {
+					e := newEngineWithHistory(engine, measurementCols, measurementRows, history)
+					defer e.Close()
+					e.Write(input[len(input)-(64<<10):])
+					if err := verifyMeasurementBurstModel(traceState(t, &tracedEngine{Engine: e}), history); err == nil {
+						t.Fatal("timed constructor witness accepted discarded input")
+					} else {
+						t.Logf("discarding the prefix is detected: %v", err)
+					}
+				})
+			})
+		}
+	}
 }
 
 func TestMeasurementBurstParsesEveryChunk(t *testing.T) {

@@ -16,6 +16,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
+          cache-dependency-path: |
+            examples/go.sum
+            oracle/go.sum
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
@@ -40,6 +43,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache-dependency-path: |
+            examples/go.sum
+            oracle/go.sum
       - name: fuzz smoke (30s per target)
         run: |
           for f in FuzzTokens FuzzStream FuzzChunking FuzzWrite FuzzDamage FuzzReplies FuzzRepaintContinuation FuzzCompactTrace FuzzGraphemeTransitions FuzzGraphemeBoundaryMatchesLookback FuzzRestoreSnapshot FuzzSnapshotContinuation FuzzSparseHistoryValidation FuzzPrefixRows FuzzColdPrefixWrites FuzzErasedRows; do

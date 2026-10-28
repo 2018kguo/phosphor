@@ -1,0 +1,48 @@
+{
+  "evidence": {
+    "url": "https://github.com/2018kguo/phosphor/releases/download/v0.4.2/phosphor-benchmark-evidence.tar.gz",
+    "sha256": "aab88d6bbffefbc844ee29bd7b421e8c6abf1a3cc88b107797bcd0d7f16195fa",
+    "source_commit": "d228ed3aab954d6950a025ca0a63fef1b69b9df2",
+    "files": 326,
+    "uncompressed_bytes": 25055126,
+    "manifest": "manifest.json",
+    "current_results": "oracle/ghostty/results/2026-10-28-native-mining"
+  },
+  "measurement": {
+    "baseline_commit": "ecfe310cd6da699df77796d35a091423075b30b3",
+    "candidate_commit": "611b81c71c4c1ec030fa32dc1555f30535a2df9f",
+    "native_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+    "go": "go version go1.26.3 darwin/arm64",
+    "host": "macOS-26.6.1-arm64-arm-64bit",
+    "geometry": [
+      120,
+      40
+    ],
+    "GOMAXPROCS": 1,
+    "native_optimization": "ReleaseFast",
+    "native_library_sha256": "60bbce29432ae9fce60638b053b4a52fa765e17689eb78fec58ef31c8e458f16",
+    "throughput_samples": 600,
+    "history": "Nominal 2000 lines / 256 KiB; serialized logical history vs native physical pages. Retained contents differ.",
+    "historical_order": {
+      "outer_repeats": 5,
+      "orders": [
+        [
+          "baseline",
+          "phosphor",
+          "ghostty"
+        ],
+        [
+          "ghostty",
+          "phosphor",
+          "baseline"
+        ]
+      ],
+      "record_round": 0,
+      "repeat_reconstruction": "Each phase groups stream, then outer repeat, then three labels; retain file order. Candidate always ran second."
+    },
+    "prompt_memory_inputs": [
+      "prompt-erase-compact",
+      "colored-prompt-erase-compact"
+    ]
+  }
+}

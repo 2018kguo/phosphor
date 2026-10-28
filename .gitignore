@@ -3,3 +3,7 @@
 *.prof
 *.out
 .DS_Store
+
+# Local benchmark samples and profiles belong outside the source tree.
+/.bench/
+/oracle/ghostty/results/

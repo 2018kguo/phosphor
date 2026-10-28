@@ -215,6 +215,17 @@ func emit(v any) {
 		if label := os.Getenv("COMPARE_LABEL"); label != "" {
 			record["label"] = label
 		}
+		for _, field := range []struct{ env, key string }{
+			{"COMPARE_OUTER_REPEAT", "outer_repeat"}, {"COMPARE_SAMPLE_ORDER", "sample_order"},
+		} {
+			if raw := os.Getenv(field.env); raw != "" {
+				n, err := strconv.Atoi(raw)
+				if err != nil || n < 0 || field.key == "sample_order" && n > 2 {
+					panic("invalid " + field.env)
+				}
+				record[field.key] = n
+			}
+		}
 	}
 	b, e := json.Marshal(v)
 	if e != nil {

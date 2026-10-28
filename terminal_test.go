@@ -470,3 +470,437 @@ func TestPrintable8(t *testing.T) {
 		check(b)
 	}
 }
+
+func TestBritishCharacterSet(t *testing.T) {
+	for _, c := range []struct{ input, want string }{
+		{"\x1b(A#q\x1b(B#", "£q#"},
+		{"\x1b*A#\x1bN\u0301#", "#́#"},
+		{"\x1b(0\x1b*A\x1bN#q\x1b[2b\x1b(B\x1b[2b", "£───qq"},
+		{"\x1b+A\x1bO##\x1bo#\x1b(B\x0f#", "£#£#"},
+		{"\x1b)A\x0e#\x1b7\x1b)B#\x1b8#", "££"},
+	} {
+		term := New(20, 4)
+		for i := range len(c.input) {
+			term.Write([]byte(c.input[i : i+1]))
+		}
+		if got := term.Line(0); got != c.want {
+			t.Errorf("input%q got%q want%q", c.input, got, c.want)
+		}
+	}
+}
+
+func TestCharacterSetContinuation(t *testing.T) {
+	for _, prefix := range []string{
+		"\x1b*A\x1bN", "\x1b+A\x1bO", "\x1b)A\x0e\x1b7\x1b)B",
+		"\x1b(A#\x1b7\x1b[?1049h\x1b*A\x1bN#\x1b7",
+	} {
+		term := New(20, 4, WithScrollback(20))
+		term.Write([]byte(prefix))
+		for _, binary := range []bool{false, true} {
+			dst := New(20, 4, WithScrollback(20))
+			if binary {
+				if err := dst.RestoreSnapshot(term.Snapshot(), SnapshotLimits{}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				dst.Write(term.Repaint(true))
+			}
+			source := New(1, 1)
+			if err := source.RestoreSnapshot(term.Snapshot(), SnapshotLimits{}); err != nil {
+				t.Fatal(err)
+			}
+			for _, next := range []string{"#q", "\x1b8#", "\x1b[?1049l\x1b8#", "\x1b[!p#"} {
+				source.Write([]byte(next))
+				dst.Write([]byte(next))
+				dst.Compact()
+				if source.Cursor() != dst.Cursor() || source.Modes() != dst.Modes() {
+					t.Fatalf("charset continuation cursor/modes changed binary%v prefix%q next%q got%+v want%+v modes%+v/%+v saved%+v/%+v", binary, prefix, next, dst.Cursor(), source.Cursor(), dst.Modes(), source.Modes(), dst.saved, source.saved)
+				}
+				for y := range 4 {
+					for x := range 20 {
+						if source.Cell(x, y) != dst.Cell(x, y) {
+							t.Fatalf("charset cell%d,%d binary%v prefix%q next%q got%+v want%+v", x, y, binary, prefix, next, dst.Cell(x, y), source.Cell(x, y))
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestCSIPrefixChunkingPreservesSnapshots(t *testing.T) {
+	for _, input := range []string{
+		"\x1b[",
+		"\x1b[31mred\x1b[0mplain",
+		"\x1b[38:2::1:2:3mcolor\x1b[4:3munderline",
+		"\x1b[?25l\x1b[>4;2m\x1b[1 q",
+		"\x1b[5n\x1b[6n\x1b[c",
+		"\x1b[99999999999999999999;2H",
+		"\x1b[" + strings.Repeat("1;", maxParams+2) + "m",
+		"\x1b[31;\x07\x00mtext\x1b[2\x18m",
+		"\x1b]2;title\x1b[31mtext\x1bP$qm\x1b\\",
+		"\x1b[1;2H\x1b[?1049h\x1b[2Jalt",
+	} {
+		for cut := 0; cut <= len(input); cut++ {
+			var batchedReply, byteReply bytes.Buffer
+			batched := New(10, 4, WithReply(&batchedReply))
+			bytewise := New(10, 4, WithReply(&byteReply))
+			batched.Write([]byte(input[:cut]))
+			for i := 0; i < cut; i++ {
+				bytewise.Write([]byte(input[i : i+1]))
+			}
+			if !bytes.Equal(batched.Snapshot(), bytewise.Snapshot()) || !bytes.Equal(batchedReply.Bytes(), byteReply.Bytes()) {
+				t.Fatalf("input %q at byte %d: batching changed parser state or replies", input, cut)
+			}
+			var restored Terminal
+			if err := restored.RestoreSnapshot(batched.Snapshot(), SnapshotLimits{}); err != nil {
+				t.Fatalf("input %q at byte %d: restore: %v", input, cut, err)
+			}
+			future := []byte(input[cut:] + "\x1b[0mfuture\x1b[1;1Hdone")
+			batched.Write(future)
+			restored.Write(future)
+			if !bytes.Equal(batched.Snapshot(), restored.Snapshot()) {
+				t.Fatalf("input %q at byte %d: checkpoint continuation changed", input, cut)
+			}
+		}
+	}
+}
+
+func TestCSIParameterSlotsAndSaturation(t *testing.T) {
+	for count := 1; count <= maxParams+2; count++ {
+		parts := make([]string, count)
+		want := make([]uint32, count)
+		for i := range parts {
+			switch i % 5 {
+			case 0:
+				parts[i], want[i] = "0", 0
+			case 1:
+				parts[i], want[i] = "65535", 65535
+			case 2:
+				parts[i], want[i] = "65536", 65536
+			case 3:
+				parts[i], want[i] = "65537", 65536
+			case 4:
+				parts[i], want[i] = "999999999999999999999999", 65536
+			}
+		}
+		for _, separator := range []string{";", ":"} {
+			in := []byte("\x1b[" + strings.Join(parts, separator))
+			for chunk := 1; chunk <= len(in); chunk++ {
+				term := New(12, 3)
+				for off := 0; off < len(in); off += chunk {
+					term.Write(in[off:min(off+chunk, len(in))])
+				}
+				for i := 0; i < min(count, maxParams); i++ {
+					if term.params[i] != want[i] || term.subParam(i) != (separator == ":" && i > 0) {
+						t.Fatalf("count=%d separator=%q chunk=%d slot=%d: value=%d sub=%v, want %d", count, separator, chunk, i, term.params[i], term.subParam(i), want[i])
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestCSIColonAtLastSlotDoesNotBecomeMode(t *testing.T) {
+	prefix := "\x1b[?" + strings.Repeat("999;", maxParams-2) + "999"
+	for _, c := range []struct {
+		separator string
+		visible   bool
+	}{{":", true}, {";", false}} {
+		in := []byte(prefix + c.separator + "25l")
+		for cut := 0; cut <= len(in); cut++ {
+			term := New(12, 3)
+			term.Write(in[:cut])
+			restored := New(12, 3)
+			restored.Write(term.Repaint(true))
+			term.Write(in[cut:])
+			restored.Write(in[cut:])
+			if term.Cursor().Visible != c.visible || restored.Cursor().Visible != c.visible {
+				t.Fatalf("separator=%q cut=%d: cursor visibility %v/%v, want %v", c.separator, cut, term.Cursor().Visible, restored.Cursor().Visible, c.visible)
+			}
+		}
+	}
+	term := New(12, 3)
+	term.Write([]byte(prefix + ":25l\x1b[?25l"))
+	if term.Cursor().Visible {
+		t.Fatal("a new CSI retained an old colon bit")
+	}
+}
+
+func TestCSIParameterBoundaryBehavior(t *testing.T) {
+	for _, c := range []struct {
+		name, in  string
+		wantFg    Color
+		wantX     int
+		wantReply string
+	}{
+		{"saturated-column", "\x1b[65536G", 0, 11, ""},
+		{"overflowed-column", "\x1b[999999999999999999999999G", 0, 11, ""},
+		{"last-sgr-slot", "\x1b[" + strings.Repeat("0;", maxParams-1) + "31m", IndexedColor(1), 0, ""},
+		{"extra-sgr-slot-ignored", "\x1b[" + strings.Repeat("0;", maxParams-1) + "31;32m", IndexedColor(1), 0, ""},
+		{"colon-rgb-saturation", "\x1b[38:2::65536:65535:65537m", RGBColor(255, 255, 255), 0, ""},
+		{"semicolon-rgb-saturation", "\x1b[38;2;65536;65535;65537m", RGBColor(255, 255, 255), 0, ""},
+		{"saturated-mode-reply", "\x1b[?999999999999999999999999$p", 0, 0, "\x1b[?65536;0$y"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := []byte(c.in)
+			for cut := 0; cut <= len(in); cut++ {
+				var replies, restoredReplies bytes.Buffer
+				term := New(12, 3, WithReply(&replies))
+				term.Write(in[:cut])
+				restored := New(12, 3, WithReply(&restoredReplies))
+				restored.Write(term.Repaint(true))
+				if restoredReplies.Len() != 0 {
+					t.Fatalf("cut=%d: repaint emitted reply %q", cut, restoredReplies.Bytes())
+				}
+				restored.Write(in[cut:])
+				term.Write(in[cut:])
+				if term.cur.pen.Fg != c.wantFg || term.Cursor().X != c.wantX || replies.String() != c.wantReply {
+					t.Fatalf("cut=%d: foreground=%v x=%d reply=%q", cut, term.cur.pen.Fg, term.Cursor().X, replies.Bytes())
+				}
+				assertContinuationState(t, term, restored, fmt.Sprintf("cut=%d", cut))
+			}
+		})
+	}
+}
+
+func TestCSIParameterStorageDoesNotAllocate(t *testing.T) {
+	term := New(12, 3)
+	in := []byte("\x1b[38:2::10:20:30m\x1b[0;1;4:3;31m\x1b[0m")
+	term.Write(in)
+	if allocs := testing.AllocsPerRun(100, func() { term.Write(in) }); allocs != 0 {
+		t.Fatalf("CSI parsing allocated %.1f times", allocs)
+	}
+}
+
+func TestShortCSIBytewiseContinuation(t *testing.T) {
+	prefix := []byte("\x1b[?2027h\x1b[?1049hALT\x1b[?1049lmain\r\n\x1b]8;;https://example.test/\x1b\\\x1b[4:3;58:2::1:2:3m👩‍💻\x1b7\x1b[1\"q")
+	for code := byte(0x40); code <= 0x7e; code++ {
+		params := []string{"", "00", "01", "09"}
+		for value := 0; value < 100; value++ {
+			params = append(params, fmt.Sprint(value))
+		}
+		for _, param := range params {
+			input := append(bytes.Clone(prefix), []byte("\x1b["+param+string(code))...)
+			var gotReply, wantReply bytes.Buffer
+			a := New(12, 5, WithReply(&gotReply))
+			b := New(12, 5, WithReply(&wantReply))
+			a.Write(input)
+			for i := range input {
+				b.Write(input[i : i+1])
+			}
+			if !bytes.Equal(a.Snapshot(), b.Snapshot()) || !bytes.Equal(gotReply.Bytes(), wantReply.Bytes()) {
+				t.Fatalf("CSI %s%c changed complete input", param, code)
+			}
+			for _, suffix := range []string{"\x1b[3", "1mX\x1b[6n", "\x1b8Y\x1b[?1049h\x1b[?1049l"} {
+				a.Write([]byte(suffix))
+				for i := range suffix {
+					b.Write([]byte(suffix[i : i+1]))
+				}
+				a.Resize(9, 4)
+				b.Resize(9, 4)
+				if !bytes.Equal(a.Snapshot(), b.Snapshot()) || !bytes.Equal(gotReply.Bytes(), wantReply.Bytes()) {
+					t.Fatalf("CSI %s%c changed future input %q", param, code, suffix)
+				}
+			}
+		}
+	}
+}
+
+func TestOSCEndsAtEscape(t *testing.T) {
+	for _, suffix := range []string{"\\", "[31mX", "X"} {
+		term := New(8, 3)
+		term.Write([]byte("\x1b]2;old\a\x1b]2;new\x1b"))
+		if term.Title() != "new" {
+			t.Fatalf("title before ST %q", term.Title())
+		}
+		if got := term.appendContinuation(nil); !bytes.Equal(got, []byte{0x1b}) {
+			t.Fatalf("continuation %q, want ESC", got)
+		}
+		term.Write([]byte(suffix))
+		if term.Title() != "new" {
+			t.Fatalf("title after %q: %q", suffix, term.Title())
+		}
+		if suffix == "[31mX" && (term.Cell(0, 0).Rune != 'X' || term.Cell(0, 0).Style.Fg != IndexedColor(1)) {
+			t.Fatal("escape after OSC did not execute")
+		}
+	}
+}
+
+func TestOSCCancel(t *testing.T) {
+	for _, cancel := range []byte{0x18, 0x1a} {
+		term := New(8, 3)
+		term.Write(append([]byte("\x1b]2;old\a\x1b]2;cancel"), cancel, 'X'))
+		if term.Title() != "old" || term.Cell(0, 0).Rune != 'X' {
+			t.Fatalf("cancel %#x: title %q, cell %+v", cancel, term.Title(), term.Cell(0, 0))
+		}
+	}
+}
+
+func TestStringsEndBeforeNextByte(t *testing.T) {
+	for _, prefix := range []string{"\x1bXignored", "\x1b^ignored", "\x1b_ignored", "\x1bPqignored", "\x1bP$qm"} {
+		for _, end := range []byte{0x1b, 0x18, 0x1a} {
+			var replies bytes.Buffer
+			term := New(8, 3, WithReply(&replies))
+			term.Write(append([]byte(prefix), end))
+			if prefix == "\x1bP$qm" && replies.String() != "\x1bP1$r0m\x1b\\" {
+				t.Fatalf("DCS end %#x: replies %q", end, replies.String())
+			}
+			if end == 0x1b {
+				term.Write([]byte("[31m"))
+			}
+			term.Write([]byte("X"))
+			if term.Cell(0, 0).Rune != 'X' {
+				t.Fatalf("%q end %#x did not return to ground", prefix, end)
+			}
+		}
+	}
+}
+
+func TestAlternateScreensCopyPendingWrap(t *testing.T) {
+	for _, mode := range []int{47, 1047, 1049} {
+		term := New(4, 3)
+		fmt.Fprintf(term, "main\x1b[?%dhabcd", mode)
+		if term.Line(0) != "" || term.Line(1) != "abcd" || !term.Cursor().PendingWrap {
+			t.Fatalf("mode%d did not carry main's pending wrap into alternate: %q %+v", mode, term.Lines(), term.Cursor())
+		}
+		fmt.Fprintf(term, "\x1b[?%dl", mode)
+		if term.Cursor().PendingWrap != (mode != 1047) {
+			t.Fatalf("mode%d left the wrong pending wrap after exit: %+v", mode, term.Cursor())
+		}
+	}
+}
+
+func TestMarginModeResetKeepsPendingWrap(t *testing.T) {
+	for _, origin := range []bool{false, true} {
+		term := New(8, 3)
+		term.Write([]byte("\x1b[?69h\x1b[3;4s"))
+		if origin {
+			term.Write([]byte("\x1b[?6h"))
+		} else {
+			term.Write([]byte("\x1b[3G"))
+		}
+		term.Write([]byte("ab\x1b[?69l"))
+		if cur := term.Cursor(); cur.X != 3 || !cur.PendingWrap || term.lrmm {
+			t.Fatal("margin reset consumed pending wrap", cur)
+		}
+		term.Write([]byte("\tX"))
+		if term.Cell(0, 1).Text() != "X" || term.Cursor().Y != 1 {
+			t.Fatal("margin reset changed future wrapping", term.Cursor())
+		}
+	}
+}
+
+func TestPendingWrapSurvivesModeAndTabs(t *testing.T) {
+	for _, mode := range []string{"", "\x1b[?7l"} {
+		for _, tab := range []string{"\t", "\x1b[I", "\x1b[Z"} {
+			term := New(6, 3)
+			term.Write([]byte("abcdef" + mode + tab))
+			wantX := 5
+			if tab == "\x1b[Z" {
+				wantX = 0
+			}
+			if cur := term.Cursor(); cur.X != wantX || cur.Y != 0 || !cur.PendingWrap {
+				t.Fatalf("mode=%q tab=%q: %+v", mode, tab, cur)
+			}
+			term.Compact()
+			restored := New(6, 3)
+			restored.Write(term.Repaint(false))
+			if restored.Cursor() != term.Cursor() || restored.Modes() != term.Modes() {
+				t.Fatalf("repaint changed pending wrap: mode=%q tab=%q", mode, tab)
+			}
+			for _, e := range []*Terminal{term, restored} {
+				e.Write([]byte("\x1b[?7hX"))
+				if cur := e.Cursor(); cur.X != 1 || cur.Y != 1 || cur.PendingWrap || e.Cell(0, 1).Text() != "X" {
+					t.Fatalf("mode=%q tab=%q did not wrap next print: %+v", mode, tab, cur)
+				}
+				if e.Wrapped(1) != (tab != "\x1b[Z") {
+					t.Fatalf("mode=%q tab=%q marked a soft wrap away from the physical edge", mode, tab)
+				}
+			}
+		}
+	}
+}
+
+func TestWideGlyphWithoutRoomMatchesNative(t *testing.T) {
+	for _, text := range []string{"AAAA", "AAAAA"} {
+		term := New(5, 3)
+		term.Write([]byte("\x1b[?7l" + text + "🚨"))
+		if term.Cursor().X != 4 || term.Cursor().PendingWrap || term.Lines()[0] != text {
+			t.Fatalf("did not drop unprintable wide glyph: %+v %q", term.Cursor(), term.Lines())
+		}
+		term.Write([]byte("\x1b[?7hX"))
+		if term.Cursor().Y != 0 || term.Cell(4, 0).Text() != "X" || !term.Cursor().PendingWrap {
+			t.Fatal("dropped glyph changed future wrapping", term.Cursor())
+		}
+	}
+	term := New(1, 3)
+	term.Write([]byte("\x1b[1;31m😀"))
+	if c := term.Cell(0, 0); c.Text() != "" || c.Style.Fg != IndexedColor(1) || c.Style.Attrs&AttrBold == 0 || !term.Cursor().PendingWrap {
+		t.Fatal("one-column dropped glyph lost native blank style/pending wrap", c, term.Cursor())
+	}
+	copy := New(1, 3)
+	copy.Write(term.Repaint(false))
+	if copy.Cell(0, 0) != term.Cell(0, 0) || copy.Cursor() != term.Cursor() {
+		t.Fatal("one-column repaint lost dropped-wide state")
+	}
+	term.Write([]byte("X"))
+	if term.Cursor().Y != 1 || term.Cell(0, 1).Text() != "X" {
+		t.Fatal("one-column dropped glyph failed to wrap the next print")
+	}
+}
+
+func TestSmoothScrollingModeSavesAndRepaints(t *testing.T) {
+	var replies bytes.Buffer
+	term := New(12, 3, WithReply(&replies))
+	term.Write([]byte("\x1b[?4h\x1b[?4s\x1b[?4l\x1b[?4r\x1b[?4$p"))
+	if !term.Modes().SmoothScrolling || replies.String() != "\x1b[?4;1$y" {
+		t.Fatal(term.Modes(), replies.String())
+	}
+	term.Compact()
+	copy := New(12, 3)
+	copy.Write(term.Repaint(false))
+	if !copy.Modes().SmoothScrolling {
+		t.Fatal("repaint discarded smooth scrolling")
+	}
+	copy.Write([]byte("\x1b[?4l\x1b[?4r"))
+	if !copy.Modes().SmoothScrolling {
+		t.Fatal("repaint discarded the saved smooth scrolling mode")
+	}
+}
+
+func TestModifierRequiresImmediateBase(t *testing.T) {
+	for _, tc := range []struct {
+		name, prefix string
+		cursor       int
+	}{
+		{"direct", "👋\x1b[?2027h", 3},
+		{"control", "👋\u200b\x1b[?2027h", 5},
+		{"extend", "👋\u0301\x1b[?2027h", 5},
+		{"selector-ignored", "👋\ufe0f\x1b[?2027h", 3},
+		{"joiner", "👋\u200d\x1b[?2027h", 5},
+		{"prepend", "👋\u0600\x1b[?2027h", 4},
+		{"executed-NUL", "👋\x00\x1b[?2027h", 3},
+		{"text-selector-mode-off", "✍\ufe0f\x1b[?2027h", 2},
+		{"text-selector-mode-on", "\x1b[?2027h✍\ufe0f", 5},
+		{"extend-mode-on", "\x1b[?2027h👋\u0301", 5},
+		{"repeated-modifier", "\x1b[?2027h👋🏿", 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := []byte(tc.prefix + "🏿X")
+			for cut := 0; cut <= len(input); cut++ {
+				term := New(12, 3)
+				term.Write(input[:cut])
+				term.Write(input[cut:])
+				if term.Cursor().X != tc.cursor {
+					t.Fatalf("cut%d cursor%+v wantX%d", cut, term.Cursor(), tc.cursor)
+				}
+				if tc.cursor == 5 && term.Cell(2, 0).Rune != '🏿' {
+					t.Fatalf("modifier crossed intervening scalar: %+v", term.Cell(0, 0))
+				}
+				assertGraphemeInvariants(t, term)
+				checkRepaint(t, term)
+			}
+		})
+	}
+}

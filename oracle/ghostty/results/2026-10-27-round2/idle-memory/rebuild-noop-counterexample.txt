@@ -1,5 +1,0 @@
---- FAIL: TestCompactDoesNotRebuildLivePools (0.00s)
-    compact_pools_test.go:105: repeated compaction of unchanged live pools allocated 2 times
-FAIL
-exit status 1
-FAIL	github.com/2018kguo/phosphor	0.167s

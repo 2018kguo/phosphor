@@ -42,7 +42,7 @@ VT_CONF_REPORT=1 go test -run 'Conformance|Libvterm|Alacritty' -v
 ```
 
 Known terminal-policy differences have explicit reasons in
-`conformance_known_test.go`; unexpected failures and unexpectedly passing
+`conformance_expectations_test.go`; unexpected failures and unexpectedly passing
 known cases fail the suite. Exclusions do not count as passing coverage.
 Preserve upstream expectations and the [source notices](../testdata/conformance/NOTICE.md).
 
@@ -103,10 +103,23 @@ describes the captured fields and separate continuation counts.
 |---|---|
 | [terminal.go](../terminal.go), [read.go](../read.go), [style.go](../style.go) | Stream processing and public screen values |
 | [resize.go](../resize.go), [compact.go](../compact.go) | Reflow, history and idle storage |
+| [modes.go](../modes.go), [reply.go](../reply.go) | Terminal modes, queries and replies |
 | [serialize.go](../serialize.go), [snapshot.go](../snapshot.go) | ANSI attach and exact checkpoints |
 | [example_test.go](../example_test.go), [mirror](../examples/mirror) | Runnable API use and a renderer |
 | [testdata](../testdata), `*_test.go` | Recordings, references and regression checks |
 | [oracle](../oracle) | Optional differential and native comparisons |
+
+Go files in the root implement one public package. Related regressions belong
+in the existing subject suite: `history_test.go`, `unicode_test.go`,
+`repaint_test.go`, `modes_test.go` and the other matching files. Conformance
+sources share the runner in `conformance_test.go`; translated Ghostty cases
+live in `conformance_ghostty_test.go`. Preserve case names, upstream expectations,
+source notices and explicit exclusions when extending a suite.
+
+Keep maintained docs in `docs/` and reproducible inputs in `testdata/`.
+Write temporary benchmark output to the ignored `.bench/` directory. The
+[benchmark guide](benchmarks.md) links the published evidence bundles; raw run
+logs, old charts and per-experiment reports do not belong in the source tree.
 
 X11 color names can be regenerated with `go run ./internal/colorgen`;
 `-source /path/to/rgb.txt` uses an offline source. The generator checks its

@@ -1,2 +1,0 @@
-ok  	github.com/2018kguo/phosphor	159.061s
-?   	github.com/2018kguo/phosphor/internal/benchdata	[no test files]

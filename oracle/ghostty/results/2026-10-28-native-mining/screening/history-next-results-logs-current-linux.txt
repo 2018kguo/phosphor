@@ -1,7 +1,0 @@
-go: downloading github.com/clipperhouse/uax29/v2 v2.7.0
-goos: linux
-goarch: arm64
-pkg: github.com/2018kguo/phosphor
-BenchmarkWriteStreamReply/logs/chunk-1024         	    1432	   1675899 ns/op	 625.70 MB/s	     501 B/op	       1 allocs/op
-PASS
-ok  	github.com/2018kguo/phosphor	2.419s
