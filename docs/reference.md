@@ -143,11 +143,20 @@ Use Snapshot for exact persistence. ANSI cannot express every retained state:
 - Some cursors outside enabled origin margins need an unused alternate
   screen as scratch space; other combinations can move the resumed cursor.
 - Very narrow screens with VS15-narrowed graphemes have replay limits.
+- Empty cells with foreground, protection or rich attributes can replay as
+  literal spaces with the same style, including protected wide-character
+  padding. Exact snapshots preserve the distinction.
 - A forced 1047 exit can erase mixed old/new alternate-screen backgrounds
   after a resize. Preserving the stored screen-mode bits can require that
   exit, which paints unprotected cells with one background. ISO-protected
   text can survive while blank resize padding changes color. Exact snapshots
   retain every original cell; ANSI cannot reproduce this combination.
+- A wrapped, ISO-protected alternate-screen row can retain its wrap through a
+  narrow-width erase and later host resize. Rebuilding it at the final width
+  with the required 1047 reset erases the new unprotected padding and clears
+  that wrap. This can change later reverse-wrap cursor movement. The source
+  guard and future-behavior witness are in `repaint_test.go`; snapshots and
+  framed views retain the original state.
 - An unmarked prompt cursor may be reproduced with explicit input state.
   Headless text effects match, while per-cell GUI semantic classification
   can differ. Binary snapshots preserve the original enum.
@@ -181,3 +190,16 @@ national charsets, SGR fonts and super/subscript, OSC 52/7, icon names/title
 stack, and raw 8-bit C1/S8C1T behavior. C1 controls encoded as UTF-8 are handled.
 If a specific command matters, check the [API](https://pkg.go.dev/github.com/2018kguo/phosphor)
 and the [coverage contract](../oracle/ghostty/coverage.md).
+
+## Draw a terminal view
+
+`AppendRowANSI` paints one visible row using the recorded Unicode cluster modes,
+styles and links. Position the cursor at the first column and use the model's
+width. It leaves cursor and input-mode restoration to the viewer. Palette
+changes become RGB colors, so drawing a view does not change the host's palette.
+
+Use `WriteScrollback` once to draw retained history. `WithScrollbackOutput`
+then reports each new row that program output scrolls away, including repeated
+rows and when retention is disabled. These callbacks run during `Write` and
+must not keep the supplied bytes or mutate the terminal. Resize and
+restart rearrange existing content without replaying it to this observer.
