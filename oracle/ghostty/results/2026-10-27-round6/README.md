@@ -4,7 +4,10 @@ This round closes measured headless text-model gaps against libghostty-vt
 and reduces memory for idle shell sessions. It does not establish universal
 terminal compatibility or a win on every throughput stream.
 
-Production source: `7a2e8f2f76e4b85a342ee87241e9738c7a39fad3`.
+Performance and prompt-memory source: `7a2e8f2f76e4b85a342ee87241e9738c7a39fad3`.
+Final correctness source includes the cold formatter repair in
+`2c459f56413b5497b1391cd1898508f2d1295994`; it unifies empty-row output
+across allocated and implicit storage without changing the input hot path.
 Baseline: released v0.3.0, `3a732c18eee88e55977b233eb25b905633a669f7`.
 Native source: `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, Zig 0.17.0,
 ReleaseFast, build-info version 0.1.0-dev. macOS arm64, Apple M5 Pro,
@@ -18,28 +21,28 @@ continuation actions, versus 150/174 in v0.3.0. The original historical
 cluster-capacity case also matches now. `final-original-corpus.jsonl`
 retains the entire output, including native export failures and its old scopes.
 
-The expanded corpus has 207 named cases and 768 parity actions. Whole,
+The expanded corpus has 208 named cases and 773 parity actions. Whole,
 one-byte and seven-byte writes have identical results. Final macOS outputs
 are byte-identical across both sides of the performance-only fix, and the
 Linux whole-write output is byte-identical to macOS:
 
 | Comparison | Pass / actions |
 |---|---:|
-| Untouched engines, direct input |767/768 |
-| Phosphor checkpoint/repaint/Compact continuation |767/768 |
-| Native checkpoint/repaint continuation |663/768 |
-| Combined, requiring all comparisons |662/768 |
+| Untouched engines, direct input |772/773 |
+| Phosphor checkpoint/repaint/Compact continuation |771/773 |
+| Native checkpoint/repaint continuation |666/773 |
+| Combined, requiring all comparisons |665/773 |
 
 `final-trace-{0,1,7}.jsonl` retains every raw difference. The command exits 1
-because two known parity failures remain; running it successfully is not a
+because the policy difference and two known ANSI-export variants remain; running it successfully is not a
 passing result. Product identity and initial host colors keep their separate
-scopes and raw replies. The two parity failures are:
+scopes and raw replies. The remaining parity differences are:
 
 - DEC special-graphics underscore: Phosphor retains xterm's blank mapping;
   the pinned native engine keeps an underscore. This deliberate policy
   difference remains in the direct denominator.
-- Forced1047 exit after height growth: old and new inactive ALT rows have
-  different backgrounds. An ANSI replay that preserves the independent mode
+- Forced 1047 exit after height or width growth: old and new inactive ALT
+  regions have different backgrounds. An ANSI replay that preserves the independent mode
   bits must erase ALT with one background when returning to MAIN. Exact
   snapshots preserve the original cells and their future use.
 
@@ -133,7 +136,19 @@ Go 1.24/current-Go tests, race/vet, examples, oracle tests, native ABI tests
 and bounded fuzz runs cover the change. New fuzz targets compare prefix
 storage with dense production storage and validate private history markers.
 Independent reviews found and fixed wrapped-row repair; final cursor and
-snapshot reviews reported no findings. Native tests include 216 bounded
+snapshot reviews reported no findings. Release fuzzing also found a test
+that compared allocated versus implicit blank ALT storage. It now compares
+physical cells and explicitly checks active-screen and mode bits. The
+known forced 1047 rectangle-growth loss has a precise, tested ANSI expectation:
+only zero ALT padding acquires the erase background. All other repaint
+observations still compare, and exact Snapshot plus future output must
+preserve the original cells. Raw native failures remain visible. Near-miss
+cases, including width-only 80/132 destinations, keep strict repaint checks. Compact fuzzing also found storage-dependent dummy
+glyph selection in one-column repaint; both old exports had equal tested
+futures. The formatter now emits identical bytes before/after Compact,
+with the original byte-equality assertion retained.
+
+Native tests include 216 bounded
 screen-mode sequences and future writes, not only the restored picture.
 
 Linux daemon crash tests require a container init process to reap orphaned
