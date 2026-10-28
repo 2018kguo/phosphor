@@ -2545,6 +2545,7 @@ func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
 	if t.sbMaxLines <= 0 {
 		return
 	}
+	encoded := t.scratch[:0]
 	if wrapped {
 		// A spacer head at the end is left out: it is not text, and the
 		// wide character after it recreates it on replay at this width.
@@ -2552,41 +2553,41 @@ func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
 		if rowCell(row, end-1).R == spacerHead {
 			end--
 		}
-		t.scratch = t.appendRowHistory(t.scratch[:0], row, end, false, true)
+		encoded = t.appendRowHistory(encoded[:0], row, end, false, true)
 	} else {
-		t.scratch = t.appendRowHistory(t.scratch[:0], row, t.cols, true, true)
+		encoded = t.appendRowHistory(encoded[:0], row, t.cols, true, true)
 	}
-	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(encoded) <= maxLogicalLine
 	if semantic := flags & rowSemanticMask; semantic != 0 || join && bytes.Contains(t.sb[len(t.sb)-1], []byte{0, 0, 'P'}) {
 		if semantic != 0 && contentEnd(row) == 0 {
 			// An annotated empty row is meaningful to native reflow.
-			t.scratch = append(t.scratch, 0, 1, ' ')
+			encoded = append(encoded, 0, 1, ' ')
 		}
-		n := len(t.scratch)
-		t.scratch = append(t.scratch, 0, 0, 0, 0)
-		copy(t.scratch[4:], t.scratch[:n])
-		t.scratch[0], t.scratch[1], t.scratch[2], t.scratch[3] = 0, 0, 'P', byte(semantic>>1)
-		join = join && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+		n := len(encoded)
+		encoded = append(encoded, 0, 0, 0, 0)
+		copy(encoded[4:], encoded[:n])
+		encoded[0], encoded[1], encoded[2], encoded[3] = 0, 0, 'P', byte(semantic>>1)
+		join = join && len(t.sb[len(t.sb)-1])+len(encoded) <= maxLogicalLine
 	}
 	putBack := join && t.sbSpacer && !startsWide(row)
 	if join && !wrapped && contentEnd(row) < t.cols {
 		// Replayed, this row starts by wrapping, so something must be
 		// printed, and the wrap may scroll in a row painted in the current
 		// background: clear the rest of it.
-		if len(t.scratch) == 0 {
-			t.scratch = append(t.scratch, 0, 1, ' ')
+		if len(encoded) == 0 {
+			encoded = append(encoded, 0, 1, ' ')
 		}
-		t.scratch = append(t.scratch, "\x1b[K"...)
+		encoded = append(encoded, "\x1b[K"...)
 	}
 	if putBack {
 		// The line left out a spacer head, but this row no longer starts
 		// with the wide character that made it: keep the column.
-		t.scratch = append(t.scratch, 0)
-		copy(t.scratch[1:], t.scratch)
-		t.scratch[0] = ' '
+		encoded = append(encoded, 0)
+		copy(encoded[1:], encoded)
+		encoded[0] = ' '
 	}
 	if n := len(t.sb); join {
-		line := append(t.sb[n-1], t.scratch...)
+		line := append(t.sb[n-1], encoded...)
 		if !wrapped && cap(line) > len(line)+len(line)/4 {
 			line = append([]byte(nil), line...)
 		}
@@ -2594,24 +2595,25 @@ func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
 		t.sb[n-1] = line
 	} else {
 		var reusable []byte
-		if len(t.sb) > t.sbStart && (len(t.sb)-t.sbStart >= t.sbMaxLines || t.sbBytes+len(t.scratch)+24 > t.sbMaxBytes) {
+		if len(t.sb) > t.sbStart && (len(t.sb)-t.sbStart >= t.sbMaxLines || t.sbBytes+len(encoded)+24 > t.sbMaxBytes) {
 			// This line will evict the oldest one. Reuse its storage so
 			// steady scrolling does not allocate for every log line.
 			reusable = t.sb[t.sbStart]
 			t.sbBytes -= len(reusable) + 24
 			t.sb[t.sbStart] = nil
 			t.sbStart++
-			if cap(reusable) > 2*max(len(t.scratch), 64) {
+			if cap(reusable) > 2*max(len(encoded), 64) {
 				reusable = nil // a short line must not pin an old long line
 			}
 		}
-		line := append(reusable[:0], t.scratch...)
+		line := append(reusable[:0], encoded...)
 		t.sb = append(t.sb, line)
 		t.sbBytes += len(line) + 24
 	}
 	t.sbOpen = wrapped
 	t.sbSpacer = wrapped && rowCell(row, t.cols-1).R == spacerHead
-	if len(t.scratch) > 4096 {
+	t.scratch = encoded
+	if len(encoded) > 4096 {
 		t.scratch = nil // do not keep a large buffer on an idle terminal
 	}
 	for n := len(t.sb) - t.sbStart; n > t.sbMaxLines || (t.sbBytes > t.sbMaxBytes && n > 1); n-- {
