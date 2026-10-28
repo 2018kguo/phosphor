@@ -2,7 +2,7 @@
 
 This tool asks whether the same PTY bytes produce the same terminal state, and what each engine costs in time and memory. It measures headless emulation; fonts, rendering and whole-daemon latency are outside the experiment. Production Phosphor needs neither cgo nor Ghostty.
 
-Start with the [Unicode, logs and idle-state results](results/2026-10-28-unicode-history/README.md) and [comparison contract](coverage.md). The [measurement audit](results/2026-10-27-agent-round/README.md) explains reply, retention and input-drop controls. Earlier phases cover [idle rows](results/2026-10-27/README.md), [metadata pools](results/2026-10-27-round2/README.md), [Unicode/checkpoints](results/2026-10-27-round3/README.md), [gap audit](results/2026-10-27-round4/README.md) and [shell prompts](results/2026-10-27-round5/README.md). They describe their measured revisions, not the current release.
+Start with the [Unicode, logs and idle-state results](results/2026-10-28-native-mining/README.md) and [comparison contract](coverage.md). The [measurement audit](results/2026-10-27-agent-round/README.md) explains reply, retention and input-drop controls. Earlier phases cover [idle rows](results/2026-10-27/README.md), [metadata pools](results/2026-10-27-round2/README.md), [Unicode/checkpoints](results/2026-10-27-round3/README.md), [gap audit](results/2026-10-27-round4/README.md) and [shell prompts](results/2026-10-27-round5/README.md). They describe their measured revisions, not the current release.
 
 ## Build
 

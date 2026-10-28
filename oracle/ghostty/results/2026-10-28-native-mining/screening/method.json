@@ -1,0 +1,11 @@
+{
+  "interpretation": "Exploratory short samples; integrated600-sample native run is authoritative.",
+  "rejected": [
+    "DecodedUnicode row batching: mixedgraphemes\u221216% despite smallCJKgain.",
+    "32byteASCIIscan: shortANSIrun overhead, vim\u22127%,less\u22124%.",
+    "History unroll/style/zero-rest/epilogue sketches: mixed/noise-sized; retained separately fromwinners.",
+    "Intern encoding/order microchanges: no separateclearwin; onlycachedcountkept."
+  ],
+  "all_recorded_samples_retained": true,
+  "comparative_windows": "Explicitly serialized across workers, no tests/compiles/profile captures during final windows."
+}

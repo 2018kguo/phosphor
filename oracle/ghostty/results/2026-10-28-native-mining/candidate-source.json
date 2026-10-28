@@ -1,0 +1,31 @@
+{
+  "commit": "611b81c71c4c1ec030fa32dc1555f30535a2df9f",
+  "files": {
+    "ascii_fill.go": "18a36dc467ebfeca56693e26ec21ccb6fdea3ffa0941cd2e683e494777b04968",
+    "ascii_fill_arm64.go": "4dbb2d1a2780a94853481bf27f5adfff001af36322a5e67345e011e4d0c1c210",
+    "ascii_fill_arm64.s": "622a563a98b38727dd04d5525b388b6182c70eea28e0ecca8d9d05958db52de7",
+    "ascii_fill_other.go": "c4bbcf5f414e81b4e6be2f4e12211f183947b771929456b374b53c1ba0bb7044",
+    "codepoint_table.go": "349983d0761788062c2691c67536ff204439febad6acfb578d2d40f7e15bc673",
+    "color.go": "05ba22baf3067326c337357f055153e604b93533cfdbd09495e17329772b2cb5",
+    "color_names.go": "8e51223f7b56b23d10f7c8e3acd3104db852763bbae0e8f2adc91810034f5e6a",
+    "column_modes.go": "3997ce1af0a813c738d152dda259e33268b9728b5ea8df92ef7d5cd8b5efaee4",
+    "compact.go": "a9621000edd427ca1c2bbaf31c52c2028480f3e75d4f2e03c3761e18c7aaeb82",
+    "damage.go": "4ae391ffb418f6c16e95ad2afac8355aed04da100e93ba60295b1278fe76a222",
+    "doc.go": "b41babdce54ca3a378a9623edd5e8ef47b63c8ac0bcad367d9b96d03d3b55883",
+    "go.mod": "e4ad9a573facb44da7883c17fa53994416a8efd2a111a84be1f8ef2067868460",
+    "grapheme.go": "434b246e925c2d05c44fd66157a3c645ffee020a19cdd3941682e7eed5c19a5f",
+    "grapheme_boundary.go": "171bd6dc4aa256d48d634309b8d3b3c120f91ff76730131cb0389c47be497baf",
+    "kitty_color.go": "e9656ece1940112716e7ac0bc3807702c910c55c79e8f511afe708d821a3f924",
+    "mouse_modes.go": "31d9fc308c18cdaa5f94ee2af0ee13b775b054d9a86a4a0c867689fc8c31bd25",
+    "options.go": "8f3b8213e3e980851b44b0ae8829a7c413f4651a5b89f4cdf10159bbaf375d0b",
+    "read.go": "0b30f94662b92ffda662cb99b4b4046cf31b46466cec6787e3230a419864b509",
+    "reply.go": "69e207076b79fa97b9891d25b2d8b93b00142ec8585f0f9e524b6b28b4ad4177",
+    "resize.go": "a1051d82ce5e1ab8e0905dc64aa90a281ed9a993509868678fc5ffebbd1ed3a8",
+    "screen_modes.go": "62f551b7260cc4ca6c4c3058f51f8e6eeadac2ce1b21c6b777d56f86fd5181ef",
+    "semantic.go": "a58bc64121a4d0f916e20cc0784797f622462170b524eab9d681dea1c52b844a",
+    "serialize.go": "748cbc6c57a2936c36c186dfed7b9dc4d90391d6a18e920dfc1d1ee944ffc6df",
+    "snapshot.go": "35176d2a527216e6ab798fda2605c0dbf26bc20577c6d4462d3f154d0b47fa57",
+    "style.go": "a722279b10e83a03b71765a885cfee4878247bd271191fbe7cfd19593b6e4b14",
+    "terminal.go": "89526b0ab7a3cd6aae2d4a501357e12ca354d789aa599d34d2f4c879bdeae16a"
+  }
+}

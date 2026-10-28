@@ -1,0 +1,17 @@
+{
+  "base": "16d24d95bcd8f64758ecf8ff099ff410b6b9a6fb",
+  "decision": "Reject sequential2/4cell and zero-rest specialization: mixed/noisy short screens; no source change committed.",
+  "scope": "copyASCIICells only; no fields/cache/constructor/budget/fixture changes; existing scalar/nonzero-style/big-endian behavior preserved.",
+  "builds": "Every successful Go test/build used GOWORK=off; prototypes used absolute canonical-path overlays. All timed binaries prebuilt; no timings overlapped agent CPU work by coordination.",
+  "screening": "Three100ms samples per variant/case; generated logs at1024/8192byte reads plus budgeted links at8192. Short shared-host screens with drift; no broad speed claim.",
+  "zero_rest_source_sha256": {
+    "serialize.go": "7b5b0190f7742eff2bf8d66a9d1ad31cc21495cbfc6d1e8e5525b802f59da3ec",
+    "history_ascii_test.go": "265440ce24389a4dfaad00cd50250b1a3bcece31bc42cde8c998178624fa0e82"
+  },
+  "validation": [
+    "Sequential2/4cell: existing10000case scalar/full-style property, foreground SGR and sparse history checks passed.",
+    "Block2/block4: focused race+checkptr passed1.558s/1.474s; constant-offset loads and16byteframe confirmed by assembly.",
+    "Zero-rest: focused scalar/history/restored continuation race+checkptr passed1.349s; same extended scalar tests pass on baseline0.178s.",
+    "Zero-rest ASM confirms CBZ instead of CMP+branch and one fewer live register, same16byteframe; no consistent measured gain."
+  ]
+}

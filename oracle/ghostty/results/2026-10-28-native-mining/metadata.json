@@ -1,0 +1,97 @@
+{
+  "baseline_commit": "ecfe310cd6da699df77796d35a091423075b30b3",
+  "candidate_commit": "611b81c71c4c1ec030fa32dc1555f30535a2df9f",
+  "native_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+  "go": "go version go1.26.3 darwin/arm64",
+  "host": "macOS-26.6.1-arm64-arm-64bit",
+  "started_utc": "2026-10-28T08:08:38.718339+00:00",
+  "binaries": {
+    "native-baseline": "7f5a3ffb708d291d56149af51f46b28ecfa0b211df34ed99c9529ca15228d27b",
+    "native-final": "fe7a29f8460e3d17c5c389d9a3446465d5b774be4e615133fc56b4bd1170a472"
+  },
+  "native_library_sha256": "60bbce29432ae9fce60638b053b4a52fa765e17689eb78fec58ef31c8e458f16",
+  "GOMAXPROCS": 1,
+  "geometry": [
+    120,
+    40
+  ],
+  "rounds": 5,
+  "native_optimization": "ReleaseFast",
+  "reply_policy": "enabled discard sinks on both engines",
+  "native_continuation_max_bytes": 0,
+  "history": "Nominal2000lines/256KiB onboth, serializedlogical vsphysicalpagehistory; not equal retained contents. none explicitlydisabledandzero rowsverified. Eachsamplerecordsactualretention.",
+  "quiet_window": "Alltaskworkers/tests/compiles/profilecapturesstopped; one timedprocessat a time.",
+  "phases": {
+    "throughput-1024.jsonl": {
+      "chunk_bytes": 1024,
+      "duration": "750ms",
+      "history": "budgeted"
+    },
+    "throughput-8192.jsonl": {
+      "chunk_bytes": 8192,
+      "duration": "400ms",
+      "history": "budgeted"
+    },
+    "throughput-65536.jsonl": {
+      "chunk_bytes": 65536,
+      "duration": "400ms",
+      "history": "budgeted"
+    },
+    "throughput-none-1024.jsonl": {
+      "chunk_bytes": 1024,
+      "duration": "500ms",
+      "history": "none"
+    }
+  },
+  "unicode": {
+    "scalar_widths": "Auditednative18data; all1114112codepointwidthvaluesunchangedfrombaseline.",
+    "boundary_data": "OfficialUnicode18,UAX29+explicitControltailoring",
+    "native_uucode_commit": "ea62149739404a73c202b48a33bf6dd2af4bd9b0",
+    "prior_audit_correction": "Earlierharness/sourceheadersinferredUnicode17incorrectly; samepinnednativedependencyalreadyused18. Widthvalueswereandremainidentical. Historicalrawlabelsretained."
+  },
+  "layout": {
+    "cluster_bytes_64bit": 40,
+    "cluster_bytes_32bit": 28,
+    "new_terminal_fields": 0,
+    "static_unicode_lookup_bytes": 52512,
+    "production_external_go_dependencies": 0
+  },
+  "throughput_samples": 600,
+  "completed_utc": "2026-10-28T08:13:57.305890+00:00",
+  "memory": {
+    "raw_samples": 126,
+    "counts": [
+      128,
+      1024
+    ],
+    "repeats": 3,
+    "fresh_process": true,
+    "compaction": "Phosphor Compact/nativeFULL",
+    "GC": "two collections before baseline and after initialization; no forcedscavenging"
+  },
+  "auxiliary": {
+    "rounds": 5,
+    "duration": "200ms",
+    "metric": "wall decimal MB/s and allocatedbytes per~MiBoperation",
+    "phosphor_baseline_binary_sha256": "395d5e8bff69863dc4e41869e95c3eded2c3502e446c63f051abe8171a5677cb",
+    "phosphor_final_binary_sha256": "5a12c4b8d057e395d1f88288a73f37a8c9a2078e6e75cdf57ffbe97f2a735f4d"
+  },
+  "correctness": {
+    "cases": 218,
+    "parity_actions": 853,
+    "baseline_direct": 804,
+    "candidate_direct": 852,
+    "phosphor_continuation": 851,
+    "native_continuation": 746,
+    "chunks": [
+      0,
+      1,
+      7
+    ],
+    "scalar_width_changes": 0,
+    "official_unicode_cases": 853,
+    "official_boundaries": 1355,
+    "explicit_control_tailoring": 26,
+    "independent_reviews": "no blockingfindings"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024": {
+    "baseline": {
+      "ns": 43782800.0,
+      "MBps": 23.95,
+      "allocated_bytes": 156489592,
+      "allocations": 539723
+    },
+    "phosphor": {
+      "ns": 7366392.0,
+      "MBps": 142.35,
+      "allocated_bytes": 15315,
+      "allocations": 69
+    }
+  },
+  "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024": {
+    "baseline": {
+      "ns": 41519467.0,
+      "MBps": 25.26,
+      "allocated_bytes": 156399574,
+      "allocations": 539320
+    },
+    "phosphor": {
+      "ns": 5809383.0,
+      "MBps": 180.5,
+      "allocated_bytes": 1017,
+      "allocations": 5
+    }
+  },
+  "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024": {
+    "baseline": {
+      "ns": 49059125.0,
+      "MBps": 21.37,
+      "allocated_bytes": 152561582,
+      "allocations": 729839
+    },
+    "phosphor": {
+      "ns": 7064176.0,
+      "MBps": 148.44,
+      "allocated_bytes": 16403,
+      "allocations": 60
+    }
+  },
+  "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024": {
+    "baseline": {
+      "ns": 45791300.0,
+      "MBps": 22.9,
+      "allocated_bytes": 152464896,
+      "allocations": 729497
+    },
+    "phosphor": {
+      "ns": 5683787.0,
+      "MBps": 184.49,
+      "allocated_bytes": 1032,
+      "allocations": 5
+    }
+  }
+}

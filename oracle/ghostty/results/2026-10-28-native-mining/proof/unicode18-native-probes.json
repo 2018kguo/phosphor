@@ -1,0 +1,392 @@
+[
+  {
+    "name": "unicode18-linker-without-leading-consonant",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027ha्"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "क"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-linker-through-extend",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027hà्‍"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "क"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-linker-interrupted-by-zwnj",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027ha्‌"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "क"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-linker-interrupted-by-spacing-mark",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027ha्ः"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "क"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-other-linker",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027haᳵ"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "क"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-other-linker-supplementary",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027ha𑨺"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "𑨋"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-new-hebrew-extend",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027hA"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "׈"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-new-oriya-extend",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027hA"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "୓"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-new-musical-extend",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 UAX29 GB9c and official18 newly assigned GCB Extend properties",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "\u001b[?2027hA"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "𝄧"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  },
+  {
+    "name": "unicode18-mode-off-linker-prefix",
+    "feature": "graphemes-unicode18",
+    "scope": "parity",
+    "source": "Unicode18 GB9c after a mode-off prefix; native replays stored scalars",
+    "cols": 8,
+    "rows": 3,
+    "actions": [
+      {
+        "kind": "write",
+        "data": "a्\u001b[?2027h"
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "write",
+        "data": "क"
+      },
+      {
+        "kind": "compact"
+      },
+      {
+        "kind": "resize",
+        "cols": 6,
+        "rows": 4
+      },
+      {
+        "kind": "snapshot"
+      },
+      {
+        "kind": "repaint"
+      },
+      {
+        "kind": "write",
+        "data": "X\r\nTAIL"
+      }
+    ]
+  }
+]

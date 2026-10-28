@@ -86,23 +86,23 @@ Matched headless runs put numbers on that tradeoff:
 
 | Workload or retained state | Phosphor compared with libghostty-vt |
 |---|---|
-| Shell prompts | About **9–26× less incremental RSS**, depending on emulator count and allocator amortization |
-| Completed editors and pagers | **19–50% less RSS**, with inactive editor buffers retained |
+| Shell prompts | About **10–26× less incremental RSS**, depending on emulator count and allocator amortization |
+| Completed editors and pagers | **19–51% less RSS**, with inactive editor buffers retained |
 | Exactly 100 styled history rows | About **3.1× less RSS**, with equal retained contents verified |
-| Editor/pager recordings and progress | **1.14–2.73× more bytes per CPU second** under the recorded budgets |
-| Scrolling logs | Native is **27% faster** with budgeted history; Phosphor is **2.1× faster** with history disabled |
-| Grapheme-heavy Unicode | Native is about **3× faster**, with grapheme mode enabled on both |
+| Editor/pager recordings and progress | **1.22–2.71× more bytes per CPU second** under the recorded budgets |
+| Scrolling logs | Native is **21% faster** with budgeted history; Phosphor is **2.2× faster** with history disabled |
+| Grapheme-heavy Unicode | Native is about **7–20% faster** with history, depending on write size; about **4% faster** without it |
 
 Inputs match, but equal byte budgets keep different amounts of history:
 Phosphor stores serialized logical lines; native prunes physical pages.
 The memory runs use 128 and 1,024 emulators in fresh processes and compact
 both engines. They exclude the child program and PTY. The
-[report](oracle/ghostty/results/2026-10-28-unicode-history/README.md) records
+[report](oracle/ghostty/results/2026-10-28-native-mining/README.md) records
 policies, all samples and a history-disabled parsing control. These are
 workload measurements, not per-session guarantees.
 
 Phosphor keeps that model in Go: no cgo, native library or separate build
-toolchain. Its API exposes cells directly, and the application decides when
+toolchain. Its production module has no external Go dependencies. Its API exposes cells directly, and the application decides when
 to compact storage and save a checkpoint. This makes it a useful fit for
 Go daemons that want to control the lifetime and cost of terminal state.
 Maintaining a separate emulator also means maintaining its compatibility;

@@ -1,0 +1,338 @@
+[
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+    "ns": 17423535.0,
+    "MBps": 60.18
+  },
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+    "ns": 13739979.0,
+    "MBps": 76.32
+  },
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+    "ns": 10365467.0,
+    "MBps": 101.16
+  },
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+    "ns": 8719554.0,
+    "MBps": 120.26
+  },
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+    "ns": 1456114.0,
+    "MBps": 720.13
+  },
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+    "ns": 928359.0,
+    "MBps": 1129.52
+  },
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 4049673.0,
+    "MBps": 258.95
+  },
+  {
+    "repeat": 0,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+    "ns": 3553906.0,
+    "MBps": 295.07
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+    "ns": 20832467.0,
+    "MBps": 50.33
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+    "ns": 14091672.0,
+    "MBps": 74.41
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+    "ns": 9989757.0,
+    "MBps": 104.97
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+    "ns": 8424955.0,
+    "MBps": 124.46
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+    "ns": 1429762.0,
+    "MBps": 733.41
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+    "ns": 913429.0,
+    "MBps": 1147.98
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 4024942.0,
+    "MBps": 260.54
+  },
+  {
+    "repeat": 0,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+    "ns": 3788234.0,
+    "MBps": 276.82
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+    "ns": 21658425.0,
+    "MBps": 48.42
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+    "ns": 14542077.0,
+    "MBps": 72.11
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+    "ns": 9997007.0,
+    "MBps": 104.89
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+    "ns": 8477061.0,
+    "MBps": 123.7
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+    "ns": 1430559.0,
+    "MBps": 733.0
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+    "ns": 909174.0,
+    "MBps": 1153.35
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 3778526.0,
+    "MBps": 277.53
+  },
+  {
+    "repeat": 1,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+    "ns": 3432120.0,
+    "MBps": 305.54
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+    "ns": 17422632.0,
+    "MBps": 60.19
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+    "ns": 13760724.0,
+    "MBps": 76.2
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+    "ns": 10326133.0,
+    "MBps": 101.55
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+    "ns": 8710196.0,
+    "MBps": 120.39
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+    "ns": 1461974.0,
+    "MBps": 717.25
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+    "ns": 918330.0,
+    "MBps": 1141.85
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 3937632.0,
+    "MBps": 266.31
+  },
+  {
+    "repeat": 1,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+    "ns": 3524883.0,
+    "MBps": 297.5
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+    "ns": 17449194.0,
+    "MBps": 60.09
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+    "ns": 13905135.0,
+    "MBps": 75.41
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+    "ns": 10588125.0,
+    "MBps": 99.04
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+    "ns": 8818179.0,
+    "MBps": 118.91
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+    "ns": 1434336.0,
+    "MBps": 731.07
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+    "ns": 921912.0,
+    "MBps": 1137.42
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 4069577.0,
+    "MBps": 257.68
+  },
+  {
+    "repeat": 2,
+    "label": "baseline",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+    "ns": 3487264.0,
+    "MBps": 300.71
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/budgeted/chunk-1024",
+    "ns": 17983389.0,
+    "MBps": 58.31
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/graphemes/none/chunk-1024",
+    "ns": 14389391.0,
+    "MBps": 72.87
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/budgeted/chunk-1024",
+    "ns": 10188146.0,
+    "MBps": 102.92
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/cjk/none/chunk-1024",
+    "ns": 8511744.0,
+    "MBps": 123.2
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/budgeted/chunk-1024",
+    "ns": 1453253.0,
+    "MBps": 721.55
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/ascii/none/chunk-1024",
+    "ns": 915265.0,
+    "MBps": 1145.68
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 4101071.0,
+    "MBps": 255.7
+  },
+  {
+    "repeat": 2,
+    "label": "batch",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/none/chunk-1024",
+    "ns": 3630295.0,
+    "MBps": 288.86
+  }
+]

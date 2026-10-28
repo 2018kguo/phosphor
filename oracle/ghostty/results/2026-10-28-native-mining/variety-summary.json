@@ -1,0 +1,30 @@
+{
+  "BenchmarkWriteGraphemeVariety/1024": {
+    "baseline": {
+      "ns": 63694062.0,
+      "MBps": 16.54,
+      "allocated_bytes": 240002278,
+      "allocations": 1014520
+    },
+    "phosphor": {
+      "ns": 26916276.0,
+      "MBps": 39.15,
+      "allocated_bytes": 45259019,
+      "allocations": 175739
+    }
+  },
+  "BenchmarkWriteGraphemeVariety/16": {
+    "baseline": {
+      "ns": 57321698.0,
+      "MBps": 18.29,
+      "allocated_bytes": 194762266,
+      "allocations": 1006040
+    },
+    "phosphor": {
+      "ns": 12729910.0,
+      "MBps": 82.37,
+      "allocated_bytes": 23839,
+      "allocations": 54
+    }
+  }
+}

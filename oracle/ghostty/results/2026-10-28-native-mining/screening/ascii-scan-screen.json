@@ -1,0 +1,254 @@
+[
+  {
+    "repeat": 0,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/vim/chunk-1024",
+    "ns": 14720.0,
+    "MBps": 466.85
+  },
+  {
+    "repeat": 0,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/less/chunk-1024",
+    "ns": 12696.0,
+    "MBps": 407.61
+  },
+  {
+    "repeat": 0,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/claude/chunk-1024",
+    "ns": 1974302.0,
+    "MBps": 531.6
+  },
+  {
+    "repeat": 0,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/logs/chunk-1024",
+    "ns": 1325291.0,
+    "MBps": 791.23
+  },
+  {
+    "repeat": 0,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/progress/chunk-1024",
+    "ns": 475664.0,
+    "MBps": 2204.92
+  },
+  {
+    "repeat": 0,
+    "label": "control",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 3954501.0,
+    "MBps": 265.18
+  },
+  {
+    "repeat": 0,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/vim/chunk-1024",
+    "ns": 16524.0,
+    "MBps": 415.87
+  },
+  {
+    "repeat": 0,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/less/chunk-1024",
+    "ns": 13198.0,
+    "MBps": 392.09
+  },
+  {
+    "repeat": 0,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/claude/chunk-1024",
+    "ns": 1948066.0,
+    "MBps": 538.76
+  },
+  {
+    "repeat": 0,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/logs/chunk-1024",
+    "ns": 1310319.0,
+    "MBps": 800.27
+  },
+  {
+    "repeat": 0,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/progress/chunk-1024",
+    "ns": 480601.0,
+    "MBps": 2182.27
+  },
+  {
+    "repeat": 0,
+    "label": "scan32",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 3914615.0,
+    "MBps": 267.88
+  },
+  {
+    "repeat": 1,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/vim/chunk-1024",
+    "ns": 14915.0,
+    "MBps": 460.74
+  },
+  {
+    "repeat": 1,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/less/chunk-1024",
+    "ns": 13195.0,
+    "MBps": 392.19
+  },
+  {
+    "repeat": 1,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/claude/chunk-1024",
+    "ns": 2015179.0,
+    "MBps": 520.82
+  },
+  {
+    "repeat": 1,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/logs/chunk-1024",
+    "ns": 1388905.0,
+    "MBps": 754.99
+  },
+  {
+    "repeat": 1,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/progress/chunk-1024",
+    "ns": 491835.0,
+    "MBps": 2132.42
+  },
+  {
+    "repeat": 1,
+    "label": "scan32",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 3948932.0,
+    "MBps": 265.55
+  },
+  {
+    "repeat": 1,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/vim/chunk-1024",
+    "ns": 14286.0,
+    "MBps": 481.01
+  },
+  {
+    "repeat": 1,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/less/chunk-1024",
+    "ns": 12540.0,
+    "MBps": 412.67
+  },
+  {
+    "repeat": 1,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/claude/chunk-1024",
+    "ns": 1947071.0,
+    "MBps": 539.04
+  },
+  {
+    "repeat": 1,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/logs/chunk-1024",
+    "ns": 1292978.0,
+    "MBps": 811.0
+  },
+  {
+    "repeat": 1,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/progress/chunk-1024",
+    "ns": 481027.0,
+    "MBps": 2180.34
+  },
+  {
+    "repeat": 1,
+    "label": "control",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 3972512.0,
+    "MBps": 263.98
+  },
+  {
+    "repeat": 2,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/vim/chunk-1024",
+    "ns": 14444.0,
+    "MBps": 475.78
+  },
+  {
+    "repeat": 2,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/less/chunk-1024",
+    "ns": 12628.0,
+    "MBps": 409.8
+  },
+  {
+    "repeat": 2,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/claude/chunk-1024",
+    "ns": 1929587.0,
+    "MBps": 543.92
+  },
+  {
+    "repeat": 2,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/logs/chunk-1024",
+    "ns": 1306570.0,
+    "MBps": 802.57
+  },
+  {
+    "repeat": 2,
+    "label": "control",
+    "case": "BenchmarkWriteStreamReply/progress/chunk-1024",
+    "ns": 480210.0,
+    "MBps": 2184.04
+  },
+  {
+    "repeat": 2,
+    "label": "control",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 4109974.0,
+    "MBps": 255.15
+  },
+  {
+    "repeat": 2,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/vim/chunk-1024",
+    "ns": 15502.0,
+    "MBps": 443.3
+  },
+  {
+    "repeat": 2,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/less/chunk-1024",
+    "ns": 13165.0,
+    "MBps": 393.09
+  },
+  {
+    "repeat": 2,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/claude/chunk-1024",
+    "ns": 1946283.0,
+    "MBps": 539.26
+  },
+  {
+    "repeat": 2,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/logs/chunk-1024",
+    "ns": 1326906.0,
+    "MBps": 790.27
+  },
+  {
+    "repeat": 2,
+    "label": "scan32",
+    "case": "BenchmarkWriteStreamReply/progress/chunk-1024",
+    "ns": 486959.0,
+    "MBps": 2153.77
+  },
+  {
+    "repeat": 2,
+    "label": "scan32",
+    "case": "BenchmarkWriteUnicodeAndLinks/links/budgeted/chunk-1024",
+    "ns": 3971947.0,
+    "MBps": 264.01
+  }
+]

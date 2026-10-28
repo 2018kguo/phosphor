@@ -1,0 +1,440 @@
+[
+  {
+    "chunk": 0,
+    "variant": "baseline",
+    "exit": 1,
+    "summary": {
+      "cases": 218,
+      "chunk": 0,
+      "coverage": "bounded named traces; not a terminal compliance percentage",
+      "direct_steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          852,
+          853
+        ]
+      },
+      "ghostty_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          746,
+          853
+        ]
+      },
+      "kind": "trace_summary",
+      "native_build": {
+        "build": "",
+        "source_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+        "version": "0.1.0-dev"
+      },
+      "parity_pass": false,
+      "phosphor_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          851,
+          853
+        ]
+      },
+      "steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          745,
+          853
+        ]
+      }
+    }
+  },
+  {
+    "chunk": 0,
+    "variant": "fused",
+    "exit": 1,
+    "summary": {
+      "cases": 218,
+      "chunk": 0,
+      "coverage": "bounded named traces; not a terminal compliance percentage",
+      "direct_steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          852,
+          853
+        ]
+      },
+      "ghostty_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          746,
+          853
+        ]
+      },
+      "kind": "trace_summary",
+      "native_build": {
+        "build": "",
+        "source_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+        "version": "0.1.0-dev"
+      },
+      "parity_pass": false,
+      "phosphor_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          851,
+          853
+        ]
+      },
+      "steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          745,
+          853
+        ]
+      }
+    }
+  },
+  {
+    "chunk": 1,
+    "variant": "baseline",
+    "exit": 1,
+    "summary": {
+      "cases": 218,
+      "chunk": 1,
+      "coverage": "bounded named traces; not a terminal compliance percentage",
+      "direct_steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          852,
+          853
+        ]
+      },
+      "ghostty_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          746,
+          853
+        ]
+      },
+      "kind": "trace_summary",
+      "native_build": {
+        "build": "",
+        "source_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+        "version": "0.1.0-dev"
+      },
+      "parity_pass": false,
+      "phosphor_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          851,
+          853
+        ]
+      },
+      "steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          745,
+          853
+        ]
+      }
+    }
+  },
+  {
+    "chunk": 1,
+    "variant": "fused",
+    "exit": 1,
+    "summary": {
+      "cases": 218,
+      "chunk": 1,
+      "coverage": "bounded named traces; not a terminal compliance percentage",
+      "direct_steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          852,
+          853
+        ]
+      },
+      "ghostty_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          746,
+          853
+        ]
+      },
+      "kind": "trace_summary",
+      "native_build": {
+        "build": "",
+        "source_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+        "version": "0.1.0-dev"
+      },
+      "parity_pass": false,
+      "phosphor_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          851,
+          853
+        ]
+      },
+      "steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          745,
+          853
+        ]
+      }
+    }
+  },
+  {
+    "chunk": 7,
+    "variant": "baseline",
+    "exit": 1,
+    "summary": {
+      "cases": 218,
+      "chunk": 7,
+      "coverage": "bounded named traces; not a terminal compliance percentage",
+      "direct_steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          852,
+          853
+        ]
+      },
+      "ghostty_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          746,
+          853
+        ]
+      },
+      "kind": "trace_summary",
+      "native_build": {
+        "build": "",
+        "source_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+        "version": "0.1.0-dev"
+      },
+      "parity_pass": false,
+      "phosphor_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          851,
+          853
+        ]
+      },
+      "steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          745,
+          853
+        ]
+      }
+    }
+  },
+  {
+    "chunk": 7,
+    "variant": "fused",
+    "exit": 1,
+    "summary": {
+      "cases": 218,
+      "chunk": 7,
+      "coverage": "bounded named traces; not a terminal compliance percentage",
+      "direct_steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          852,
+          853
+        ]
+      },
+      "ghostty_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          746,
+          853
+        ]
+      },
+      "kind": "trace_summary",
+      "native_build": {
+        "build": "",
+        "source_commit": "6ba144158577d033ccb6ed4b574e4013957c9161",
+        "version": "0.1.0-dev"
+      },
+      "parity_pass": false,
+      "phosphor_continuation_steps_by_scope_pass_total": {
+        "deliberate": [
+          1,
+          1
+        ],
+        "identity": [
+          2,
+          2
+        ],
+        "parity": [
+          851,
+          853
+        ]
+      },
+      "steps_by_scope_pass_total": {
+        "deliberate": [
+          0,
+          1
+        ],
+        "identity": [
+          0,
+          2
+        ],
+        "parity": [
+          745,
+          853
+        ]
+      }
+    }
+  }
+]
