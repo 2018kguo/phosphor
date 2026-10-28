@@ -2140,12 +2140,18 @@ func (t *Terminal) resizeTabs(oldCols int) {
 }
 
 func (t *Terminal) sgr() {
-	if t.nparams == 0 {
-		if t.cur.pen.E != 0 {
-			t.setUnderlineColor(0)
+	if t.nparams <= 1 {
+		if t.nparams == 0 || t.sub == 0 && t.params[0] == 0 {
+			if t.cur.pen.E != 0 {
+				t.setUnderlineColor(0)
+			}
+			t.cur.pen = cell{A: t.cur.pen.A & AttrProtected, E: t.cur.pen.E}
+			return
 		}
-		t.cur.pen = cell{A: t.cur.pen.A & AttrProtected, E: t.cur.pen.E}
-		return
+		if t.sub == 0 && t.params[0] >= 30 && t.params[0] <= 37 {
+			t.cur.pen.Fg = colorIndexed | Color(t.params[0]-30)
+			return
+		}
 	}
 	p := &t.cur.pen
 	nparams := int(t.nparams)
