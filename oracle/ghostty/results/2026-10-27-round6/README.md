@@ -6,7 +6,7 @@ Measured performance/prompt memory: `7a2e8f2f76e4b85a342ee87241e9738c7a39fad3`. 
 
 ## Compatibility
 
-The original 72-case corpus improved 150/174→174/174 direct and Phosphor continuation, including the old cluster-capacity case: [raw](final-original-corpus.jsonl). Expanded 208-case/773-action results:
+The original 72-case corpus improved 150/174→174/174 direct and Phosphor continuation. The additional historical cluster-capacity case also matches: [raw](final-original-corpus.jsonl). Expanded 208-case/773-action results:
 
 | Comparison | Pass / actions |
 |---|---:|
