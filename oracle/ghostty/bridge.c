@@ -22,6 +22,68 @@ GhosttyTerminal exp_new(int cols, int rows) {
   return t;
 }
 
+// Probe effective mouse behavior through the public encoder API. Mode bits
+// alone cannot identify the last-selected tracking mode or report format.
+int exp_mouse_report(GhosttyTerminal t, int action, bool pressed, int tracking, int format,
+                     uint8_t *out, size_t capacity, size_t *len) {
+  GhosttyMouseEncoder encoder = NULL;
+  GhosttyMouseEvent event = NULL;
+  int rc = ghostty_mouse_encoder_new(NULL, &encoder);
+  if (rc) return rc;
+  if ((rc = ghostty_mouse_event_new(NULL, &event))) goto done;
+  ghostty_mouse_encoder_setopt_from_terminal(encoder, t);
+  GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+  size.screen_width = 2048; size.screen_height = 4096;
+  size.cell_width = 8; size.cell_height = 16;
+  ghostty_mouse_encoder_setopt(encoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+  ghostty_mouse_encoder_setopt(encoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
+  if (tracking >= 0) {
+    GhosttyMouseTrackingMode v = (GhosttyMouseTrackingMode)tracking;
+    ghostty_mouse_encoder_setopt(encoder, GHOSTTY_MOUSE_ENCODER_OPT_EVENT, &v);
+  }
+  if (format >= 0) {
+    GhosttyMouseFormat v = (GhosttyMouseFormat)format;
+    ghostty_mouse_encoder_setopt(encoder, GHOSTTY_MOUSE_ENCODER_OPT_FORMAT, &v);
+  }
+  ghostty_mouse_event_set_action(event, (GhosttyMouseAction)action);
+  if (action != GHOSTTY_MOUSE_ACTION_MOTION || pressed)
+    ghostty_mouse_event_set_button(event, GHOSTTY_MOUSE_BUTTON_LEFT);
+  ghostty_mouse_event_set_position(event, (GhosttyMousePosition){1993, 49});
+  rc = ghostty_mouse_encoder_encode(encoder, event, (char *)out, capacity, len);
+done:
+  ghostty_mouse_event_free(event);
+  ghostty_mouse_encoder_free(encoder);
+  return rc;
+}
+
+static int exp_effective_mouse(GhosttyTerminal t, uint16_t *tracking, uint16_t *format) {
+  uint8_t out[64], candidate[64]; size_t len, candidate_len;
+  int pattern = 0, rc;
+  for (int n = 0; n < 4; n++) {
+    int action = n < 2 ? n : GHOSTTY_MOUSE_ACTION_MOTION;
+    if ((rc = exp_mouse_report(t, action, n == 2, -1, GHOSTTY_MOUSE_FORMAT_SGR, out, sizeof(out), &len))) return rc;
+    if (len) pattern |= 1 << n;
+  }
+  switch (pattern) {
+    case 0: *tracking = 0; break;
+    case 1: *tracking = 9; break;
+    case 3: *tracking = 1000; break;
+    case 7: *tracking = 1002; break;
+    case 15: *tracking = 1003; break;
+    default: return GHOSTTY_INVALID_VALUE;
+  }
+  // Keep tracking constant so a disabled mouse does not hide its format.
+  if ((rc = exp_mouse_report(t, GHOSTTY_MOUSE_ACTION_PRESS, false, GHOSTTY_MOUSE_TRACKING_NORMAL, -1, out, sizeof(out), &len))) return rc;
+  const uint16_t formats[] = {0, 1005, 1006, 1015, 1016};
+  for (int n = 0; n < 5; n++) {
+    if ((rc = exp_mouse_report(t, GHOSTTY_MOUSE_ACTION_PRESS, false, GHOSTTY_MOUSE_TRACKING_NORMAL, n, candidate, sizeof(candidate), &candidate_len))) return rc;
+    if (len == candidate_len && !memcmp(out, candidate, len)) {
+      *format = formats[n]; return 0;
+    }
+  }
+  return GHOSTTY_INVALID_VALUE;
+}
+
 int exp_info(GhosttyTerminal t, ExpInfo *i) {
   GhosttyTerminalScreen screen;
   GhosttyTerminalData keys[] = {
@@ -164,19 +226,21 @@ static uint32_t exp_color(GhosttyStyleColor c) {
 }
 void exp_capture_free(ExpState *out) {
   free(out->cells); free(out->wraps);
-  out->cells = NULL; out->wraps = NULL;
+  out->cells = NULL; out->wraps = NULL; out->prompts = NULL;
 }
 int exp_capture(GhosttyTerminal t, ExpState *out) {
   memset(out, 0, sizeof(*out));
   int rc = exp_info(t, &out->info);
   if (rc) return rc;
+  if ((rc = exp_effective_mouse(t, &out->mouse, &out->mouse_encoding))) return rc;
   if ((rc = ghostty_terminal_get(t, GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS, &out->history_rows))) return rc;
   out->total_rows = out->history_rows + out->info.rows;
   // Trace fixtures are bounded independently of production terminal limits.
   if (out->info.cols > 256 || out->total_rows > 256 || out->total_rows * out->info.cols > 32768)
     return GHOSTTY_LIMIT_EXCEEDED;
   out->cells = calloc(out->total_rows * out->info.cols, sizeof(ExpCell));
-  out->wraps = calloc(out->total_rows, 1);
+  out->wraps = calloc(out->total_rows, 2);
+  out->prompts = out->wraps ? out->wraps + out->total_rows : NULL;
   if (!out->cells || !out->wraps) { rc = GHOSTTY_OUT_OF_MEMORY; goto fail; }
   for (size_t y = 0; y < out->total_rows; y++) {
     for (size_t x = 0; x < out->info.cols; x++) {
@@ -185,10 +249,12 @@ int exp_capture(GhosttyTerminal t, ExpState *out) {
         .value = {.coordinate = {(uint16_t)x, (uint32_t)(y < out->history_rows ? y : y - out->history_rows)}}};
       if ((rc = ghostty_terminal_grid_ref(t, point, &ref))) goto fail;
       if (!x) {
-        GhosttyRow row; bool wrap;
+        GhosttyRow row; bool wrap; GhosttyRowSemanticPrompt prompt;
         if ((rc = ghostty_grid_ref_row(&ref, &row)) ||
-            (rc = ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &wrap))) goto fail;
+            (rc = ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &wrap)) ||
+            (rc = ghostty_row_get(row, GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, &prompt))) goto fail;
         out->wraps[y] = wrap;
+        out->prompts[y] = (uint8_t)prompt;
       }
       ExpCell *c = &out->cells[y * out->info.cols + x];
       GhosttyCell raw; GhosttyCellWide wide; GhosttyCellContentTag tag; bool protected;
@@ -223,7 +289,9 @@ int exp_capture(GhosttyTerminal t, ExpState *out) {
     GHOSTTY_MODE_INSERT, GHOSTTY_MODE_LINEFEED, GHOSTTY_MODE_ORIGIN, GHOSTTY_MODE_REVERSE_COLORS,
     GHOSTTY_MODE_SYNC_OUTPUT, GHOSTTY_MODE_X10_MOUSE, GHOSTTY_MODE_NORMAL_MOUSE,
     GHOSTTY_MODE_BUTTON_MOUSE, GHOSTTY_MODE_ANY_MOUSE, GHOSTTY_MODE_UTF8_MOUSE,
-    GHOSTTY_MODE_SGR_MOUSE, GHOSTTY_MODE_URXVT_MOUSE, GHOSTTY_MODE_SGR_PIXELS_MOUSE};
+    GHOSTTY_MODE_SGR_MOUSE, GHOSTTY_MODE_URXVT_MOUSE, GHOSTTY_MODE_SGR_PIXELS_MOUSE,
+    GHOSTTY_MODE_132_COLUMN, GHOSTTY_MODE_ENABLE_MODE_3, GHOSTTY_MODE_SLOW_SCROLL,
+    GHOSTTY_MODE_ALT_SCREEN_LEGACY, GHOSTTY_MODE_ALT_SCREEN, GHOSTTY_MODE_ALT_SCREEN_SAVE};
   for (size_t n = 0; n < sizeof(modes)/sizeof(*modes); n++) {
     GhosttyTerminalModeConfig v = {.mode = modes[n]};
     if ((rc = ghostty_terminal_get(t, GHOSTTY_TERMINAL_DATA_MODE, &v))) goto fail;

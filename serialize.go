@@ -3,6 +3,7 @@ package phosphor
 import (
 	"bytes"
 	"encoding/binary"
+	"math/bits"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ var sgrAttributeCodes = [...]struct {
 
 // appendSGR appends the escape sequence that sets exactly c's style,
 // starting from a reset.
-func appendSGR(b []byte, c cell) []byte {
+func (t *Terminal) appendSGR(b []byte, c cell) []byte {
 	b = append(b, "\x1b[0"...)
 	// Range by reference so each style does not copy the encoding table.
 	for _, a := range &sgrAttributeCodes {
@@ -38,6 +39,7 @@ func appendSGR(b []byte, c cell) []byte {
 	}
 	b = appendColor(b, c.Fg, 30)
 	b = appendColor(b, c.Bg, 40)
+	b = appendColor(b, t.extraAt(c.E).underline, 50)
 	return append(b, 'm')
 }
 
@@ -58,9 +60,9 @@ func appendColor(b []byte, c Color, base int) []byte {
 	n := int(c & 0xff)
 	b = append(b, ';')
 	switch {
-	case n < 8:
+	case n < 8 && base != 50:
 		return strconv.AppendInt(b, int64(base+n), 10)
-	case n < 16:
+	case n < 16 && base != 50:
 		return strconv.AppendInt(b, int64(base+60+n-8), 10)
 	}
 	b = strconv.AppendInt(b, int64(base+8), 10)
@@ -68,41 +70,57 @@ func appendColor(b []byte, c Color, base int) []byte {
 	return strconv.AppendInt(b, int64(n), 10)
 }
 
-func styleOf(c cell) cell { return cell{Fg: c.Fg, Bg: c.Bg, A: c.A, L: c.L} }
+func styleOf(c cell) cell { return cell{Fg: c.Fg, Bg: c.Bg, A: c.A, E: c.E} }
 
 // appendRow appends one row's characters with the escape sequences for
 // their styles, starting and ending in the default style. With trim,
 // trailing default blanks are left out.
-func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
-	if row == nil {
-		if !trim {
-			for range t.cols {
-				b = append(b, ' ')
-			}
-		}
-		return b
-	}
-	end := len(row)
+func (t *Terminal) appendRow(b []byte, row []cell, width int, trim bool) []byte {
+	return t.appendRowHistory(b, row, width, trim, false)
+}
+
+// appendRowHistory keeps sparse history cells distinct from literal spaces.
+// The local tag precedes the spaces the VT formatter already needs, so rows
+// still append in place and ordinary log lines keep their original bytes.
+func (t *Terminal) appendRowHistory(b []byte, row []cell, width int, trim, history bool) []byte {
+	end := width
 	if trim {
-		for end > 0 && isZeroAt(&row[end-1]) {
-			end--
-		}
+		end = min(end, contentEnd(row))
 	}
 	var style cell
-	// The style as two words (Fg; Bg, A and L), for two compares a cell.
+	// The style as two words (Fg; Bg, A and E), for two compares a cell.
 	var fg Color
 	var rest uint64
-	cells := row[:end]
+	cells := row[:min(end, len(row))]
+	if history {
+		// Stored default zeros and the implicit tail are one hole run.
+		// Its encoding must not depend on the row's allocated prefix.
+		for len(cells) > 0 && cells[len(cells)-1] == (cell{}) {
+			cells = cells[:len(cells)-1]
+		}
+	}
 	for i := 0; i < len(cells); {
 		c := &cells[i]
 		if c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {
-			if c.L != style.L || (c.A^style.A)&AttrProtected != 0 {
+			if c.E != style.E || (c.A^style.A)&AttrProtected != 0 {
 				b = t.appendStyle(b, style, *c)
 			} else {
-				b = appendSGR(b, *c)
+				b = t.appendSGR(b, *c)
 			}
 			style = styleOf(*c)
 			fg, rest = c.Fg, *(*uint64)(unsafe.Pointer(&c.Bg))
+		}
+		if history && c.R == 0 {
+			end := i + 1
+			for end < len(cells) && cells[end].R == 0 && styleOf(cells[end]) == style {
+				end++
+			}
+			b = append(b, 0)
+			b = binary.AppendUvarint(b, uint64(end-i))
+			for ; i < end; i++ {
+				b = append(b, ' ')
+			}
+			continue
 		}
 		if uint32(c.R-1) < utf8.RuneSelf-1 {
 			b = slices.Grow(b, len(cells)-i)
@@ -116,7 +134,13 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 		switch {
 		case r == wideTail: // printed with its left half (same style)
 		case r == 0, r == spacerHead:
-			b = append(b, ' ')
+			if r == 0 && t.cols == 1 && !history {
+				// A wide glyph cannot fit in one column: native writes an
+				// empty cell with the current pen and sets pending wrap.
+				b = utf8.AppendRune(b, '界')
+			} else {
+				b = append(b, ' ')
+			}
 		case r >= clusterBase:
 			var tail cell
 			if i < len(cells) && cells[i].R == wideTail {
@@ -127,14 +151,35 @@ func (t *Terminal) appendRow(b []byte, row []cell, trim bool) []byte {
 			b = utf8.AppendRune(b, r)
 		}
 	}
+	if end > len(cells) {
+		b = t.appendStyle(b, style, cell{})
+		style = cell{}
+	}
 	if style.A&AttrProtected != 0 {
 		b = appendProtect(b, false)
 	}
-	if style.L != 0 {
+	if t.link(style.E) != "" {
 		b = t.appendLink(b, 0)
 	}
-	if style.A&^AttrProtected != 0 || style.Fg != 0 || style.Bg != 0 {
+	if style.A&^AttrProtected != 0 || style.Fg != 0 || style.Bg != 0 || t.extraAt(style.E).underline != 0 {
 		b = append(b, "\x1b[0m"...)
+	}
+	if padding := end - len(cells); padding > 0 {
+		if history {
+			b = append(b, 0)
+			b = binary.AppendUvarint(b, uint64(padding))
+		}
+		if t.cols == 1 && !history {
+			// Implicit zero cells need the same clipped-wide print as
+			// stored zero cells to recreate a one-column pending wrap.
+			for range padding {
+				b = utf8.AppendRune(b, '界')
+			}
+		} else {
+			for range padding {
+				b = append(b, ' ')
+			}
+		}
 	}
 	return b
 }
@@ -158,14 +203,15 @@ func copyASCIICells(dst []byte, src []cell) int {
 // appendStyle appends what changes the style from to that of c.
 func (t *Terminal) appendStyle(b []byte, from, c cell) []byte {
 	s := styleOf(c)
+	oldExtra, newExtra := t.extraAt(from.E), t.extraAt(s.E)
 	if (s.A^from.A)&AttrProtected != 0 {
 		b = appendProtect(b, s.A&AttrProtected != 0)
 	}
-	if (s.A^from.A)&^AttrProtected != 0 || s.Fg != from.Fg || s.Bg != from.Bg {
-		b = appendSGR(b, s)
+	if (s.A^from.A)&^AttrProtected != 0 || s.Fg != from.Fg || s.Bg != from.Bg || oldExtra.underline != newExtra.underline {
+		b = t.appendSGR(b, s)
 	}
-	if s.L != from.L {
-		b = t.appendLink(b, s.L)
+	if oldExtra.link != newExtra.link {
+		b = t.appendLink(b, s.E)
 	}
 	return b
 }
@@ -173,10 +219,10 @@ func (t *Terminal) appendStyle(b []byte, from, c cell) []byte {
 // appendLink appends OSC 8 starting hyperlink l, or ending one (0).
 func (t *Terminal) appendLink(b []byte, l uint16) []byte {
 	b = append(b, "\x1b]8;"...)
-	if l == 0 {
+	if target := t.link(l); target == "" {
 		b = append(b, ';')
 	} else {
-		b = append(b, t.link(l)...)
+		b = append(b, target...)
 	}
 	return append(b, "\x1b\\"...)
 }
@@ -192,15 +238,254 @@ func appendProtect(b []byte, on bool) []byte {
 // appendWrapped appends a row that continues on next: all its cells (blanks
 // as spaces, so the row is full and the next character wraps), but for a
 // blank the wide character starting next left behind.
-func (t *Terminal) appendWrapped(b []byte, row, next []cell) []byte {
+func (t *Terminal) appendWrapped(b []byte, row, next []cell, saved *bool) []byte {
 	end := t.wrapEnd(row, next)
-	if row == nil {
-		for range end {
-			b = append(b, ' ')
-		}
-		return b
+	return t.appendRepaintRow(b, row, end, false, saved)
+}
+
+// appendRepaintRow repairs the empty cells that row printing temporarily
+// makes literal spaces. DECSC/DECRC preserve the pending wrap while ECH
+// repairs the row before the next print can move it into history.
+func (t *Terminal) appendRepaintRow(b []byte, row []cell, width int, trim bool, saved *bool) []byte {
+	end := width
+	if trim {
+		end = min(width, contentEnd(row))
 	}
-	return t.appendRow(b, row[:end], false)
+	if end == t.cols && t.canStageNarrowEdge(row) {
+		// Build a completed narrow cluster where its wide base fits, then
+		// shift it into the final column. Saving a temporary edge print
+		// keeps this row's pending wrap available to the next painted row.
+		b = t.appendRow(b, row[:end-1], end-1, false)
+		b = append(b, ' ', 0x1b, '7')
+		*saved = true
+		b = appendHPA(b, end-2)
+		b = t.appendRow(b, row[end-1:], 1, false)
+		b = appendHPA(b, end-2)
+		b = append(b, "\x1b[@"...)
+		x := end - 2
+		if row[x].R == wideTail {
+			x--
+		}
+		b = appendHPA(b, x)
+		b = t.appendRow(b, row[x:end-1], end-1-x, false)
+		b = append(b, "\x1b8"...)
+	} else {
+		b = t.appendRow(b, row, width, trim)
+	}
+	return t.appendRepaintHoles(b, row, end, 0, saved)
+}
+
+func appendHPA(b []byte, x int) []byte {
+	b = append(b, "\x1b["...)
+	b = strconv.AppendInt(b, int64(x+1), 10)
+	return append(b, 'G')
+}
+
+func (t *Terminal) canStageNarrowEdge(row []cell) bool {
+	if t.cols < 2 || len(row) != t.cols || row[t.cols-1].R < clusterBase {
+		return false
+	}
+	last := t.x.clusters[row[t.cols-1].R-clusterBase]
+	if last.width != 1 || clusterReplayWidth(last) < 2 {
+		return false
+	}
+	if previous := row[t.cols-2].R; previous >= clusterBase {
+		c := t.x.clusters[previous-clusterBase]
+		if c.width == 1 && clusterReplayWidth(c) > 1 {
+			return false // restoring it would overwrite the staged last cell
+		}
+	}
+	return true
+}
+
+func clusterReplayWidth(c cluster) int {
+	width, peak, index := 0, 0, 0
+	var previous rune
+	for _, cp := range c.text {
+		if index == 0 {
+			width = CodepointWidth(cp)
+		} else if c.joinModes.has(index) {
+			width, _ = graphemeWidthEffect(width, previous, cp)
+		}
+		peak = max(peak, width)
+		previous, index = cp, index+1
+	}
+	return peak
+}
+
+func (t *Terminal) appendRepaintHoles(b []byte, row []cell, end, offset int, saved *bool) []byte {
+	started := false
+	for x := 0; x < end; {
+		if !repaintHole(rowCell(row, x)) {
+			x++
+			continue
+		}
+		bg := rowCell(row, x).Bg
+		to := x + 1
+		for to < end && repaintHole(rowCell(row, to)) && rowCell(row, to).Bg == bg {
+			to++
+		}
+		if !started {
+			b = append(b, "\x1b7"...)
+			started, *saved = true, true
+		}
+		b = t.appendSGR(b, cell{Bg: bg})
+		b = appendHPA(b, offset+x)
+		b = append(b, "\x1b["...)
+		b = strconv.AppendInt(b, int64(to-x), 10)
+		if offset+to == t.cols {
+			// Inserting through the right edge replaces only these holes.
+			// ECH would also clear a wrap already restored by screen painting.
+			b = append(b, '@')
+		} else {
+			b = append(b, 'X')
+		}
+		x = to
+	}
+	if started {
+		b = append(b, "\x1b8"...)
+	}
+	return b
+}
+
+// appendPendingCursor recreates wrap at the physical edge, then uses CBT
+// to return to a saved column without clearing it. Tabs are restored before
+// saved cursors are built, so the temporary stop can be removed immediately.
+func (t *Terminal) appendPendingCursor(b []byte, scr [][]cell, c cursor) []byte {
+	edge := t.cols - 1
+	temporaryTab := c.x > 0 && c.x < edge && !t.isTab(c.x)
+	if temporaryTab {
+		b = appendCUP(b, c.y, c.x)
+		b = append(b, "\x1bH"...)
+	}
+	row := rowAt(scr, c.y)
+	x, end := edge, edge+1
+	if x > 0 && rowCell(row, x).R == wideTail {
+		x--
+	}
+	b = appendCUP(b, c.y, x)
+	b = append(b, "\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f"...)
+	row = row[min(x, len(row)):min(end, len(row))]
+	b = t.appendRow(b, row, end-x, false)
+	if t.cols > 1 {
+		usedSave := false
+		b = t.appendRepaintHoles(b, row, end-x, x, &usedSave)
+	}
+	if c.x < edge {
+		count := 1
+		for stop := c.x + 1; stop < edge; stop++ {
+			if t.isTab(stop) {
+				count++
+			}
+		}
+		b = append(b, "\x1b["...)
+		b = strconv.AppendInt(b, int64(count), 10)
+		b = append(b, 'Z')
+		if temporaryTab {
+			b = append(b, "\x1b[g"...)
+		}
+	}
+	return b
+}
+
+// Erase commands create empty cells with only a background. Preserve the
+// formatter's existing styled-space fallback for a clipped wide cell whose
+// retained foreground or attributes cannot be encoded as an ANSI empty cell.
+func repaintHole(c cell) bool {
+	return c.R == 0 && c.Fg == 0 && c.A == 0 && c.E == 0
+}
+
+// appendSavedCursor reinstates a screen's DECSC slot after painting used it.
+// With full margins, origin mode can save an arbitrary physical position.
+func (t *Terminal) appendSavedCursor(b []byte, slot int, originOn bool) []byte {
+	var s savedCursor
+	if t.saved != nil {
+		s = t.saved.screen[slot]
+	}
+	if !s.valid {
+		// Before margins and modes are restored, DECSTR can forget the
+		// temporary DECSC slot without changing the painted cells.
+		return append(b, "\x1b[!p\x1b[?25l"...)
+	}
+	switch {
+	case s.origin:
+		b = append(b, "\x1b[?6h"...)
+	case originOn:
+		b = append(b, "\x1b[?6l"...)
+	}
+	if s.wrapPending {
+		scr := t.main
+		if slot == 1 {
+			scr = t.alt
+		}
+		b = t.appendPendingCursor(b, scr, s.cursor)
+	} else {
+		b = appendCUP(b, s.y, s.x)
+	}
+	b = t.appendSGR(b, s.pen)
+	b = appendProtect(b, s.pen.A&AttrProtected != 0)
+	b = appendCharsets(b, s.cursor)
+	if s.ss != 0 {
+		b = append(b, 0x1b, 'L'+s.ss)
+	}
+	b = append(b, "\x1b7"...)
+	b = appendProtect(b, false)
+	if s.origin || s.ss != 0 {
+		b = append(b, "\x1b[?6l"...)
+	}
+	if s.ss != 0 {
+		// At column zero this combining mark has no base. It consumes the
+		// temporary single shift without changing cells or the saved slot.
+		b = append(b, "\x1b[H\u0300"...)
+	}
+	return append(b, "\x1b[0m\x1b(B\x1b)B\x1b*B\x1b+B\x0f"...)
+}
+
+func appendHistoryRepaint(b, line []byte, cols int, open bool, saved *bool) []byte {
+	sparse := false
+	if bytes.IndexByte(line, 0) >= 0 {
+		walkHistory(line, nil, func(start, spaces, end int) { sparse = true }, func(start, end int, flags rowFlags) { sparse = true })
+	}
+	clustered := bytes.Contains(line, []byte("\xef\xb8\x8e")) && bytes.Contains(line, []byte("\x1b[?2027h"))
+	if !sparse && !clustered {
+		return append(b, line...)
+	}
+	tmp := replayLine(line, cols)
+	if !sparse {
+		stage := false
+		for _, row := range tmp.main[:tmp.cur.y+1] {
+			stage = stage || tmp.canStageNarrowEdge(row)
+		}
+		if !stage {
+			return append(b, line...)
+		}
+	}
+	for y, row := range tmp.main[:tmp.cur.y+1] {
+		before := len(b)
+		if y < tmp.cur.y {
+			end := cols
+			if rowCell(row, end-1).R == spacerHead && startsWide(tmp.main[y+1]) {
+				end-- // history omits the spacer, regardless of its style
+			}
+			b = tmp.appendRepaintRow(b, row, end, false, saved)
+		} else if open {
+			end := tmp.cur.x
+			if tmp.cur.wrapPending {
+				end++
+			}
+			b = tmp.appendRepaintRow(b, row, end, false, saved)
+		} else {
+			b = tmp.appendRepaintRow(b, row, cols, true, saved)
+		}
+		if y > 0 && len(b) == before {
+			b = tmp.appendRepaintRow(b, []cell{{}}, 1, false, saved)
+		}
+		if flags := rowFlagsAt(tmp.mainWrap, y); flags&rowSemanticMask != 0 {
+			b = appendPromptMarker(b, flags)
+			b = append(b, "\x1b]133;D\x1b\\"...)
+		}
+	}
+	return b
 }
 
 func appendCUP(b []byte, y, x int) []byte {
@@ -223,10 +508,7 @@ func appendMode(b []byte, mode int, on bool) []byte {
 
 func appendCharsets(b []byte, c cursor) []byte {
 	for i, g := range c.g {
-		b = append(b, 0x1b, "()*+"[i], 'B')
-		if g {
-			b[len(b)-1] = '0'
-		}
+		b = append(b, 0x1b, "()*+"[i], [...]byte{'B', '0', 'A'}[g])
 	}
 	return append(b, [...]string{"\x0f", "\x0e", "\x1bn", "\x1bo"}[c.gl]...)
 }
@@ -266,11 +548,20 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	// Synchronized update, normalize the receiving terminal, hide the
 	// cursor while painting.
 	b = append(b, "\x1b[?2026h\x1b[?2027l\x1b[?1049l\x1b[?5l\x1b[?69l\x1b[0\"q\x1b[0m\x1b[r\x1b[?6l\x1b[?7h\x1b[4l\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[?25l\x1b[H\x1b[2J"...)
+	var savedModes []savedMode
+	if t.x != nil {
+		savedModes = t.x.savedModes
+	}
+	b = t.appendColumnModes(b, savedModes)
+	b, entryMode, exitMode := t.appendScreenModes(b, savedModes)
+	b = append(b, "\x1b[!p\x1b[?25l"...)
+	b = t.appendPromptRedraw(b)
 	sbOpen := false
+	usedSave := false
 	if withScrollback {
 		lines := t.sb[t.sbStart:]
-		for _, line := range lines {
-			b = append(b, line...)
+		for i, line := range lines {
+			b = appendHistoryRepaint(b, line, t.cols, i == len(lines)-1 && t.sbOpen, &usedSave)
 			b = append(b, "\r\n"...)
 		}
 		if sbOpen = t.sbOpen && len(lines) > 0; sbOpen {
@@ -285,24 +576,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		// the wide character that made it: keep the column.
 		b = append(b, ' ')
 	}
-	b = t.appendScreen(b, t.main, t.mainWrap, sbOpen, false)
-	if t.altActive {
-		// Enter the alternate screen from the main screen's saved cursor so
-		// leaving it later restores the right position.
-		if t.saved != nil && t.saved.alternate.valid {
-			b = appendCUP(b, t.saved.alternate.y, t.saved.alternate.x)
-			b = append(b, "\x1b[?1049h"...)
-		} else {
-			b = append(b, "\x1b[?1047h"...)
-		}
-		b = append(b, "\x1b[H\x1b[2J"...)
-		b = t.appendScreen(b, t.alt, t.altWrap, false, true)
-	} else if t.alt != nil {
-		// An alternate screen left with mode 47 keeps its contents.
-		b = append(b, "\x1b[?47h\x1b[H\x1b[2J"...)
-		b = t.appendScreen(b, t.alt, t.altWrap, false, true)
-		b = append(b, "\x1b[?47l"...)
-	}
+	b = t.appendScreen(b, t.main, t.mainWrap, sbOpen, false, &usedSave)
+	b = t.appendRowSemantics(b, t.mainWrap)
 	if t.tabs() != nil {
 		b = append(b, "\x1b[3g"...)
 		for x := range t.cols {
@@ -312,11 +587,59 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			}
 		}
 	}
-	var savedModes []savedMode
-	if t.x != nil {
-		savedModes = t.x.savedModes
+	if t.altActive {
+		if usedSave || t.saved != nil && t.saved.screen[0].valid {
+			b = t.appendSavedCursor(b, 0, false)
+			usedSave = false
+		}
+		p := t.x.inactivePrimary
+		b = t.appendSemanticCursor(b, 0, p.y)
+		if p.pending {
+			c := t.cur
+			c.x, c.y, c.wrapPending, c.origin = p.x, p.y, p.pending, false
+			b = t.appendPendingCursor(b, t.main, c)
+		} else {
+			b = appendCUP(b, p.y, p.x)
+		}
+		if entryMode == 1049 && t.saved != nil && t.saved.screen[0].valid {
+			c := t.saved.screen[0].cursor
+			b = t.appendSGR(b, c.pen)
+			b = appendProtect(b, c.pen.A&AttrProtected != 0)
+			b = appendCharsets(b, c)
+			if c.ss != 0 {
+				b = append(b, 0x1b, 'L'+c.ss)
+			}
+		}
+		b = appendMode(b, entryMode, true)
+
+		b = append(b, "\x1b[!p\x1b[?25l\x1b[?6l\x1b[0m\x1b[0\"q\x1b]8;;\x1b\\\x1b(B\x1b)B\x1b*B\x1b+B\x0f\x1b[H\x1b[2J"...)
+		b = t.appendScreen(b, t.alt, t.altWrap, false, true, &usedSave)
+		b = t.appendRowSemantics(b, t.altWrap)
+	} else if t.alt != nil || t.saved != nil && t.saved.screen[1].valid {
+		// A kept alternate screen must remain available to the next switch.
+		usedSave = usedSave || entryMode == 1049
+		b = appendMode(b, entryMode, true)
+		b = append(b, "\x1b[!p\x1b[?25l\x1b[H\x1b[2J"...)
+		altUsedSave := false
+		b = t.appendScreen(b, t.alt, t.altWrap, false, true, &altUsedSave)
+		b = t.appendRowSemantics(b, t.altWrap)
+		if altUsedSave || t.saved != nil && t.saved.screen[1].valid {
+			b = t.appendSavedCursor(b, 1, false)
+		}
+		b = t.appendSemanticCursor(b, 1, 0)
+		if exitMode == 1047 {
+			b = t.appendSGR(b, cell{Bg: t.alternateEraseBackground()})
+			if t.protISO {
+				b = append(b, "\x1bV"...)
+			}
+		}
+		b = appendMode(b, exitMode, false)
 	}
+
 	for _, m := range savedModes {
+		if m.mode == 3 || m.mode == 40 || screenModeBit(m.mode) != 0 {
+			continue
+		}
 		b = appendMode(b, m.mode, m.on)
 		b = append(b, "\x1b[?"...)
 		b = strconv.AppendInt(b, int64(m.mode), 10)
@@ -324,6 +647,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	}
 	originOn := false // whether the restored modes left origin mode on
 	for _, m := range savedModes {
+		if m.mode == 3 || m.mode == 40 || screenModeBit(m.mode) != 0 {
+			continue
+		}
 		on, _ := t.modeValue(m.mode)
 		b = appendMode(b, m.mode, on && m.mode != 25)
 		if m.mode == 6 {
@@ -334,34 +660,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.altActive {
 		slot = 1
 	}
-	if t.saved != nil && t.saved.screen[slot].valid {
-		s := t.saved.screen[slot]
-		// Origin mode homes the cursor, so it goes first. The region and
-		// margins are not set yet, so the position is absolute even then
-		// (a saved cursor may lie outside the region set since).
-		switch {
-		case s.origin:
-			b = append(b, "\x1b[?6h"...)
-		case originOn:
-			b = append(b, "\x1b[?6l"...) // DECSC saves origin mode too
-		}
-		b = appendCUP(b, s.y, s.x)
-		b = appendSGR(b, s.pen)
-		b = appendProtect(b, s.pen.A&AttrProtected != 0)
-		if s.pen.L != 0 {
-			b = t.appendLink(b, s.pen.L)
-		}
-		b = appendCharsets(b, s.cursor)
-		b = append(b, "\x1b7"...)
-		b = appendProtect(b, false)
-		if s.pen.L != 0 {
-			b = t.appendLink(b, 0)
-		}
-		if s.origin {
-			b = append(b, "\x1b[?6l"...)
-		}
-		b = append(b, "\x1b(B\x1b)B\x1b*B\x1b+B\x0f"...)
-		originOn = false // either way the block leaves origin mode off
+	if usedSave || t.saved != nil && t.saved.screen[slot].valid {
+		b = t.appendSavedCursor(b, slot, originOn)
+		originOn = false
 	}
 	if t.top != 0 || t.bot != t.rows-1 {
 		b = append(b, "\x1b["...)
@@ -382,6 +683,9 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	}
 	// Cursor. Origin mode homes the cursor when switched on, so it is
 	// enabled first and followed by a region-relative CUP.
+	b = appendMode(b, 6, false)
+	originOn = false
+	b = t.appendSemanticCursor(b, t.semanticSlot(), t.cur.y)
 	x, y := t.cur.x, t.cur.y
 	if originOn && (!t.cur.origin || t.cur.wrapPending) {
 		// The restored modes left origin mode on, and the CUP below is
@@ -389,23 +693,57 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = append(b, "\x1b[?6l"...)
 	}
 	if !t.autowrap && t.cur.wrapPending {
-		// Disable wrapping before the final edge print: it sets pending
-		// wrap even with DECAWM off, while disabling it afterwards clears it.
+		// Disable wrapping before the final edge print so restoring a
+		// one-column empty cell does not advance to another row.
 		b = appendMode(b, 7, false)
 	}
-	if t.cur.wrapPending {
-		// Reprint the last cell to recreate the pending wrap.
+	savedSlot := 0
+	if t.altActive {
+		savedSlot = 1
+	}
+	invalidSaved := t.saved == nil || !t.saved.screen[savedSlot].valid
+	canRepairPending := t.cur.wrapPending && invalidSaved && !t.cur.origin && t.top == 0 && t.bot == t.rows-1 && t.left == 0 && t.right == t.cols-1
+	if canRepairPending {
+		b = t.appendPendingCursor(b, t.screen(), t.cur)
+		// Native DECSTR preserves pending wrap while forgetting the
+		// temporary DECSC slot used to turn printed spaces back into holes.
+		b = append(b, "\x1b[!p\x1b[?25l"...)
+		if t.lrmm {
+			b = appendMode(b, 69, true)
+		}
+	} else if t.cur.wrapPending {
+		// A tab can move the cursor while leaving wrap pending. Recreate
+		// the wrap at the edge, then use CBT to return without clearing it.
 		row := t.screen()[y]
-		cx, end := x, x+1
-		if row != nil && cx > 0 && row[cx].R == wideTail {
+		edge := t.cols - 1
+		if x <= t.right {
+			edge = t.right
+		}
+		temporaryTab := x > 0 && x < edge && !t.isTab(x)
+		if temporaryTab {
+			b = appendCUP(b, y, x)
+			b = append(b, "\x1bH"...)
+		}
+		cx, end := edge, edge+1
+		if cx > 0 && rowCell(row, cx).R == wideTail {
 			cx--
 		}
 		b = appendCUP(b, y, cx)
 		b = append(b, "\x1b[0m"...)
-		if row == nil {
-			b = append(b, ' ')
-		} else {
-			b = t.appendRow(b, row[cx:end], false)
+		b = t.appendRow(b, row[min(cx, len(row)):min(end, len(row))], end-cx, false)
+		if x < edge {
+			count := 1
+			for stop := x + 1; stop < edge; stop++ {
+				if t.isTab(stop) {
+					count++
+				}
+			}
+			b = append(b, "\x1b["...)
+			b = strconv.AppendInt(b, int64(count), 10)
+			b = append(b, 'Z')
+			if temporaryTab {
+				b = append(b, "\x1b[g"...)
+			}
 		}
 		if t.cur.origin {
 			b = append(b, "\x1b[?6h"...)
@@ -413,15 +751,35 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 			// recreated in that combination, so land on the last column.
 			b = appendCUP(b, y-t.top, x-t.left)
 		}
+	} else if t.canStageOriginCursor() {
+		// ED22 on a scratch alternate screen can reach physical positions
+		// above/left of origin margins. Mode 47 copies that cursor back
+		// without touching the painted main screen or either DECSC slot.
+		b = append(b, "\x1b[?47h\x1b[?6h\x1b[0m.\x1b[22J"...)
+		if y > 0 {
+			b = append(b, "\x1b["...)
+			b = strconv.AppendInt(b, int64(y), 10)
+			b = append(b, 'B')
+		}
+		if x > 0 {
+			b = append(b, "\x1b["...)
+			b = strconv.AppendInt(b, int64(x), 10)
+			b = append(b, 'C')
+		}
+		mode := 47
+		if t.privateModes()&privateMode47 != 0 {
+			mode = 1047
+		}
+		b = appendMode(b, mode, false)
 	} else if t.cur.origin {
 		b = append(b, "\x1b[?6h"...)
 		b = appendCUP(b, y-t.top, x-t.left)
 	} else {
 		b = appendCUP(b, y, x)
 	}
-	b = appendSGR(b, t.cur.pen)
-	if t.cur.pen.L != 0 {
-		b = t.appendLink(b, t.cur.pen.L)
+	b = t.appendSGR(b, t.cur.pen)
+	if t.link(t.cur.pen.E) != "" {
+		b = t.appendLink(b, t.cur.pen.E)
 	}
 	switch prot := t.cur.pen.A&AttrProtected != 0; {
 	case t.protISO && prot:
@@ -432,14 +790,17 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 		b = appendProtect(b, true)
 	}
 	b = appendCharsets(b, t.cur)
-	if t.ss != 0 {
-		b = append(b, 0x1b, 'L'+t.ss) // SS2 is ESC N, SS3 ESC O
+	if t.cur.ss != 0 {
+		b = append(b, 0x1b, 'L'+t.cur.ss) // SS2 is ESC N, SS3 ESC O
 	}
-	if !t.autowrap && !t.cur.wrapPending {
+	if !t.autowrap {
 		b = appendMode(b, 7, false)
 	}
 	if t.reverseVideo {
 		b = appendMode(b, 5, true)
+	}
+	if t.privateModes()&privateModeSlowScroll != 0 {
+		b = appendMode(b, 4, true)
 	}
 	if t.revWrap {
 		b = appendMode(b, 45, true)
@@ -459,12 +820,8 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	if t.appKeypad {
 		b = append(b, "\x1b="...)
 	}
-	if t.mouse != 0 {
-		b = appendMode(b, int(t.mouse), true)
-	}
-	if t.mouseEnc != 0 {
-		b = appendMode(b, int(t.mouseEnc), true)
-	}
+	b = appendMouseModes(b, t.mouse, mouseTrackingNumbers)
+	b = appendMouseModes(b, t.mouseEnc, mouseEncodingNumbers)
 	if t.focus {
 		b = appendMode(b, 1004, true)
 	}
@@ -500,6 +857,12 @@ func (t *Terminal) AppendRepaint(b []byte, withScrollback bool) []byte {
 	return t.appendContinuation(b)
 }
 
+func (t *Terminal) canStageOriginCursor() bool {
+	return t.cur.origin && !t.cur.wrapPending && !t.altActive && t.altBlank() &&
+		t.privateModes()&(privateMode47|privateMode1047) != privateMode47|privateMode1047 &&
+		(t.cur.x < t.left || t.cur.y < t.top) && t.cur.x <= t.right && t.cur.y <= t.bot
+}
+
 // appendContinuation reconstructs the unfinished parser prefix from its
 // bounded state. Replaying the original input would repeat controls which
 // already moved the cursor or rang the bell. Keeping no separate raw log
@@ -517,7 +880,7 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 		if t.marker != 0 {
 			b = append(b, t.marker)
 		}
-		if t.paramSet {
+		if t.paramSet || t.nparams != 0 {
 			for i := 0; i <= min(int(t.nparams), maxParams-1); i++ {
 				if i > 0 {
 					separator := byte(';')
@@ -526,7 +889,9 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 					}
 					b = append(b, separator)
 				}
-				b = strconv.AppendInt(b, int64(t.params[i]), 10)
+				if i != int(t.nparams) || t.paramSet {
+					b = strconv.AppendInt(b, int64(t.params[i]), 10)
+				}
 			}
 			if t.nparams == maxParams {
 				// Further parameter bytes are ignored once the array fills.
@@ -569,10 +934,10 @@ func (t *Terminal) appendContinuation(b []byte) []byte {
 // With open, the first row continues a line already painted. With
 // addressed, rows are reached with cursor moves (blank rows skipped);
 // otherwise they flow in separated by CR LF.
-func (t *Terminal) appendScreen(b []byte, scr [][]cell, wrap []bool, open, addressed bool) []byte {
+func (t *Terminal) appendScreen(b []byte, scr [][]cell, wrap []rowFlags, open, addressed bool, saved *bool) []byte {
 	for y, row := range scr {
-		cont := open && y == 0 || y > 0 && wrap != nil && wrap[y-1]
-		next := y < len(scr)-1 && wrap != nil && wrap[y]
+		cont := open && y == 0 || y > 0 && wrap != nil && wrap[y-1]&rowWrap != 0
+		next := y < len(scr)-1 && wrap != nil && wrap[y]&rowWrap != 0
 		if addressed && !cont {
 			if !next && zeroRow(row) {
 				continue
@@ -581,18 +946,21 @@ func (t *Terminal) appendScreen(b []byte, scr [][]cell, wrap []bool, open, addre
 		}
 		n := len(b)
 		if next {
-			b = t.appendWrapped(b, row, scr[y+1])
+			b = t.appendWrapped(b, row, scr[y+1], saved)
 		} else {
-			b = t.appendRow(b, row, true)
+			b = t.appendRepaintRow(b, row, t.cols, true, saved)
 		}
 		if cont && len(b) == n {
 			// Something must be printed for the wrap to happen.
 			c := cell{R: ' '}
-			if row != nil {
+			if len(row) > 0 {
 				c = styleOf(row[0])
 				c.R = ' '
 			}
-			b = t.appendRow(b, []cell{c}, false)
+			if rowCell(row, 0).R == 0 {
+				c.R = 0
+			}
+			b = t.appendRepaintRow(b, []cell{c}, 1, false, saved)
 		}
 		if cont && !next && contentEnd(row) < t.cols {
 			// The wrap may have scrolled in a row painted in the current
@@ -639,17 +1007,33 @@ func (t *Terminal) rowText(row []cell) string {
 // scrollback line holds.
 func stripSGR(line []byte) string {
 	var sb strings.Builder
-	walkHistoryText(line, func(text []byte) { sb.Write(text) })
+	walkHistory(line, func(text []byte) { sb.Write(text) }, ignoreHistoryHoles, ignoreHistoryRows)
 	return sb.String()
 }
 
+func ignoreHistoryHoles(start, spaces, end int)        {}
+func ignoreHistoryRows(start, end int, flags rowFlags) {}
+
+func validateHistoryLine(line []byte) bool {
+	return walkHistory(line, nil, ignoreHistoryHoles, ignoreHistoryRows)
+}
+
 // walkHistoryText scans the bounded grammar produced by appendRow: text,
-// CSI styles/modes/EL and OSC 8 links terminated by ST. Sharing this lexer
+// CSI styles/modes/EL and OSC 8 rare terminated by ST. Sharing this lexer
 // keeps text extraction and history allocation sizing independent of URLs.
 func walkHistoryText(line []byte, text func([]byte)) bool {
+	return walkHistory(line, text, nil, nil)
+}
+
+// walkHistory shares the formatter grammar across text, replay and snapshot
+// validation. A nonnil holes callback enables the sparse history extension:
+// NUL, a canonical positive uvarint, then exactly that many ASCII spaces.
+// The callback receives the tag start, spaces start and spaces end offsets.
+// NUL inside an OSC payload is ordinary payload, never a sparse tag.
+func walkHistory(line []byte, text func([]byte), holes func(start, spaces, end int), rows func(start, end int, flags rowFlags)) bool {
 	for i := 0; i < len(line); {
 		start := i
-		for i < len(line) && line[i] != 0x1b {
+		for i < len(line) && line[i] != 0x1b && line[i] != 0 {
 			if i+8 <= len(line) && printable8(binary.LittleEndian.Uint64(line[i:])) {
 				i += 8
 				continue
@@ -669,6 +1053,34 @@ func walkHistoryText(line []byte, text func([]byte)) bool {
 		}
 		if i == len(line) {
 			return true
+		}
+		if line[i] == 0 {
+			n, size := binary.Uvarint(line[i+1:])
+			if n == 0 {
+				// A zero count is a typed row annotation, never an empty hole.
+				// The kind is 0 none,1 primary prompt,2 continuation.
+				if rows == nil || size != 1 || i+4 > len(line) || line[i+2] != 'P' || line[i+3] > 2 {
+					return false
+				}
+				rows(i, i+4, rowFlags(line[i+3])<<1)
+				i += 4
+				continue
+			}
+			if holes == nil || size <= 0 || n > uint64(len(line)-i-1-size) || size != (bits.Len64(n)+6)/7 {
+				return false
+			}
+			spaces, end := i+1+size, i+1+size+int(n)
+			for _, c := range line[spaces:end] {
+				if c != ' ' {
+					return false
+				}
+			}
+			holes(i, spaces, end)
+			if text != nil {
+				text(line[spaces:end])
+			}
+			i = end
+			continue
 		}
 		if i+2 > len(line) {
 			return false

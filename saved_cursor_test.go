@@ -36,7 +36,7 @@ func TestSavedCursorStorageIsLazy(t *testing.T) {
 	}
 }
 
-func TestSavedCursorLinksSurviveCompaction(t *testing.T) {
+func TestSavedCursorStylesAndLiveLinksSurviveCompaction(t *testing.T) {
 	term := New(12, 5)
 	term.Write([]byte("\x1b[2;3H\x1b[31m\x1b]8;;https://main\a\x1b7"))
 	term.Write([]byte("\x1b[34m\x1b]8;;https://1049\a\x1b[?1049h"))
@@ -46,15 +46,15 @@ func TestSavedCursorLinksSurviveCompaction(t *testing.T) {
 	}
 	term.Resize(14, 6)
 	term.Write([]byte("\x1b8A"))
-	if c := term.Cell(3, 2); c.Rune != 'A' || c.Link.URI != "https://alternate" || c.Style.Fg != IndexedColor(6) {
+	if c := term.Cell(3, 2); c.Rune != 'A' || c.Link.URI != "https://unused/99" || c.Style.Fg != IndexedColor(6) {
 		t.Fatalf("alternate DECSC after compaction: %+v", c)
 	}
 	term.Write([]byte("\x1b[?1049lB"))
-	if c := term.Cell(2, 1); c.Rune != 'B' || c.Link.URI != "https://1049" || c.Style.Fg != IndexedColor(4) {
+	if c := term.Cell(2, 1); c.Rune != 'B' || c.Link.URI != "" || c.Style.Fg != IndexedColor(4) {
 		t.Fatalf("1049 restore after compaction: %+v", c)
 	}
 	term.Write([]byte("\x1b8M"))
-	if c := term.Cell(2, 1); c.Rune != 'M' || c.Link.URI != "https://main" || c.Style.Fg != IndexedColor(1) {
+	if c := term.Cell(2, 1); c.Rune != 'M' || c.Link.URI != "" || c.Style.Fg != IndexedColor(4) {
 		t.Fatalf("main DECSC after compaction: %+v", c)
 	}
 	checkRepaint(t, term)

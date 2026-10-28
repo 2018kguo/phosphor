@@ -112,13 +112,14 @@ const (
 // program set them, and AttrInverse (and Modes.ReverseVideo) say to swap
 // them.
 type Style struct {
-	Fg, Bg    Color     // foreground and background
-	Attrs     Attr      // bold, italic...
-	Underline Underline // the underline style, if underlined
+	Fg, Bg         Color     // foreground and background
+	UnderlineColor Color     // default follows the foreground
+	Attrs          Attr      // bold, italic...
+	Underline      Underline // the underline style, if underlined
 }
 
-func publicStyle(c *cell) Style {
-	return Style{Fg: c.Fg, Bg: c.Bg, Attrs: c.A &^ ulMask, Underline: Underline(c.A >> ulShift & 7)}
+func (t *Terminal) publicStyle(c *cell) Style {
+	return Style{Fg: c.Fg, Bg: c.Bg, UnderlineColor: t.extraAt(c.E).underline, Attrs: c.A &^ ulMask, Underline: Underline(c.A >> ulShift & 7)}
 }
 
 // Hyperlink is an OSC 8 hyperlink. The zero value is no link.
@@ -190,7 +191,7 @@ func (c Cell) AppendText(b []byte) []byte {
 }
 
 // Palette is the set of colors a terminal reports to programs that ask
-// (OSC 4, 10, 11 and 12), and that a renderer uses to draw indexed and
+// (OSC 4, 10, 11, 12 and 21), and that a renderer uses to draw indexed and
 // default colors.
 type Palette struct {
 	Foreground RGB // the default foreground (OSC 10)
@@ -289,22 +290,59 @@ type MouseEncoding uint16
 
 // The mouse report encodings.
 const (
-	MouseEncodingDefault MouseEncoding = 0    // CSI M with bytes
-	MouseEncodingUTF8    MouseEncoding = 1005 // CSI M with UTF-8
-	MouseEncodingSGR     MouseEncoding = 1006 // CSI < ... M/m
-	MouseEncodingURXVT   MouseEncoding = 1015 // CSI ... M
+	MouseEncodingDefault   MouseEncoding = 0    // CSI M with bytes
+	MouseEncodingUTF8      MouseEncoding = 1005 // CSI M with UTF-8
+	MouseEncodingSGR       MouseEncoding = 1006 // CSI < ... M/m
+	MouseEncodingURXVT     MouseEncoding = 1015 // CSI ... M
+	MouseEncodingSGRPixels MouseEncoding = 1016 // CSI < ... M/m with pixel coordinates
+)
+
+// MouseTrackingModes records the independently enabled mouse tracking modes.
+// Mouse in Modes reports the most recently selected tracking behavior.
+type MouseTrackingModes uint8
+
+const (
+	MouseTrackingX10 MouseTrackingModes = 1 << iota
+	MouseTrackingNormal
+	MouseTrackingButtonEvent
+	MouseTrackingAnyEvent
+)
+
+// MouseEncodingModes records the independently enabled mouse report encodings.
+// MouseEncoding in Modes reports the most recently selected encoding.
+type MouseEncodingModes uint8
+
+const (
+	MouseEncodingModeUTF8 MouseEncodingModes = 1 << iota
+	MouseEncodingModeSGR
+	MouseEncodingModeURXVT
+	MouseEncodingModeSGRPixels
+)
+
+// AltScreenModes records independently enabled DEC alternate-screen modes.
+// Their bits may differ from the screen currently shown; the last set or
+// reset switches screens even when other mode bits remain enabled.
+type AltScreenModes uint8
+
+const (
+	AltScreenMode47 AltScreenModes = 1 << iota
+	AltScreenMode1047
+	AltScreenMode1049
 )
 
 // Modes are the terminal modes a program sets, mostly to say how input
 // should be encoded for it and how the screen should be drawn.
 type Modes struct {
-	AltScreen             bool          // the alternate screen is shown (47, 1047, 1049)
-	ApplicationCursorKeys bool          // DECCKM: cursor keys send ESC O A...
-	ApplicationKeypad     bool          // DECKPAM: the keypad sends application sequences
-	BracketedPaste        bool          // 2004: pasted text is wrapped in ESC [200~ ... ESC [201~
-	FocusEvents           bool          // 1004: report focus in and out
-	Mouse                 MouseMode     // the mouse events to report (9, 1000, 1002, 1003)
-	MouseEncoding         MouseEncoding // how to encode them (1005, 1006, 1015)
+	AltScreen             bool               // the alternate screen is shown (47, 1047, 1049)
+	AltScreenModes        AltScreenModes     // independent 47/1047/1049 bits
+	ApplicationCursorKeys bool               // DECCKM: cursor keys send ESC O A...
+	ApplicationKeypad     bool               // DECKPAM: the keypad sends application sequences
+	BracketedPaste        bool               // 2004: pasted text is wrapped in ESC [200~ ... ESC [201~
+	FocusEvents           bool               // 1004: report focus in and out
+	Mouse                 MouseMode          // the mouse events to report (9, 1000, 1002, 1003)
+	MouseEncoding         MouseEncoding      // how to encode them (1005, 1006, 1015, 1016)
+	MouseTrackingModes    MouseTrackingModes // enabled tracking bits, queried and saved independently
+	MouseEncodingModes    MouseEncodingModes // enabled encoding bits, queried and saved independently
 	// KittyKeyboard holds the kitty keyboard protocol flags in effect
 	// (CSI > u), 0 when the protocol is off.
 	KittyKeyboard uint16
@@ -317,5 +355,8 @@ type Modes struct {
 	// shown at once (2026): a renderer may wait for it to clear.
 	SyncUpdate bool
 	// GraphemeClustering joins Unicode grapheme clusters into cells (2027).
-	GraphemeClustering bool
+	GraphemeClustering   bool
+	Columns132           bool // DECCOLM (3): the program selected 132-column mode
+	AllowColumnSwitching bool // mode40 permits DECCOLM to resize the terminal
+	SmoothScrolling      bool // DEC mode4 requests smooth scrolling from the renderer
 }

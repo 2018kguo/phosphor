@@ -29,7 +29,7 @@ var (
 
 const snapshotMagic = "PHOSNP\x00\x00"
 const snapshotHeader = 24
-const snapshotVersion = 1
+const snapshotVersion = 2
 
 var snapshotCRC = crc32.MakeTable(crc32.Castagnoli)
 
@@ -63,8 +63,8 @@ func (t *Terminal) Snapshot() []byte {
 		for _, c := range x.clusters {
 			n += len(c.text) + 8
 		}
-		for _, s := range x.links {
-			n += len(s) + 4
+		for _, s := range x.rare {
+			n += len(s.link) + 9
 		}
 		n += 10*len(x.tabs) + 5*len(x.savedModes)
 	}
@@ -101,11 +101,12 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 			flags |= 1 << uint(i)
 		}
 	}
+	flags |= uint64(t.privateModes()) << 18
+	flags |= uint64(t.semantic[0])<<(18+privateModeCount) | uint64(t.semantic[1])<<(20+privateModeCount) | uint64(t.promptRedraw)<<(22+privateModeCount)
 	e.u(flags)
 	for _, n := range []int{t.top, t.bot, t.left, t.right, t.sbMaxLines, t.sbMaxBytes} {
 		e.u(uint64(n))
 	}
-	e.u(uint64(t.ss))
 	e.u(uint64(t.mouse))
 	e.u(uint64(t.mouseEnc))
 	e.u(uint64(t.cursorStyle.shape))
@@ -125,11 +126,13 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 	for _, c := range x.clusters {
 		e.blob([]byte(c.text))
 		e.u(uint64(c.width))
-		e.u(uint64(c.joinModes))
+		e.u(c.joinModes[0])
+		e.u(c.joinModes[1])
 	}
-	e.u(uint64(len(x.links)))
-	for _, s := range x.links {
-		e.blob([]byte(s))
+	e.u(uint64(len(x.rare)))
+	for _, s := range x.rare {
+		e.blob([]byte(s.link))
+		e.u(uint64(s.underline))
 	}
 	e.u(uint64(len(x.tabs)))
 	for _, bits := range x.tabs {
@@ -140,10 +143,15 @@ func (t *Terminal) AppendSnapshot(dst []byte) []byte {
 		e.u(uint64(s.mode))
 		e.boolean(s.on)
 	}
+	if t.altActive {
+		e.u(uint64(x.inactivePrimary.x))
+		e.u(uint64(x.inactivePrimary.y))
+		e.boolean(x.inactivePrimary.pending)
+	}
 	e.cursor(t.cur)
-	var saves [3]savedCursor
+	var saves [2]savedCursor
 	if t.saved != nil {
-		saves = [3]savedCursor{t.saved.screen[0], t.saved.screen[1], t.saved.alternate}
+		saves = t.saved.screen
 	}
 	var valid uint64
 	for i, c := range saves {
@@ -213,24 +221,28 @@ func (e *snapshotEncoder) style(c cell) {
 	e.u(uint64(c.Fg))
 	e.u(uint64(c.Bg))
 	e.u(uint64(c.A))
-	e.u(uint64(c.L))
+	e.u(uint64(c.E))
 }
 func (e *snapshotEncoder) cursor(c cursor) {
 	e.u(uint64(c.x))
 	e.u(uint64(c.y))
 	e.style(c.pen)
 	var flags uint64
-	for i, on := range []bool{c.wrapPending, c.origin, c.g[0], c.g[1], c.g[2], c.g[3]} {
+	for i, on := range []bool{c.wrapPending, c.origin} {
 		if on {
 			flags |= 1 << uint(i)
 		}
 	}
+	for i, g := range c.g {
+		flags |= uint64(g) << uint(2+2*i)
+	}
+	flags |= uint64(c.ss) << 10
 	e.u(flags)
 	e.u(uint64(c.gl))
 }
-func (e *snapshotEncoder) screen(screen [][]cell, wraps []bool) {
+func (e *snapshotEncoder) screen(screen [][]cell, wraps []rowFlags) {
 	for y, row := range screen {
-		e.boolean(wraps != nil && wraps[y])
+		e.u(uint64(rowFlagsAt(wraps, y)))
 		n := len(row)
 		for n > 0 && row[n-1] == (cell{}) {
 			n--
@@ -283,7 +295,8 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if len(data) < snapshotHeader || string(data[:8]) != snapshotMagic {
 		return fmt.Errorf("%w: header", ErrSnapshotMalformed)
 	}
-	if binary.LittleEndian.Uint16(data[8:]) != snapshotVersion {
+	version := binary.LittleEndian.Uint16(data[8:])
+	if version != 1 && version != snapshotVersion {
 		return ErrSnapshotVersion
 	}
 	if binary.LittleEndian.Uint16(data[10:]) != 0 || binary.LittleEndian.Uint64(data[12:]) != uint64(len(data)-snapshotHeader) {
@@ -293,7 +306,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	if binary.LittleEndian.Uint32(data[20:]) != crc32.Checksum(payload, snapshotCRC) {
 		return fmt.Errorf("%w: checksum", ErrSnapshotMalformed)
 	}
-	d := snapshotDecoder{b: payload, remaining: limits.MaxBytes, section: "terminal"}
+	d := snapshotDecoder{b: payload, remaining: limits.MaxBytes, section: "terminal", version: version}
 	d.charge(1, int(unsafe.Sizeof(Terminal{})))
 	var next Terminal
 	next.cols, next.rows = d.integer(), d.integer()
@@ -302,7 +315,11 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	} else if next.rows > limits.MaxCells/next.cols {
 		d.fail(ErrSnapshotLimit, "screen cells")
 	}
-	flags := d.number((1 << 18) - 1)
+	flagMask := uint64((1 << (24 + privateModeCount)) - 1)
+	if version == 1 {
+		flagMask = (1 << 18) - 1
+	}
+	flags := d.number(flagMask)
 	for i, p := range []*bool{&next.altActive, &next.lrmm, &next.protISO, &next.autowrap, &next.revWrap,
 		&next.revWrapExt, &next.insert, &next.newline, &next.cursorHidden, &next.reverseVideo, &next.appCursor,
 		&next.appKeypad, &next.bracketed, &next.focus, &next.sync, &next.grapheme, &next.sbOpen, &next.sbSpacer} {
@@ -314,14 +331,28 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		!next.lrmm && (next.left != 0 || next.right != next.cols-1) || next.sbMaxBytes < 1 {
 		d.fail(ErrSnapshotMalformed, "margins or scrollback policy")
 	}
-	next.ss = uint8(d.number(3))
-	if next.ss == 1 {
-		d.fail(ErrSnapshotMalformed, "single shift")
+	var legacySS uint8
+	if version == 1 {
+		legacySS = uint8(d.number(3))
+		if legacySS == 1 {
+			d.fail(ErrSnapshotMalformed, "single shift")
+		}
 	}
-	next.mouse, next.mouseEnc = uint16(d.number(1015)), uint16(d.number(1015))
-	if next.mouse != 0 && next.mouse != 9 && next.mouse != 1000 && next.mouse != 1002 && next.mouse != 1003 ||
-		next.mouseEnc != 0 && next.mouseEnc != 1005 && next.mouseEnc != 1006 && next.mouseEnc != 1015 {
-		d.fail(ErrSnapshotMalformed, "mouse mode")
+	if version == 1 {
+		tracking, encoding := int(d.number(1015)), int(d.number(1015))
+		if tracking != 0 && mouseModeBit(tracking, mouseTrackingNumbers) == 0 ||
+			encoding != 0 && (encoding == 1016 || mouseModeBit(encoding, mouseEncodingNumbers) == 0) {
+			d.fail(ErrSnapshotMalformed, "legacy mouse mode")
+		}
+		// V1 remembered only the effective mode. Other enabled bits were
+		// already lost by that release, so preserve the single known bit.
+		next.mouse = setMouseMode(0, tracking, true, mouseTrackingNumbers)
+		next.mouseEnc = setMouseMode(0, encoding, true, mouseEncodingNumbers)
+	} else {
+		next.mouse, next.mouseEnc = uint16(d.number(0x4f)), uint16(d.number(0x4f))
+		if !validMouseModes(next.mouse) || !validMouseModes(next.mouseEnc) {
+			d.fail(ErrSnapshotMalformed, "mouse modes")
+		}
 	}
 	next.cursorStyle = cursorAppearance{shape: CursorShape(d.number(uint64(CursorBar))), blink: d.boolean()}
 	next.lastChar = rune(d.number(utf8.MaxRune))
@@ -340,12 +371,45 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 	}
 	d.section = "lookup tables"
-	var x extra
+	x := extra{privateModes: uint8(flags>>18) & privateModeMask}
+	if version >= 2 {
+		screenBits := x.privateModes & (privateMode47 | privateMode1047 | privateMode1049)
+		if next.altActive && screenBits == 0 || !next.altActive && screenBits == privateMode47|privateMode1047|privateMode1049 {
+			d.fail(ErrSnapshotMalformed, "screen mode selection")
+		}
+	}
+	next.semantic = [2]semanticContent{semanticContent(flags>>(18+privateModeCount)) & 3, semanticContent(flags>>(20+privateModeCount)) & 3}
+	next.promptRedraw = promptRedraw(flags>>(22+privateModeCount)) & 3
+	if next.promptRedraw > promptRedrawLast {
+		d.fail(ErrSnapshotMalformed, "prompt redraw mode")
+	}
 	n = d.count(int(^uint32(0)>>1)-int(clusterBase)+1, int(unsafe.Sizeof(cluster{})))
 	if n > 0 {
 		x.clusters = make([]cluster, n)
 		for i := range x.clusters {
-			c := cluster{text: d.text(maxCluster), width: uint8(d.number(2)), joinModes: uint32(d.number(0xffffffff))}
+			bound := maxCluster
+			if version == 1 {
+				bound = 32
+			}
+			c := cluster{text: d.text(bound), width: uint8(d.number(2))}
+			if version == 1 {
+				// Released v1 indexed mode bits by UTF-8 byte offset. Reject
+				// non-boundaries before converting to codepoint indices.
+				old := uint32(d.number(0xffffffff))
+				index := 0
+				for offset := range c.text {
+					if offset != 0 && old&(1<<uint(offset)) != 0 {
+						c.joinModes.set(index)
+						old &^= 1 << uint(offset)
+					}
+					index++
+				}
+				if old != 0 {
+					d.fail(ErrSnapshotMalformed, "cluster byte boundary")
+				}
+			} else {
+				c.joinModes = clusterModes{d.u(), d.number(1)}
+			}
 			if !snapshotCluster(c) {
 				d.fail(ErrSnapshotMalformed, "cluster")
 			}
@@ -353,16 +417,22 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		}
 		x.clusterCap = max(64, len(x.clusters)*2)
 	}
-	n = d.count(0xffff, int(unsafe.Sizeof("")))
+	n = d.count(0xffff, int(unsafe.Sizeof(cellExtra{})))
 	if n > 0 {
-		x.links = make([]string, n)
-		for i := range x.links {
-			x.links[i] = d.text(maxOSC)
-			if !snapshotOSCText(x.links[i]) {
+		x.rare = make([]cellExtra, n)
+		for i := range x.rare {
+			x.rare[i].link = d.text(maxOSC)
+			if !snapshotOSCText(x.rare[i].link) {
 				d.fail(ErrSnapshotMalformed, "hyperlink terminator")
 			}
+			if version >= 2 {
+				x.rare[i].underline = Color(d.number(0xffffffff))
+				if !snapshotColor(x.rare[i].underline) {
+					d.fail(ErrSnapshotMalformed, "underline color")
+				}
+			}
 		}
-		x.linkCap = max(16, len(x.links)*2)
+		x.rareCap = min(0xffff, max(16, len(x.rare)*2))
 	}
 	n = d.count((next.cols+63)/64, 8)
 	if n > 0 {
@@ -374,7 +444,11 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 			x.tabs[i] = d.u()
 		}
 	}
-	n = d.count(16, int(unsafe.Sizeof(savedMode{})))
+	modeLimit := len(savedModeNumbers)
+	if version == 1 {
+		modeLimit = 16
+	}
+	n = d.count(modeLimit, int(unsafe.Sizeof(savedMode{})))
 	if n > 0 {
 		x.savedModes = make([]savedMode, n)
 		for i := range x.savedModes {
@@ -390,7 +464,10 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 			x.savedModes[i] = s
 		}
 	}
-	if x.clusters != nil || x.links != nil || x.tabs != nil || x.savedModes != nil {
+	if version >= 2 && next.altActive {
+		x.inactivePrimary = point{int(d.number(uint64(next.cols - 1))), int(d.number(uint64(next.rows - 1))), d.boolean()}
+	}
+	if next.altActive || x.clusters != nil || x.rare != nil || x.tabs != nil || x.savedModes != nil || x.privateModes != 0 {
 		if d.charge(1, int(unsafe.Sizeof(extra{}))) {
 			next.x = new(extra)
 			*next.x = x
@@ -398,15 +475,53 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 	}
 	d.section = "cursors"
 	next.cur = d.cursor(&next)
-	valid := d.number(7)
+	var legacyAlternate savedCursor
+	validMask := uint64(3)
+	if version == 1 {
+		validMask = 7
+		next.cur.ss = legacySS
+	}
+	valid := d.number(validMask)
 	if valid != 0 && d.charge(1, int(unsafe.Sizeof(savedCursors{}))) {
 		next.saved = &savedCursors{}
-		for i, c := range []*savedCursor{&next.saved.screen[0], &next.saved.screen[1], &next.saved.alternate} {
-			if valid&(1<<uint(i)) != 0 {
-				*c = savedCursor{cursor: d.cursor(&next), valid: true}
+		count := 2
+		if version == 1 {
+			count = 3
+		}
+		for i := 0; i < count; i++ {
+			if valid&(1<<uint(i)) == 0 {
+				continue
+			}
+			c := savedCursor{cursor: d.cursor(&next), valid: true}
+			if version == 1 {
+				c.pen.E = 0
+			} else if d.err == nil && next.link(c.pen.E) != "" {
+				d.fail(ErrSnapshotMalformed, "saved hyperlink")
+			}
+			if i == 2 {
+				legacyAlternate = c
+			} else {
+				next.saved.screen[i] = c
 			}
 		}
 	}
+	if version == 1 {
+		if next.altActive && next.x != nil {
+			// V1 only retained primary geometry when its separate 1049 save existed.
+			c := next.cur
+			if legacyAlternate.valid {
+				c = legacyAlternate.cursor
+			}
+			next.x.inactivePrimary = point{c.x, c.y, c.wrapPending}
+			next.x.privateModes |= privateMode47
+		}
+		// Native 1049 and DECSC share the primary save. The legacy third record
+		// is newer than the primary record when it exists; no third authority lives on.
+		if legacyAlternate.valid {
+			next.saved.screen[0] = legacyAlternate
+		}
+	}
+
 	d.section = "screens"
 	next.main, next.mainWrap = d.screen(&next)
 	if d.boolean() {
@@ -421,7 +536,13 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 		next.sb = make([][]byte, n)
 		for i := range next.sb {
 			b := d.blob(int(^uint(0) >> 1))
-			if d.err == nil && !walkHistoryText(b, nil) {
+			valid := false
+			if version == 1 {
+				valid = walkHistoryText(b, nil)
+			} else {
+				valid = validateHistoryLine(b)
+			}
+			if d.err == nil && !valid {
 				d.fail(ErrSnapshotMalformed, "history formatter syntax")
 			}
 			if d.err != nil {
@@ -488,6 +609,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 
 type snapshotDecoder struct {
 	b         []byte
+	version   uint16
 	remaining int
 	section   string
 	err       error
@@ -567,22 +689,42 @@ func (d *snapshotDecoder) rgb() RGB {
 	return RGB{b[0], b[1], b[2]}
 }
 func (d *snapshotDecoder) style(t *Terminal) cell {
-	c := cell{Fg: Color(d.number(0xffffffff)), Bg: Color(d.number(0xffffffff)), A: Attr(d.number(0xffff)), L: uint16(d.number(0xffff))}
-	validColor := func(c Color) bool { return c == 0 || c>>24 == 1 && c&0x00ffff00 == 0 || c>>24 == 2 }
-	if !validColor(c.Fg) || !validColor(c.Bg) || c.A & ^(AttrBold|AttrFaint|AttrItalic|AttrBlink|AttrInverse|AttrHidden|AttrStrikethrough|AttrOverline|AttrProtected|ulMask) != 0 || (c.A&ulMask)>>ulShift > Attr(UnderlineDashed) {
+	c := cell{Fg: Color(d.number(0xffffffff)), Bg: Color(d.number(0xffffffff)), A: Attr(d.number(0xffff)), E: uint16(d.number(0xffff))}
+	if !snapshotColor(c.Fg) || !snapshotColor(c.Bg) || c.A & ^(AttrBold|AttrFaint|AttrItalic|AttrBlink|AttrInverse|AttrHidden|AttrStrikethrough|AttrOverline|AttrProtected|ulMask) != 0 || (c.A&ulMask)>>ulShift > Attr(UnderlineDashed) {
 		d.fail(ErrSnapshotMalformed, "cell style")
 	}
-	if c.L != 0 && (t.x == nil || int(c.L) > len(t.x.links)) {
-		d.fail(ErrSnapshotMalformed, "hyperlink reference")
+	if c.E != 0 && (t.x == nil || int(c.E) > len(t.x.rare)) {
+		d.fail(ErrSnapshotMalformed, "cell attribute reference")
 	}
 	return c
 }
+
+func snapshotColor(c Color) bool {
+	return c == 0 || c>>24 == 1 && c&0x00ffff00 == 0 || c>>24 == 2
+}
 func (d *snapshotDecoder) cursor(t *Terminal) cursor {
 	c := cursor{x: d.integer(), y: d.integer(), pen: d.style(t)}
-	flags := d.number(63)
+	maximum := uint64(4095)
+	if d.version == 1 {
+		maximum = 63
+	}
+	flags := d.number(maximum)
 	c.wrapPending, c.origin = flags&1 != 0, flags&2 != 0
 	for i := range c.g {
-		c.g[i] = flags&(1<<uint(i+2)) != 0
+		if d.version == 1 {
+			c.g[i] = charset(flags >> uint(i+2) & 1)
+		} else {
+			c.g[i] = charset(flags >> uint(2+2*i) & 3)
+			if c.g[i] > charsetBritish {
+				d.fail(ErrSnapshotMalformed, "character set")
+			}
+		}
+	}
+	if d.version >= 2 {
+		c.ss = uint8(flags >> 10)
+		if c.ss == 1 {
+			d.fail(ErrSnapshotMalformed, "single shift")
+		}
 	}
 	c.gl = uint8(d.number(3))
 	if c.x >= t.cols || c.y >= t.rows {
@@ -590,35 +732,39 @@ func (d *snapshotDecoder) cursor(t *Terminal) cursor {
 	}
 	return c
 }
-func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []bool) {
+func (d *snapshotDecoder) screen(t *Terminal) ([][]cell, []rowFlags) {
 	if !d.charge(t.rows, int(unsafe.Sizeof([]cell{}))) {
 		return nil, nil
 	}
 	screen := make([][]cell, t.rows)
-	var wraps []bool
+	var wraps []rowFlags
 	for y := range screen {
 		if d.err != nil {
 			break
 		}
-		if d.boolean() {
-			if y == t.rows-1 {
+		flags := rowFlags(d.number(5))
+		if d.version == 1 && flags > 1 {
+			d.fail(ErrSnapshotMalformed, "legacy row wrap")
+		}
+		if flags != 0 {
+			if y == t.rows-1 && flags&rowWrap != 0 {
 				d.fail(ErrSnapshotMalformed, "last row wraps")
 			}
 			if wraps == nil && d.charge(t.rows, 1) {
-				wraps = make([]bool, t.rows)
+				wraps = make([]rowFlags, t.rows)
 			}
 			if wraps != nil {
-				wraps[y] = true
+				wraps[y] = flags
 			}
 		}
 		n := d.integer()
 		if n > t.cols {
 			d.fail(ErrSnapshotMalformed, "row length")
 		}
-		if n == 0 || !d.charge(t.cols, int(unsafe.Sizeof(cell{}))) {
+		if n == 0 || !d.charge(n, int(unsafe.Sizeof(cell{}))) {
 			continue
 		}
-		row := make([]cell, t.cols)
+		row := make([]cell, n)
 		screen[y] = row
 		wantTail := false
 		for i := 0; i < n && d.err == nil; {
@@ -679,16 +825,21 @@ func snapshotCluster(c cluster) bool {
 	if len(c.text) == 0 || !utf8.ValidString(c.text) || c.width < 1 || c.width > 2 || !snapshotScalar(firstRune(c.text)) {
 		return false
 	}
-	var starts uint32
-	for i, r := range c.text {
+	var starts clusterModes
+	index := 0
+	for _, r := range c.text {
+		if index >= maxClusterRunes {
+			return false
+		}
 		if r < 0x20 || r >= 0x7f && r < 0xa0 {
 			return false
 		}
-		if i != 0 {
-			starts |= 1 << uint(i)
+		if index != 0 {
+			starts.set(index)
 		}
+		index++
 	}
-	return c.joinModes & ^starts == 0
+	return c.joinModes[0] & ^starts[0] == 0 && c.joinModes[1] & ^starts[1] == 0
 }
 
 func snapshotOSCText(s string) bool {

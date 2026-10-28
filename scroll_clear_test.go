@@ -138,22 +138,21 @@ func TestScrollClearMarginsAlternateAndBounds(t *testing.T) {
 
 // DECRC can already leave the cursor outside an enabled origin region.
 // Scroll-and-clear reaches the same state when it homes a scrolled-away
-// cursor. VT repaint currently clamps that position; record the actual
-// cursor and next printed cell because state() normalizes this known limit.
-func TestScrollClearOutsideOriginReplayLimit(t *testing.T) {
+// cursor. Check physical coordinates and subsequent output directly.
+func TestScrollClearOutsideOriginReplay(t *testing.T) {
 	original := feed(8, 4, "A\x1b[2;3r\x1b[?69h\x1b[3;6s\x1b[?6hB\x1b[22J")
 	if cur := original.Cursor(); cur.X != 0 || cur.Y != 0 || !original.cur.origin {
 		t.Fatalf("scroll-and-clear cursor %+v, origin %v", cur, original.cur.origin)
 	}
 	restored := New(8, 4)
 	restored.Write(original.Repaint(true))
-	if cur := restored.Cursor(); cur.X != 2 || cur.Y != 1 || !restored.cur.origin {
-		t.Fatalf("known repaint bound changed: cursor %+v, origin %v", cur, restored.cur.origin)
+	if cur := restored.Cursor(); cur != original.Cursor() || !restored.cur.origin {
+		t.Fatalf("repaint moved cursor: %+v, origin %v", cur, restored.cur.origin)
 	}
 	original.Write([]byte("X"))
 	restored.Write([]byte("X"))
-	if original.Line(0) != "X" || restored.Line(1) != "  X" {
-		t.Fatalf("known continuation difference changed: original %q, restored %q", original.Lines(), restored.Lines())
+	if original.Line(0) != "X" || restored.Line(0) != "X" || original.Cursor() != restored.Cursor() {
+		t.Fatalf("repaint changed continuation: original %q, restored %q", original.Lines(), restored.Lines())
 	}
 }
 

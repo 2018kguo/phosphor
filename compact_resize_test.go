@@ -119,8 +119,8 @@ func TestResizeHistoryPoolsStayBoundedWithoutOutput(t *testing.T) {
 				}
 				// One retained history row has no live pool IDs. Allow a
 				// bounded cache, but never one entry set per resize cycle.
-				if term.x != nil && len(term.x.clusters)+len(term.x.links) > 4*100 {
-					t.Fatalf("cycle %d retained %d clusters and %d links", cycle, len(term.x.clusters), len(term.x.links))
+				if term.x != nil && len(term.x.clusters)+len(term.x.rare) > 4*100 {
+					t.Fatalf("cycle %d retained %d clusters and %d attribute pairs", cycle, len(term.x.clusters), len(term.x.rare))
 				}
 			}
 		})

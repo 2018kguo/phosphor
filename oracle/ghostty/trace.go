@@ -24,7 +24,6 @@ import (
 
 // This is a closed projection of the headless text model. Differences are
 // retained, including blanks, pending wrap, physical cursor and typed colors.
-// Underline color is observed on Ghostty even though phosphor lacks that field.
 type modelCell struct {
 	Text           string `json:"text"`
 	Width          int    `json:"width"`
@@ -42,20 +41,24 @@ type modelState struct {
 	Cols, Rows     int
 	Cursor         modelCursor
 	Alt            bool
-	Modes          [18]bool
+	Modes          [24]bool
+	Mouse          uint16
+	MouseEncoding  uint16
 	Kitty          uint16
 	Title          string
 	Screen         [][]modelCell
 	Wrapped        []bool
+	Prompt         []int
 	History        [][]modelCell
 	HistoryWrapped []bool
 	Replies        string
 }
 type tracedEngine struct {
 	Engine
-	replies   bytes.Buffer
-	native    *C.ExpReplies
-	replyBase string
+	replies       bytes.Buffer
+	native        *C.ExpReplies
+	replyBase     string
+	sharedPalette bool
 }
 
 func newTracedEngine(name string, cols, rows int) *tracedEngine {
@@ -73,8 +76,36 @@ func newTracedEngine(name string, cols, rows int) *tracedEngine {
 	return t
 }
 func (t *tracedEngine) Close() { t.Engine.Close(); C.exp_replies_free(t.native) }
+
+// A fixture can supply the same host palette to both engines before input.
+// This tests color reset behavior without treating different host defaults
+// as a protocol failure. Captured cells and reply bytes remain unchanged.
+func (g *ghost) sharedHostPalette() {
+	p := phosphor.DefaultPalette()
+	rgb := func(c phosphor.RGB) C.GhosttyColorRgb {
+		return C.GhosttyColorRgb{r: C.uint8_t(c.R), g: C.uint8_t(c.G), b: C.uint8_t(c.B)}
+	}
+	fg, bg, cursor := rgb(p.Foreground), rgb(p.Background), rgb(p.Cursor)
+	var colors [256]C.GhosttyColorRgb
+	for i, color := range p.Colors {
+		colors[i] = rgb(color)
+	}
+	must(C.int(C.ghostty_terminal_set(g.t, C.GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, unsafe.Pointer(&fg))))
+	must(C.int(C.ghostty_terminal_set(g.t, C.GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, unsafe.Pointer(&bg))))
+	must(C.int(C.ghostty_terminal_set(g.t, C.GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, unsafe.Pointer(&cursor))))
+	must(C.int(C.ghostty_terminal_set(g.t, C.GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, unsafe.Pointer(&colors[0]))))
+}
+
+func (g *ghost) mouseReport(action int, pressed bool, tracking, format int) ([]byte, error) {
+	var out [64]byte
+	var n C.size_t
+	if rc := C.exp_mouse_report(g.t, C.int(action), C.bool(pressed), C.int(tracking), C.int(format), (*C.uint8_t)(unsafe.Pointer(&out[0])), C.size_t(len(out)), &n); rc != 0 {
+		return nil, fmt.Errorf("native mouse encode: %d", int(rc))
+	}
+	return out[:int(n)], nil
+}
 func phosCell(c phosphor.Cell) modelCell {
-	return modelCell{Text: c.Text(), Width: c.Width, Fg: uint32(c.Style.Fg), Bg: uint32(c.Style.Bg), Attrs: uint16(c.Style.Attrs), Underline: uint8(c.Style.Underline), URI: c.Link.URI}
+	return modelCell{Text: c.Text(), Width: c.Width, Fg: uint32(c.Style.Fg), Bg: uint32(c.Style.Bg), Attrs: uint16(c.Style.Attrs), Underline: uint8(c.Style.Underline), UnderlineColor: uint32(c.Style.UnderlineColor), URI: c.Link.URI}
 }
 func (t *tracedEngine) state() (modelState, error) {
 	if p, ok := t.Engine.(*phos); ok {
@@ -85,8 +116,14 @@ func (t *tracedEngine) state() (modelState, error) {
 		if shape == 0 {
 			shape = 1
 		} // host default is a block in both constructors
-		s := modelState{Cols: cols, Rows: rows, Cursor: modelCursor{cur.X, cur.Y, shape, cur.Visible, cur.Blink, cur.PendingWrap}, Alt: m.AltScreen, Kitty: m.KittyKeyboard, Title: p.t.Title(), Replies: t.replies.String()}
-		s.Modes = [18]bool{m.ApplicationCursorKeys, m.ApplicationKeypad, m.BracketedPaste, m.FocusEvents, m.Autowrap, m.Insert, m.Newline, m.Origin, m.ReverseVideo, m.SyncUpdate, m.Mouse == 9, m.Mouse == 1000, m.Mouse == 1002, m.Mouse == 1003, m.MouseEncoding == 1005, m.MouseEncoding == 1006, m.MouseEncoding == 1015, m.MouseEncoding == 1016}
+		s := modelState{Cols: cols, Rows: rows, Cursor: modelCursor{cur.X, cur.Y, shape, cur.Visible, cur.Blink, cur.PendingWrap}, Alt: m.AltScreen, Kitty: m.KittyKeyboard, Title: p.t.Title(), Replies: t.replies.String(), Mouse: uint16(m.Mouse), MouseEncoding: uint16(m.MouseEncoding)}
+		s.Modes = [24]bool{m.ApplicationCursorKeys, m.ApplicationKeypad, m.BracketedPaste, m.FocusEvents, m.Autowrap, m.Insert, m.Newline, m.Origin, m.ReverseVideo, m.SyncUpdate,
+			m.MouseTrackingModes&phosphor.MouseTrackingX10 != 0, m.MouseTrackingModes&phosphor.MouseTrackingNormal != 0,
+			m.MouseTrackingModes&phosphor.MouseTrackingButtonEvent != 0, m.MouseTrackingModes&phosphor.MouseTrackingAnyEvent != 0,
+			m.MouseEncodingModes&phosphor.MouseEncodingModeUTF8 != 0, m.MouseEncodingModes&phosphor.MouseEncodingModeSGR != 0,
+			m.MouseEncodingModes&phosphor.MouseEncodingModeURXVT != 0, m.MouseEncodingModes&phosphor.MouseEncodingModeSGRPixels != 0,
+			m.Columns132, m.AllowColumnSwitching, m.SmoothScrolling,
+			m.AltScreenModes&phosphor.AltScreenMode47 != 0, m.AltScreenModes&phosphor.AltScreenMode1047 != 0, m.AltScreenModes&phosphor.AltScreenMode1049 != 0}
 		for y := 0; y < rows; y++ {
 			row := make([]modelCell, cols)
 			for x := range row {
@@ -94,6 +131,7 @@ func (t *tracedEngine) state() (modelState, error) {
 			}
 			s.Screen = append(s.Screen, row)
 			s.Wrapped = append(s.Wrapped, p.t.Wrapped(y))
+			s.Prompt = append(s.Prompt, int(p.t.Prompt(y)))
 		}
 		if !m.AltScreen {
 			for i := 0; i < p.t.ScrollbackLen(); i++ {
@@ -116,7 +154,7 @@ func (t *tracedEngine) state() (modelState, error) {
 	}
 	defer C.exp_capture_free(&raw)
 	i := raw.info
-	s := modelState{Cols: int(i.cols), Rows: int(i.rows), Cursor: modelCursor{int(i.x), int(i.y), int(raw.cursor_shape), bool(i.visible), bool(raw.cursor_blink), bool(i.pending_wrap)}, Alt: bool(i.alt), Kitty: uint16(raw.kitty)}
+	s := modelState{Cols: int(i.cols), Rows: int(i.rows), Cursor: modelCursor{int(i.x), int(i.y), int(raw.cursor_shape), bool(i.visible), bool(raw.cursor_blink), bool(i.pending_wrap)}, Alt: bool(i.alt), Kitty: uint16(raw.kitty), Mouse: uint16(raw.mouse), MouseEncoding: uint16(raw.mouse_encoding)}
 	if raw.title.len > 0 {
 		s.Title = string(C.GoBytes(unsafe.Pointer(raw.title.ptr), C.int(raw.title.len)))
 	}
@@ -125,6 +163,7 @@ func (t *tracedEngine) state() (modelState, error) {
 	}
 	cells := unsafe.Slice(raw.cells, int(raw.total_rows)*s.Cols)
 	wraps := unsafe.Slice(raw.wraps, int(raw.total_rows))
+	prompts := unsafe.Slice(raw.prompts, int(raw.total_rows))
 	for y := 0; y < int(raw.total_rows); y++ {
 		row := make([]modelCell, s.Cols)
 		for x := range row {
@@ -141,6 +180,7 @@ func (t *tracedEngine) state() (modelState, error) {
 		} else {
 			s.Screen = append(s.Screen, row)
 			s.Wrapped = append(s.Wrapped, wraps[y] != 0)
+			s.Prompt = append(s.Prompt, int(prompts[y]))
 		}
 	}
 	if t.native != nil {
@@ -160,13 +200,14 @@ type traceAction struct {
 	Rows int    `json:"rows,omitempty"`
 }
 type traceCase struct {
-	Name    string        `json:"name"`
-	Feature string        `json:"feature"`
-	Scope   string        `json:"scope"` // parity, identity, deliberate, or limit
-	Source  string        `json:"source"`
-	Cols    int           `json:"cols"`
-	Rows    int           `json:"rows"`
-	Actions []traceAction `json:"actions"`
+	Name          string        `json:"name"`
+	Feature       string        `json:"feature"`
+	Scope         string        `json:"scope"` // parity, identity, deliberate, or limit
+	Source        string        `json:"source"`
+	Cols          int           `json:"cols"`
+	Rows          int           `json:"rows"`
+	Actions       []traceAction `json:"actions"`
+	SharedPalette bool          `json:"shared_palette,omitempty"`
 }
 
 func decodeTraces(r io.Reader) ([]traceCase, error) {
@@ -267,6 +308,10 @@ func differences(a, b modelState) []modelDifference {
 					continue
 				}
 				for row := range x {
+					if len(x[row]) != len(y[row]) {
+						out = append(out, modelDifference{fmt.Sprintf("%s[%d].cols", name, row), len(x[row]), len(y[row])})
+						continue
+					}
 					for col := range x[row] {
 						if !reflect.DeepEqual(x[row][col], y[row][col]) {
 							out = append(out, modelDifference{fmt.Sprintf("%s[%d][%d]", name, row, col), x[row][col], y[row][col]})
@@ -310,6 +355,9 @@ func (t *tracedEngine) replace(data []byte, cols, rows int, snapshot bool) {
 			engine = restore(name, data, cols, rows)
 		} else {
 			engine = newEngine(name, cols, rows)
+			if t.sharedPalette {
+				engine.(*ghost).sharedHostPalette()
+			}
 			engine.Write(data)
 		}
 	}
@@ -351,9 +399,26 @@ func traceChecks(path string, chunk int) bool {
 	}
 	ok := true
 	totals := map[string][2]int{}
+	directTotals, phosphorTotals, ghosttyTotals := map[string][2]int{}, map[string][2]int{}, map[string][2]int{}
+	tally := func(totals map[string][2]int, scope string, pass bool) {
+		counts := totals[scope]
+		counts[1]++
+		if pass {
+			counts[0]++
+		}
+		totals[scope] = counts
+	}
 	for _, c := range cases {
 		a, b := newTracedEngine("phosphor", c.Cols, c.Rows), newTracedEngine("ghostty", c.Cols, c.Rows)
 		controlA, controlB := newTracedEngine("phosphor", c.Cols, c.Rows), newTracedEngine("ghostty", c.Cols, c.Rows)
+		if c.SharedPalette {
+			for _, t := range []*tracedEngine{a, b, controlA, controlB} {
+				t.sharedPalette = true
+				if g, ok := t.Engine.(*ghost); ok {
+					g.sharedHostPalette()
+				}
+			}
+		}
 		for n, action := range c.Actions {
 			var local []modelDifference
 			switch action.Kind {
@@ -380,6 +445,9 @@ func traceChecks(path string, chunk int) bool {
 					panic(e)
 				}
 				local = differences(before, after)
+				for i := range local {
+					local[i].Field = "phosphor.compact." + local[i].Field
+				}
 			case "snapshot", "repaint":
 				for _, t := range []*tracedEngine{a, b} {
 					before, e := t.state()
@@ -416,12 +484,21 @@ func traceChecks(path string, chunk int) bool {
 				panic(e)
 			}
 			diff := append(local, differences(x, y)...)
-			pass := len(diff) == 0
+			phosphorPass, ghosttyPass := true, true
+			for _, d := range local {
+				if strings.HasPrefix(d.Field, "ghostty.") {
+					ghosttyPass = false
+				} else {
+					phosphorPass = false
+				}
+			}
+			var controls [2]modelState
 			for i, t := range []*tracedEngine{controlA, controlB} {
 				control, e := t.state()
 				if e != nil {
 					panic(e)
 				}
+				controls[i] = control
 				actual := x
 				engine := "phosphor"
 				if i == 1 {
@@ -429,28 +506,37 @@ func traceChecks(path string, chunk int) bool {
 					engine = "ghostty"
 				}
 				for _, d := range differences(control, actual) {
+					if i == 0 {
+						phosphorPass = false
+					} else {
+						ghosttyPass = false
+					}
 					d.Field = engine + ".continuation." + d.Field
 					diff = append(diff, d)
 				}
 			}
-			pass = len(diff) == 0
+			directDiff := differences(controls[0], controls[1])
+			directPass := len(directDiff) == 0
+			pass := len(diff) == 0
 			if c.Scope == "parity" && !pass {
 				ok = false
 			}
-			counts := totals[c.Scope]
-			counts[1]++
-			if pass {
-				counts[0]++
-			}
-			totals[c.Scope] = counts
-			emit(map[string]any{"kind": "trace", "case": c.Name, "feature": c.Feature, "scope": c.Scope, "source": c.Source, "chunk": chunk, "step": n, "action": action, "pass": pass, "differences": diff, "phosphor_replies_hex": hex.EncodeToString([]byte(x.Replies)), "ghostty_replies_hex": hex.EncodeToString([]byte(y.Replies))})
+			tally(totals, c.Scope, pass)
+			tally(directTotals, c.Scope, directPass)
+			tally(phosphorTotals, c.Scope, phosphorPass)
+			tally(ghosttyTotals, c.Scope, ghosttyPass)
+			emit(map[string]any{"kind": "trace", "case": c.Name, "feature": c.Feature, "scope": c.Scope, "source": c.Source, "chunk": chunk, "step": n, "action": action, "pass": pass, "differences": diff,
+				"direct_pass": directPass, "direct_differences": directDiff, "phosphor_continuation_pass": phosphorPass, "ghostty_continuation_pass": ghosttyPass,
+				"phosphor_replies_hex": hex.EncodeToString([]byte(x.Replies)), "ghostty_replies_hex": hex.EncodeToString([]byte(y.Replies))})
 		}
 		a.Close()
 		b.Close()
 		controlA.Close()
 		controlB.Close()
 	}
-	emit(map[string]any{"kind": "trace_summary", "native_build": nativeBuildInfo(), "chunk": chunk, "cases": len(cases), "steps_by_scope_pass_total": totals, "parity_pass": ok, "coverage": "bounded named traces; not a terminal compliance percentage"})
+	emit(map[string]any{"kind": "trace_summary", "native_build": nativeBuildInfo(), "chunk": chunk, "cases": len(cases), "steps_by_scope_pass_total": totals,
+		"direct_steps_by_scope_pass_total": directTotals, "phosphor_continuation_steps_by_scope_pass_total": phosphorTotals, "ghostty_continuation_steps_by_scope_pass_total": ghosttyTotals,
+		"parity_pass": ok, "coverage": "bounded named traces; not a terminal compliance percentage"})
 	return ok
 }
 func scalarWidths(table bool) {

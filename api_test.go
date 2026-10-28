@@ -132,8 +132,8 @@ func TestCursorAndModes(t *testing.T) {
 		t.Fatalf("initial modes %+v", got)
 	}
 	term.Write([]byte("\x1b[?1049h\x1b[?1h\x1b=\x1b[?2004h\x1b[?1004h\x1b[?1002h\x1b[?1006h\x1b[>5u\x1b[?7l\x1b[4h\x1b[20h\x1b[?6h\x1b[?5h\x1b[?2026h"))
-	want := Modes{AltScreen: true, ApplicationCursorKeys: true, ApplicationKeypad: true, BracketedPaste: true, FocusEvents: true,
-		Mouse: MouseButtonEvent, MouseEncoding: MouseEncodingSGR, KittyKeyboard: 5, Insert: true, Newline: true, Origin: true,
+	want := Modes{AltScreen: true, AltScreenModes: AltScreenMode1049, ApplicationCursorKeys: true, ApplicationKeypad: true, BracketedPaste: true, FocusEvents: true,
+		Mouse: MouseButtonEvent, MouseEncoding: MouseEncodingSGR, MouseTrackingModes: MouseTrackingButtonEvent, MouseEncodingModes: MouseEncodingModeSGR, KittyKeyboard: 5, Insert: true, Newline: true, Origin: true,
 		ReverseVideo: true, SyncUpdate: true}
 	if got := term.Modes(); got != want {
 		t.Fatalf("modes\n got %+v\nwant %+v", got, want)
@@ -240,7 +240,8 @@ func TestPalette(t *testing.T) {
 	}{
 		{"rgb:ff/00/80", RGB{255, 0, 128}, true}, {"rgb:f/0/8", RGB{255, 0, 136}, true}, {"rgb:ffff/0000/8000", RGB{255, 0, 128}, true},
 		{"#f08", RGB{0xf0, 0, 0x80}, true}, {"#ff0080", RGB{255, 0, 128}, true}, {"#fff000888", RGB{255, 0, 0x88}, true},
-		{"rgb:1/2", RGB{}, false}, {"rgb:12345/0/0", RGB{}, false}, {"#12", RGB{}, false}, {"red", RGB{}, false}, {"#ggg", RGB{}, false},
+		{"red", RGB{255, 0, 0}, true},
+		{"rgb:1/2", RGB{}, false}, {"rgb:12345/0/0", RGB{}, false}, {"#12", RGB{}, false}, {"#ggg", RGB{}, false},
 	} {
 		if got, ok := parseColor(c.in); got != c.want || ok != c.ok {
 			t.Errorf("parseColor(%q) = %v, %v", c.in, got, ok)
@@ -276,7 +277,7 @@ func TestReplies(t *testing.T) {
 		{"\x1b[?1h\x1b[?1$p", "\x1b[?1;1$y"},
 		{"\x1b[?7$p", "\x1b[?7;1$y"},
 		{"\x1b[?25$p", "\x1b[?25;1$y"},
-		{"\x1b[?1049h\x1b[?1049$p\x1b[?47$p", "\x1b[?1049;1$y\x1b[?47;1$y"},
+		{"\x1b[?1049h\x1b[?1049$p\x1b[?47$p", "\x1b[?1049;1$y\x1b[?47;2$y"},
 		{"\x1b[?2004h\x1b[?2004$p", "\x1b[?2004;1$y"},
 		{"\x1b[?2026h\x1b[?2026$p", "\x1b[?2026;1$y"},
 		{"\x1b[?1006$p", "\x1b[?1006;2$y"},

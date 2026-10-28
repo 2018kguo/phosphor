@@ -12,6 +12,86 @@ import (
 	"github.com/2018kguo/phosphor"
 )
 
+func TestNativeMouseBitsAndEffectiveSelection(t *testing.T) {
+	p := newTracedEngine("phosphor", 12, 3)
+	g := newTracedEngine("ghostty", 12, 3)
+	defer p.Close()
+	defer g.Close()
+	for _, input := range []string{
+		"\x1b[?1000h\x1b[?9h", // last-set wins, even when the earlier mode is more capable
+		"\x1b[?1003l",         // resetting an inactive bit clears the effective mode
+		"\x1b[?1002;1003;1006;1015;1005;1016h",
+		"\x1b[?1006l", // the remaining encoding bits do not choose a fallback
+		"\x1b[?9;1000;1002;1003;1005;1006;1015;1016s",
+		"\x1b[?9;1000;1002;1003;1005;1006;1015;1016l",
+		"\x1b[?1003;1000;9;1002;1016;1005;1006;1015r",
+		"\x1b[?9$p\x1b[?1000$p\x1b[?1002$p\x1b[?1003$p\x1b[?1005$p\x1b[?1006$p\x1b[?1015$p\x1b[?1016$p",
+		"\x1b[!p",
+		"\x1bc",
+	} {
+		p.Write([]byte(input))
+		g.Write([]byte(input))
+		ps, gs := traceState(t, p), traceState(t, g)
+		if diff := differences(ps, gs); len(diff) > 0 {
+			t.Fatalf("after %q: %+v", input, diff)
+		}
+		t.Logf("input=%q bits=%v tracking=%d encoding=%d replies=%q", input, gs.Modes[10:], gs.Mouse, gs.MouseEncoding, gs.Replies)
+	}
+}
+
+func TestNativeEffectiveMouseProbeHasDistinctOutputs(t *testing.T) {
+	e := newTracedEngine("ghostty", 12, 3)
+	defer e.Close()
+	g := e.Engine.(*ghost)
+	seen := map[string]bool{}
+	for format := 0; format < 5; format++ {
+		report, err := g.mouseReport(0, false, 2, format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen[string(report)] {
+			t.Fatalf("format %d cannot be distinguished: %x", format, report)
+		}
+		seen[string(report)] = true
+		t.Logf("native format %d: %x", format, report)
+	}
+	for tracking, wantPattern := range []uint8{0, 1, 3, 7, 15} {
+		var pattern uint8
+		for n := 0; n < 4; n++ {
+			action := min(n, 2)
+			report, err := g.mouseReport(action, n == 2, tracking, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(report) != 0 {
+				pattern |= 1 << n
+			}
+		}
+		if pattern != wantPattern {
+			t.Fatalf("native tracking %d has pattern %d, want %d", tracking, pattern, wantPattern)
+		}
+	}
+}
+
+func TestNativeGraphemeCapacityIs64SuffixCodepoints(t *testing.T) {
+	for _, suffix := range []string{"\u0301", "\U000E0100"} {
+		for _, count := range []int{15, 16, 63, 64, 65, 80} {
+			e := newTracedEngine("ghostty", 8, 3)
+			e.Write([]byte("A" + strings.Repeat(suffix, count)))
+			s := traceState(t, e)
+			e.Close()
+			want := "A" + strings.Repeat(suffix, min(count, 64))
+			if got := s.Screen[0][0].Text; got != want {
+				t.Fatalf("suffix=%U count=%d got %d bytes want %d", []rune(suffix)[0], count, len(got), len(want))
+			}
+			if s.Cursor.X != 1 || s.Cursor.Y != 0 || s.Screen[0][1].Text != "" {
+				t.Fatal("excess suffix codepoints moved the cursor or became standalone cells", s.Cursor)
+			}
+			t.Logf("suffix=%U count=%d retained=%d codepoints %d bytes", []rune(suffix)[0], count, min(count, 64)+1, len(want))
+		}
+	}
+}
+
 func traceState(t *testing.T, engine *tracedEngine) modelState {
 	t.Helper()
 	s, err := engine.state()
@@ -308,7 +388,7 @@ func TestTraceFixturesCoverTextModel(t *testing.T) {
 			actions[a.Kind] = true
 		}
 	}
-	for _, f := range []string{"cells-wrap", "cell-style", "underline-color", "hyperlinks", "protection", "width-wrap", "graphemes", "graphemes-style", "cursor", "cursor-margins", "margins", "modes", "keyboard", "charsets", "rep", "editing", "tabs", "osc", "continuation", "screens", "history", "portable-repaint"} {
+	for _, f := range []string{"cells-wrap", "cell-style", "underline-color", "hyperlinks", "protection", "width-wrap", "graphemes", "graphemes-style", "cursor", "cursor-margins", "margins", "modes", "keyboard", "charsets", "rep", "editing", "tabs", "osc", "continuation", "screens", "history", "portable-repaint", "queries", "palette", "semantic-prompts", "columns"} {
 		if !features[f] {
 			t.Errorf("missing feature %s", f)
 		}
@@ -318,7 +398,7 @@ func TestTraceFixturesCoverTextModel(t *testing.T) {
 			t.Errorf("missing action %s", a)
 		}
 	}
-	for _, s := range []string{"parity", "identity", "deliberate", "limit"} {
+	for _, s := range []string{"parity", "identity", "deliberate"} {
 		if !scopes[s] {
 			t.Errorf("missing scope %s", s)
 		}

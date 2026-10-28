@@ -125,11 +125,12 @@ func (t *Terminal) appendDSR(b []byte) []byte {
 // decModeState returns the DECRQM state of DEC private mode mode: 1 set,
 // 2 reset, 0 not recognized.
 func (t *Terminal) decModeState(mode int) int {
+	if mode == 117 {
+		return 4
+	} // BCE always uses the active background.
 	on, ok := t.modeValue(mode)
 	if !ok {
 		switch mode {
-		case 47, 1047, 1049:
-			on = t.altActive
 		case 66: // DECNKM, the keypad mode DECKPAM sets
 			on = t.appKeypad
 		case 2026:
@@ -148,6 +149,8 @@ func (t *Terminal) decModeState(mode int) int {
 func (t *Terminal) ansiModeState(mode int) int {
 	var on bool
 	switch mode {
+	case 1, 5, 7, 10, 11, 13, 14, 15, 16, 17, 18, 19:
+		return 4 // Recognized ANSI modes with fixed reset behavior.
 	case 4:
 		on = t.insert
 	case 20:
@@ -194,7 +197,7 @@ func (t *Terminal) appendDECRQSS(b []byte, q string) []byte {
 	case "m": // SGR, as "0;1;31m"
 		b = append(b, ok...)
 		n := len(b)
-		b = appendSGR(b, t.cur.pen)
+		b = t.appendSGR(b, t.cur.pen)
 		b = append(b[:n], b[n+2:]...) // drop the CSI
 	case "r":
 		b = appendPair(b, t.top+1, t.bot+1, "r")
@@ -230,6 +233,8 @@ func (t *Terminal) appendXTGETTCAP(b []byte, q string) []byte {
 		switch string(raw) {
 		case "Co", "colors":
 			val = "256"
+		case "Smulx":
+			val = "\\E[4:%p1%dm"
 		}
 		if err != nil || val == "" {
 			b = append(b, "\x1bP0+r"...)
@@ -238,7 +243,10 @@ func (t *Terminal) appendXTGETTCAP(b []byte, q string) []byte {
 			b = append(b, "\x1bP1+r"...)
 			b = append(b, name...)
 			b = append(b, '=')
-			b = hex.AppendEncode(b, []byte(val))
+			const digits = "0123456789ABCDEF"
+			for i := range len(val) {
+				b = append(b, digits[val[i]>>4], digits[val[i]&15])
+			}
 		}
 		b = append(b, "\x1b\\"...)
 	}
@@ -254,18 +262,20 @@ func (t *Terminal) conf() *config {
 }
 
 // oscColor handles the OSC strings that set, query and reset colors: 4
-// (palette), 10, 11, 12 (foreground, background, cursor), 104, 110, 111
+// (palette), 10, 11, 12 (foreground, background, cursor), 21 (kitty), 104, 110, 111
 // and 112 (reset). Others are ignored.
 func (t *Terminal) oscColor(s []byte) {
 	n, r, _ := bytes.Cut(s, []byte{';'})
 	var num, rest string
 	switch string(n) { // no allocation unless it is one of these
-	case "4", "10", "11", "12", "104", "110", "111", "112":
+	case "4", "10", "11", "12", "21", "104", "110", "111", "112":
 		num, rest = string(n), string(r)
 	default:
 		return
 	}
 	switch num {
+	case "21":
+		t.oscKittyColor(rest)
 	case "4":
 		for rest != "" {
 			var idx, spec string
@@ -310,8 +320,7 @@ func (t *Terminal) colorOp(slot uint16, spec, prefix string) {
 		if t.cfg == nil || t.cfg.reply == nil {
 			return
 		}
-		p := t.Palette()
-		c := *p.slot(slot)
+		c := t.paletteColor(slot)
 		b := append(t.scratch[:0], "\x1b]"...)
 		b = append(b, prefix...)
 		b = append(b, "rgb:"...)
@@ -333,6 +342,11 @@ func (t *Terminal) colorOp(slot uint16, spec, prefix string) {
 	if !ok {
 		return
 	}
+	t.setColor(slot, c)
+}
+
+// setColor is shared by the xterm and kitty color protocol adapters.
+func (t *Terminal) setColor(slot uint16, c RGB) {
 	cfg := t.conf()
 	t.touchAll()
 	for i := range cfg.colors {
@@ -357,43 +371,4 @@ func (t *Terminal) resetColors(match func(uint16) bool) {
 	}
 	t.cfg.colors = kept
 	t.touchAll()
-}
-
-// parseColor parses an X11 color specification in the forms programs
-// send: rgb:R/G/B with 1-4 hex digits per component, and #RGB with 1-4
-// digits per component. Color names are not supported.
-func parseColor(s string) (RGB, bool) {
-	var parts [3]string
-	if rest, ok := strings.CutPrefix(s, "rgb:"); ok {
-		p := strings.Split(rest, "/")
-		if len(p) != 3 {
-			return RGB{}, false
-		}
-		copy(parts[:], p)
-		var c [3]uint8
-		for i, h := range parts {
-			v, err := strconv.ParseUint(h, 16, 16)
-			if err != nil || len(h) == 0 || len(h) > 4 {
-				return RGB{}, false
-			}
-			maxv := uint64(1)<<(4*len(h)) - 1
-			c[i] = uint8((v*255 + maxv/2) / maxv)
-		}
-		return RGB{c[0], c[1], c[2]}, true
-	}
-	if rest, ok := strings.CutPrefix(s, "#"); ok && len(rest)%3 == 0 && len(rest) > 0 && len(rest) <= 12 {
-		n := len(rest) / 3
-		var c [3]uint8
-		for i := range c {
-			h := rest[i*n : (i+1)*n]
-			v, err := strconv.ParseUint(h, 16, 16)
-			if err != nil {
-				return RGB{}, false
-			}
-			// The digits are the high bits of the component.
-			c[i] = uint8(v << (16 - 4*n) >> 8)
-		}
-		return RGB{c[0], c[1], c[2]}, true
-	}
-	return RGB{}, false
 }

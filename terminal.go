@@ -1,6 +1,7 @@
 package phosphor
 
 import (
+	"bytes"
 	"encoding/binary"
 	"strings"
 	"unicode/utf8"
@@ -16,7 +17,7 @@ type cell struct {
 	Fg Color
 	Bg Color
 	A  Attr
-	L  uint16 // hyperlink (OSC 8): 0 for none, else the Terminal's links[L-1]
+	E  uint16 // rare attributes: 0 for default, else the Terminal's rare[E-1]
 }
 
 const (
@@ -34,8 +35,17 @@ const (
 	DefaultScrollbackBytes = 256 << 10
 	maxOSC                 = 4096
 	maxParams              = 32
-	maxCluster             = 32 // bytes of a character with its combining marks
+	maxClusterRunes        = 65 // base plus 64 suffix codepoints, matching libghostty-vt
+	maxCluster             = maxClusterRunes * utf8.UTFMax
 	maxLogicalLine         = 32 << 10
+)
+
+type charset uint8
+
+const (
+	charsetASCII charset = iota
+	charsetGraphics
+	charsetBritish
 )
 
 type cursor struct {
@@ -43,8 +53,9 @@ type cursor struct {
 	pen         cell
 	wrapPending bool
 	origin      bool
-	g           [4]bool // G0-G3 designated as DEC special graphics
-	gl          uint8   // which of G0-G3 is invoked into GL
+	g           [4]charset // G0-G3 designated character sets
+	gl          uint8      // which of G0-G3 is invoked into GL
+	ss          uint8      // pending single shift (2 or 3)
 }
 
 type savedCursor struct {
@@ -54,10 +65,9 @@ type savedCursor struct {
 
 // savedCursors is allocated on the first save and reused until a full
 // reset or Compact finds every slot invalid. A shell prompt pays for none
-// of the three slots; repeated active saves and screen switches reuse it.
+// of the two slots; repeated active saves and screen switches reuse it.
 type savedCursors struct {
-	screen    [2]savedCursor // DECSC slots: main, alternate
-	alternate savedCursor    // cursor saved by ?1049h
+	screen [2]savedCursor // DECSC slots: main, alternate
 }
 
 // Terminal is a VT/xterm screen model: write a program's output to it and
@@ -69,22 +79,24 @@ type savedCursors struct {
 // not call back into the Terminal.
 type Terminal struct {
 	cols, rows int
-	main, alt  [][]cell // alt is nil unless the alternate screen is in use
-	// Soft-wrap flags, nil until a row wraps: wrap[y] means row y
-	// continues on row y+1.
-	mainWrap, altWrap []bool
+	main, alt  [][]cell // alt is allocated on first entry and retained for later switches
+	// Canonical row metadata, nil until a row wraps or a shell annotates it.
+	// rowWrap means row y continues on row y+1.
+	mainWrap, altWrap []rowFlags
 	altActive         bool
 	cur               cursor
 	saved             *savedCursors
-	top, bot          int       // scroll region, inclusive
-	left, right       int       // left and right margins, inclusive
-	lrmm              bool      // DECLRMM: left and right margins enabled
-	protISO           bool      // protection was last set by SPA (ISO), not DECSCA
-	ss                uint8     // pending single shift (2 or 3)
-	grapheme          bool      // 2027: Unicode grapheme clustering
-	x                 *extra    // state few programs use, nil until one does
-	cfg               *config   // options and palette changes, nil if none
-	dirty             *dirtySet // damage, nil until ClearDirty is first called
+	top, bot          int  // scroll region, inclusive
+	left, right       int  // left and right margins, inclusive
+	lrmm              bool // DECLRMM: left and right margins enabled
+	protISO           bool // protection was last set by SPA (ISO), not DECSCA
+	grapheme          bool // 2027: Unicode grapheme clustering
+	// These bytes occupy existing padding before x; Terminal stays560 bytes.
+	semantic     [2]semanticContent // screen content state, independent of DECSC
+	promptRedraw promptRedraw
+	x            *extra    // state few programs use, nil until one does
+	cfg          *config   // options and palette changes, nil if none
+	dirty        *dirtySet // damage, nil until ClearDirty is first called
 
 	// modes
 	autowrap     bool
@@ -99,8 +111,8 @@ type Terminal struct {
 	bracketed    bool
 	focus        bool
 	sync         bool   // 2026: synchronized update in progress
-	mouse        uint16 // 0, 9, 1000, 1002 or 1003
-	mouseEnc     uint16 // 0, 1005, 1006 or 1015
+	mouse        uint16 // independent tracking bits and effective selection; see mouse_modes.go
+	mouseEnc     uint16 // independent encoding bits and effective selection
 	cursorStyle  cursorAppearance
 	kitty        []uint16
 	title        string
@@ -124,24 +136,33 @@ type Terminal struct {
 	nparams  uint8 // at most maxParams; also the partial CSI's current slot
 	state    uint8
 	utf8n    uint8 // an unfinished UTF-8 scalar has at most four bytes
-	paramSet bool
-	marker   byte // private marker: ? > < =
-	inter    byte // last intermediate byte
-	oscBel   bool // the OSC string was ended by BEL (replies end the same way)
+	paramSet bool  // the current CSI parameter has digits
+	marker   byte  // private marker: ? > < =
+	inter    byte  // last intermediate byte
+	oscBel   bool  // the OSC string was ended by BEL (replies end the same way)
 	oscOver  bool
 }
 
 // extra holds the state few programs use, kept out of Terminal so an idle
 // terminal stays small.
 type extra struct {
-	tabs       []uint64    // tab stops, nil for every 8 columns
-	savedModes []savedMode // XTSAVE
+	tabs         []uint64    // tab stops, nil for every 8 columns
+	savedModes   []savedMode // XTSAVE
+	privateModes uint8       // column, scroll and independent alternate-screen mode bits
+	// The primary screen's actual cursor while the alternate is active.
+	// A DECSC slot can name a different position and cannot replace this fact.
+	inactivePrimary point
 	// characters with combining marks, referenced by cells
 	clusters   []cluster
 	clusterCap int
-	// hyperlink targets ("params;uri"), referenced by cells
-	links   []string
-	linkCap int
+	// Uncommon cell attributes share the cell's 16-bit index.
+	rare    []cellExtra
+	rareCap int
+}
+
+type cellExtra struct {
+	link      string // OSC 8 target ("params;uri")
+	underline Color
 }
 
 // ext returns t.x, allocating it.
@@ -211,7 +232,7 @@ func (t *Terminal) screen() [][]cell {
 }
 
 // wraps returns the active screen's soft-wrap flags (nil if none is set).
-func (t *Terminal) wraps() []bool {
+func (t *Terminal) wraps() []rowFlags {
 	if t.altActive {
 		return t.altWrap
 	}
@@ -225,14 +246,18 @@ func (t *Terminal) setWrap(y int, on bool) {
 		if !on {
 			return
 		}
-		w = make([]bool, t.rows)
+		w = make([]rowFlags, t.rows)
 		if t.altActive {
 			t.altWrap = w
 		} else {
 			t.mainWrap = w
 		}
 	}
-	w[y] = on
+	if on {
+		w[y] |= rowWrap
+	} else {
+		w[y] &^= rowWrap
+	}
 }
 
 // wrapped reports whether row y continues the row above it (for row 0 of
@@ -242,7 +267,7 @@ func (t *Terminal) wrapped(y int) bool {
 		return !t.altActive && t.sbOpen
 	}
 	w := t.wraps()
-	return w != nil && w[y-1]
+	return w != nil && w[y-1]&rowWrap != 0
 }
 
 // Write feeds the terminal a program's output, implementing io.Writer.
@@ -376,6 +401,11 @@ func (t *Terminal) c1(r rune) {
 }
 
 func (t *Terminal) printRune(r rune) {
+	// A single shift applies to the next character, including a Unicode
+	// combining mark. National character sets only translate GL bytes.
+	if r > 0x7f {
+		t.cur.ss = 0
+	}
 	if t.grapheme && r > 255 && t.extendGrapheme(r) {
 		return
 	}
@@ -470,9 +500,9 @@ func (t *Terminal) step(c byte) {
 			} else {
 				t.nparams = maxParams
 			}
-			t.paramSet = true
+			t.paramSet = false
 		case c >= '<' && c <= '?':
-			if t.paramSet || t.marker != 0 {
+			if t.paramSet || t.nparams != 0 || t.marker != 0 {
 				t.state = stCSIIgnore
 			} else {
 				t.marker = c
@@ -481,8 +511,13 @@ func (t *Terminal) step(c byte) {
 			t.inter = c
 		case c >= 0x40 && c <= 0x7e:
 			t.state = stGround
-			if t.paramSet {
+			missingColon := !t.paramSet && t.nparams < maxParams && t.subParam(int(t.nparams))
+			if t.paramSet || t.nparams != 0 {
 				t.nparams = min(t.nparams+1, maxParams)
+			}
+			if missingColon && c == 'm' && t.marker == 0 && t.inter == 0 {
+				// A final colon has no implicit zero sub-parameter in SGR.
+				t.nparams--
 			}
 			t.csiDispatch(c)
 		default:
@@ -525,7 +560,6 @@ func (t *Terminal) execute(c byte) {
 	case '\b':
 		t.cursorLeft(1)
 	case '\t':
-		t.cur.wrapPending = false
 		t.cur.x = t.nextTab(t.cur.x)
 	case '\n', '\v', '\f':
 		t.cur.wrapPending = false
@@ -550,7 +584,13 @@ func (t *Terminal) escDispatch(c byte) {
 	switch t.inter {
 	case 0:
 	case '(', ')', '*', '+':
-		t.cur.g[t.inter-'('] = c == '0'
+		g := charsetASCII
+		if c == '0' {
+			g = charsetGraphics
+		} else if c == 'A' {
+			g = charsetBritish
+		}
+		t.cur.g[t.inter-'('] = g
 		return
 	case '#':
 		if c == '8' {
@@ -582,9 +622,9 @@ func (t *Terminal) escDispatch(c byte) {
 	case 'W': // EPA
 		t.protect(false, true)
 	case 'N':
-		t.ss = 2
+		t.cur.ss = 2
 	case 'O':
-		t.ss = 3
+		t.cur.ss = 3
 	case 'n':
 		t.cur.gl = 2
 	case 'o':
@@ -604,11 +644,7 @@ func (t *Terminal) decaln() {
 	t.touchAll()
 	scr := t.screen()
 	for y := range scr {
-		row := scr[y]
-		if row == nil {
-			row = make([]cell, t.cols)
-			scr[y] = row
-		}
+		row := t.row(y)
 		for x := range row {
 			row[x] = cell{R: 'E'}
 		}
@@ -627,16 +663,17 @@ func (t *Terminal) reset() {
 	*t = Terminal{
 		cfg: cfg, dirty: dirty,
 		cols: t.cols, rows: t.rows,
-		main:       make([][]cell, t.rows),
-		bot:        t.rows - 1,
-		right:      t.cols - 1,
-		autowrap:   true,
-		sb:         sb,
-		sbStart:    sbStart,
-		sbBytes:    sbBytes,
-		sbMaxLines: t.sbMaxLines,
-		sbMaxBytes: t.sbMaxBytes,
-		osc:        t.osc[:0],
+		main:         make([][]cell, t.rows),
+		bot:          t.rows - 1,
+		right:        t.cols - 1,
+		autowrap:     true,
+		promptRedraw: promptRedrawAll, // native RIS differs from headless construction
+		sb:           sb,
+		sbStart:      sbStart,
+		sbBytes:      sbBytes,
+		sbMaxLines:   t.sbMaxLines,
+		sbMaxBytes:   t.sbMaxBytes,
+		osc:          t.osc[:0],
 	}
 	t.touchAll()
 }
@@ -646,7 +683,9 @@ func (t *Terminal) saveCursor() {
 	if t.altActive {
 		i = 1
 	}
-	t.cursorSaves().screen[i] = savedCursor{cursor: t.cur, valid: true}
+	c := t.cur
+	c.pen.E = t.internExtra(cellExtra{underline: t.extraAt(c.pen.E).underline})
+	t.cursorSaves().screen[i] = savedCursor{cursor: c, valid: true}
 }
 
 func (t *Terminal) cursorSaves() *savedCursors {
@@ -661,11 +700,13 @@ func (t *Terminal) restoreCursor() {
 	if t.altActive {
 		i = 1
 	}
+	link := t.link(t.cur.pen.E)
 	if t.saved == nil || !t.saved.screen[i].valid {
 		t.cur = cursor{}
-		return
+	} else {
+		t.setCursor(t.saved.screen[i].cursor)
 	}
-	t.setCursor(t.saved.screen[i].cursor)
+	t.setLink(link)
 }
 
 // setCursor installs a saved cursor, clamping it to the current size.
@@ -806,12 +847,10 @@ func (t *Terminal) csiDispatch(c byte) {
 	case 'k':
 		t.cursorUp(t.param(0, 1))
 	case 'I':
-		t.cur.wrapPending = false
 		for range min(t.param(0, 1), t.cols) {
 			t.cur.x = t.nextTab(t.cur.x)
 		}
 	case 'Z':
-		t.cur.wrapPending = false
 		lim := 0
 		if t.cur.origin {
 			lim = t.left
@@ -898,12 +937,16 @@ func (t *Terminal) softReset() {
 	t.protISO = false
 	t.appCursor = false
 	t.appKeypad = false
+	t.lrmm = false
 	t.top, t.bot, t.left, t.right = 0, t.rows-1, 0, t.cols-1
 	t.cur.pen = cell{}
-	t.cur.g, t.cur.gl, t.ss = [4]bool{}, 0, 0
-	t.cur.wrapPending = false
+	t.cur.g, t.cur.gl, t.cur.ss = [4]charset{}, 0, 0
 	if t.saved != nil {
-		t.saved.screen = [2]savedCursor{}
+		slot := 0
+		if t.altActive {
+			slot = 1
+		}
+		t.saved.screen[slot] = savedCursor{}
 	}
 }
 
@@ -913,6 +956,14 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 	switch mode {
 	case 1:
 		return t.appCursor, true
+	case 3:
+		return t.privateModes()&privateMode132 != 0, true
+	case 4:
+		return t.privateModes()&privateModeSlowScroll != 0, true
+	case 47, 1047, 1049:
+		return t.privateModes()&screenModeBit(mode) != 0, true
+	case 40:
+		return t.privateModes()&privateModeAllowColumns != 0, true
 	case 5:
 		return t.reverseVideo, true
 	case 6:
@@ -930,9 +981,9 @@ func (t *Terminal) modeValue(mode int) (on, ok bool) {
 	case 25:
 		return !t.cursorHidden, true
 	case 9, 1000, 1002, 1003:
-		return int(t.mouse) == mode, true
-	case 1005, 1006, 1015:
-		return int(t.mouseEnc) == mode, true
+		return t.mouse&mouseModeBit(mode, mouseTrackingNumbers) != 0, true
+	case 1005, 1006, 1015, 1016:
+		return t.mouseEnc&mouseModeBit(mode, mouseEncodingNumbers) != 0, true
 	case 1004:
 		return t.focus, true
 	case 2004:
@@ -957,8 +1008,12 @@ func (t *Terminal) xtSaveMode(mode int, save bool) {
 		}
 		return
 	}
-	if on, ok := t.modeValue(mode); ok && save && len(x.savedModes) < 16 {
-		x.savedModes = append(x.savedModes, savedMode{mode, on})
+	if on, ok := t.modeValue(mode); ok {
+		if save && len(x.savedModes) < len(savedModeNumbers) {
+			x.savedModes = append(x.savedModes, savedMode{mode, on})
+		} else if !save {
+			t.decMode(mode, mode == 7 || mode == 25)
+		}
 	}
 }
 
@@ -974,6 +1029,20 @@ func (t *Terminal) decMode(mode int, on bool) {
 	switch mode {
 	case 1:
 		t.appCursor = on
+	case 3:
+		t.setColumnMode(on)
+	case 4:
+		if on {
+			t.ext().privateModes |= privateModeSlowScroll
+		} else if t.x != nil {
+			t.x.privateModes &^= privateModeSlowScroll
+		}
+	case 40:
+		if on {
+			t.ext().privateModes |= privateModeAllowColumns
+		} else if t.x != nil {
+			t.x.privateModes &^= privateModeAllowColumns
+		}
 	case 5:
 		if t.reverseVideo != on {
 			t.touchAll() // every cell's colors change
@@ -984,9 +1053,6 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.moveTo(0, 0)
 	case 7:
 		t.autowrap = on
-		if !on {
-			t.cur.wrapPending = false
-		}
 	case 12:
 		t.cursorStyle.blink = on
 	case 45:
@@ -995,24 +1061,15 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.lrmm = on
 		if !on {
 			t.left, t.right = 0, t.cols-1
-			t.cur.wrapPending = t.cur.wrapPending && t.cur.x == t.cols-1
 		}
 	case 1045:
 		t.revWrapExt = on
 	case 25:
 		t.cursorHidden = !on
 	case 9, 1000, 1002, 1003:
-		if on {
-			t.mouse = uint16(mode)
-		} else if int(t.mouse) == mode {
-			t.mouse = 0
-		}
-	case 1005, 1006, 1015:
-		if on {
-			t.mouseEnc = uint16(mode)
-		} else if int(t.mouseEnc) == mode {
-			t.mouseEnc = 0
-		}
+		t.mouse = setMouseMode(t.mouse, mode, on, mouseTrackingNumbers)
+	case 1005, 1006, 1015, 1016:
+		t.mouseEnc = setMouseMode(t.mouseEnc, mode, on, mouseEncodingNumbers)
 	case 1004:
 		t.focus = on
 	case 2004:
@@ -1021,56 +1078,66 @@ func (t *Terminal) decMode(mode int, on bool) {
 		t.sync = on
 	case 2027:
 		t.grapheme = on
-	case 47, 1047:
-		t.setAlt(on, mode == 1047)
+	case 47, 1047, 1049:
+		t.setScreenMode(mode, on)
 	case 1048:
 		if on {
 			t.saveCursor()
 		} else {
 			t.restoreCursor()
 		}
-	case 1049:
+	}
+}
+
+// setScreenMode separates each reported mode bit from the active screen.
+func (t *Terminal) setScreenMode(mode int, on bool) {
+	bit := screenModeBit(mode)
+	if on {
+		t.ext().privateModes |= bit
+	} else if t.x != nil {
+		t.x.privateModes &^= bit
+	}
+	if mode == 1049 && on {
+		t.saveCursor()
+	}
+	if mode == 1047 && !on && t.altActive {
+		t.eraseDisplay(2, false)
+	}
+	changed, pending := on != t.altActive, t.cur.wrapPending
+	t.switchScreen(on, mode)
+	if mode == 1049 {
 		if on {
-			if !t.altActive {
-				t.cursorSaves().alternate = savedCursor{cursor: t.cur, valid: true}
+			t.eraseDisplay(2, false)
+			if changed {
+				t.cur.wrapPending = pending
 			}
-			t.setAlt(true, true)
-			t.clearScreen()
-		} else if t.altActive {
-			var saved savedCursor
-			if t.saved != nil {
-				saved = t.saved.alternate
-			}
-			t.setAlt(false, true)
-			if saved.valid {
-				t.setCursor(saved.cursor)
-			}
+		} else {
+			t.restoreCursor()
 		}
 	}
 }
 
-// setAlt switches screens. Leaving the alternate screen frees it, unless
-// it was left with mode 47 (which keeps its contents for the next switch)
-// and holds something.
-func (t *Terminal) setAlt(on, clearOnExit bool) {
+// switchScreen ends the live hyperlink only when the screen changes.
+// Charset and ordinary pen state travel with the cursor; DECSC does not.
+func (t *Terminal) switchScreen(on bool, mode int) {
 	if on == t.altActive {
 		return
 	}
+	t.setLink("")
 	t.touchAll()
-	t.altActive = on
+	content := t.semanticContent()
 	if on {
-		if t.alt == nil {
-			t.alt = make([][]cell, t.rows)
-		}
-	} else {
-		if t.saved != nil {
-			t.saved.alternate.valid = false
-		}
-		if clearOnExit || t.altBlank() {
-			t.alt, t.altWrap = nil, nil
-		}
+		t.ext().inactivePrimary = point{t.cur.x, t.cur.y, t.cur.wrapPending}
+	} else if t.x != nil {
+		t.x.inactivePrimary = point{}
 	}
-	t.cur.wrapPending = false
+	t.altActive = on
+	if on || mode != 1049 {
+		t.setSemanticContent(content)
+	}
+	if on && t.alt == nil {
+		t.alt = make([][]cell, t.rows)
+	}
 }
 
 func (t *Terminal) altBlank() bool {
@@ -1093,26 +1160,28 @@ func (t *Terminal) eraseRows(from, to int) {
 	for y := from; y < to; y++ {
 		t.touch(y)
 		if row := scr[y]; row != nil {
-			t.blank(row)
+			scr[y] = t.blank(row)
 		} else {
 			scr[y] = t.blankRow()
 		}
 		if w != nil {
-			w[y] = false
+			w[y] = 0
 		}
 	}
 }
 
 // blank erases row in place with the current background.
-func (t *Terminal) blank(row []cell) {
+func (t *Terminal) blank(row []cell) []cell {
 	if t.cur.pen.Bg == 0 {
 		clear(row)
-		return
+		return row
 	}
+	row = growRow(row, t.cols, t.cols)
 	blank := cell{Bg: t.cur.pen.Bg}
 	for x := range row {
 		row[x] = blank
 	}
+	return row
 }
 
 // blankRow returns an erased row: nil when the erase color is the default.
@@ -1127,15 +1196,60 @@ func (t *Terminal) blankRow() []cell {
 	return row
 }
 
-// row returns screen row y for writing, allocating it if it is still
-// blank, and marks it dirty.
+// row returns a full-width screen row for writing and marks it dirty.
+// Compact can retain only its nonzero prefix; newly exposed cells are zero
+// even when a previous width reduction left old data in the capacity.
 func (t *Terminal) row(y int) []cell {
 	t.touch(y)
 	scr := t.screen()
-	if scr[y] == nil {
-		scr[y] = make([]cell, t.cols)
+	if len(scr[y]) < t.cols {
+		scr[y] = growRow(scr[y], t.cols, t.cols)
 	}
 	return scr[y]
+}
+
+// ensureRowPrefix prepares only the columns a print will write. Capacity
+// grows geometrically for byte-sized writes, bounded by the physical row.
+// Alternate-screen writers use full rows to avoid reallocating dense redraws.
+func ensureRowPrefix(row *[]cell, end, cols int) []cell {
+	if len(*row) < end {
+		*row = growRowPrefix(*row, end, cols)
+	}
+	return *row
+}
+
+// Keep capacity policy and allocation outside the printing loop's hot wrapper.
+//
+//go:noinline
+func growRowPrefix(row []cell, end, limit int) []cell {
+	capacity := cap(row)
+	if capacity < end {
+		capacity = limit
+		if cap(row) <= limit/2 {
+			capacity = max(end, 2*cap(row))
+		}
+	}
+	return growRow(row, end, capacity)
+}
+
+func growRow(row []cell, end, capacity int) []cell {
+	if cap(row) < end {
+		next := make([]cell, end, capacity)
+		copy(next, row)
+		return next
+	}
+	old := len(row)
+	row = row[:end]
+	clear(row[old:])
+	return row
+}
+
+// rowCell reads an implicit zero outside a row's owned prefix.
+func rowCell(row []cell, x int) cell {
+	if uint(x) < uint(len(row)) {
+		return row[x]
+	}
+	return cell{}
 }
 
 // fillCells erases cells [from, to) of row y with the current background.
@@ -1146,22 +1260,49 @@ func (t *Terminal) fillCells(y, from, to int) {
 		return
 	}
 	if to == t.cols {
-		if w := t.wraps(); w != nil {
-			w[y] = false
+		if w := t.wraps(); w != nil && w[y]&rowWrap != 0 {
+			w[y] &^= rowWrap
+			t.touch(y)
 		}
 	}
 	scr := t.screen()
-	if scr[y] == nil && t.cur.pen.Bg == 0 {
-		return
+	var row []cell
+	if t.cur.pen.Bg == 0 {
+		row = scr[y]
+		if from >= len(row) {
+			return // the requested range already consists of implicit zeros
+		}
+		to = min(to, len(row))
+		if !t.RowDirty(y) {
+			// Clean rows need an actual-change check so damage does not
+			// depend on whether an all-zero tail owns storage. A row that
+			// is already dirty can take the normal fast clear path.
+			changed := false
+			for _, c := range row[from:to] {
+				if c != (cell{}) {
+					changed = true
+					break
+				}
+			}
+			if !changed {
+				return
+			}
+		}
+		t.touch(y)
+	} else {
+		row = t.row(y)
 	}
-	row := t.row(y)
 	blank := cell{Bg: t.cur.pen.Bg}
 	// Erasing half of a wide character erases all of it.
 	if from > 0 && row[from].R == wideTail {
 		row[from-1] = blank
 	}
-	if to < t.cols && row[to].R == wideTail {
+	if to < len(row) && row[to].R == wideTail {
 		row[to] = blank
+	}
+	if blank.Bg == 0 {
+		clear(row[from:to])
+		return
 	}
 	for x := from; x < to; x++ {
 		row[x] = blank
@@ -1173,12 +1314,12 @@ var decGraphics = [...]rune{
 	'⎻', '─', '⎼', '⎽', '├', '┤', '┴', '┬', '│', '≤', '≥', 'π', '≠', '£', '·',
 }
 
-// charset returns whether the character set for the next printed
-// character is DEC special graphics, consuming a single shift.
-func (t *Terminal) graphics() bool {
-	if t.ss != 0 {
-		g := t.cur.g[t.ss]
-		t.ss = 0
+// characterSet consumes a single shift when choosing the next character's
+// mapping. REP uses the designation in effect when the repeat runs.
+func (t *Terminal) characterSet() charset {
+	if t.cur.ss != 0 {
+		g := t.cur.g[t.cur.ss]
+		t.cur.ss = 0
 		return g
 	}
 	return t.cur.g[t.cur.gl]
@@ -1188,7 +1329,11 @@ func (t *Terminal) print(r rune, w int) {
 	// REP reprints the input scalar with the charset in effect when REP
 	// runs. Saving the mapped box character would ignore later SI/SO or SCS.
 	t.lastChar = r
-	if t.graphics() && r >= 0x5f && r <= 0x7e {
+	g := t.characterSet()
+	if g == charsetBritish && r == '#' {
+		r = '£'
+	}
+	if g == charsetGraphics && r >= 0x5f && r <= 0x7e {
 		if r == 0x5f {
 			r = ' '
 		} else {
@@ -1201,6 +1346,13 @@ func (t *Terminal) print(r rune, w int) {
 	}
 	t.cur.wrapPending = false
 	if w > t.cols {
+		// A one-column terminal cannot print a wide glyph. Native keeps
+		// an empty cell with the pen and a pending wrap for the next print.
+		blank := t.cur.pen
+		blank.R = 0
+		t.touch(t.cur.y)
+		ensureRowPrefix(&t.screen()[t.cur.y], t.cur.x+1, t.cols)[t.cur.x] = blank
+		t.cur.wrapPending = true
 		return
 	}
 	// Text runs up to the right margin, unless the cursor is already
@@ -1211,7 +1363,7 @@ func (t *Terminal) print(r rune, w int) {
 	}
 	if t.cur.x+w > edge+1 {
 		if !t.autowrap {
-			t.cur.x = max(edge+1-w, 0)
+			return
 		} else {
 			t.fillCells(t.cur.y, t.cur.x, edge+1)
 			if w == 2 {
@@ -1220,7 +1372,12 @@ func (t *Terminal) print(r rune, w int) {
 				if t.fullWidth() {
 					spacer.R = spacerHead
 				}
-				t.row(t.cur.y)[t.cur.x] = spacer
+				if t.altActive {
+					t.row(t.cur.y)[t.cur.x] = spacer
+				} else {
+					t.touch(t.cur.y)
+					ensureRowPrefix(&t.screen()[t.cur.y], t.cur.x+1, t.cols)[t.cur.x] = spacer
+				}
 			}
 			t.wrapLine()
 			t.cur.x = t.left
@@ -1230,8 +1387,14 @@ func (t *Terminal) print(r rune, w int) {
 			edge = t.right
 		}
 	}
-	row := t.row(t.cur.y)
 	x := t.cur.x
+	var row []cell
+	if t.insert || t.altActive {
+		row = t.row(t.cur.y)
+	} else {
+		t.touch(t.cur.y)
+		row = ensureRowPrefix(&t.screen()[t.cur.y], x+w, t.cols)
+	}
 	if t.insert && x+w <= edge {
 		copy(row[x+w:edge+1], row[x:edge+1-w])
 	}
@@ -1240,7 +1403,7 @@ func (t *Terminal) print(r rune, w int) {
 	if row[x].R == wideTail && x > 0 {
 		row[x-1] = cell{}
 	}
-	if end := x + w; end < t.cols && row[end].R == wideTail {
+	if end := x + w; end < len(row) && row[end].R == wideTail {
 		row[end] = cell{}
 	}
 	pen.R = r
@@ -1263,8 +1426,10 @@ func (t *Terminal) print(r rune, w int) {
 // wrapLine moves the cursor to the next line for autowrap and marks the
 // row it left as continuing there.
 func (t *Terminal) wrapLine() {
+	content := t.semanticContent()
+	defer t.semanticWrap(content)
 	y := t.cur.y
-	if !t.fullWidth() {
+	if !t.fullWidth() || t.cur.x != t.cols-1 {
 		t.index() // soft wraps are only kept for full rows
 		return
 	}
@@ -1293,8 +1458,15 @@ func (t *Terminal) combine(r rune) {
 	if x < 0 || row == nil {
 		return
 	}
-	if row[x].R == wideTail && x > 0 {
+	if rowCell(row, x).R == wideTail && x > 0 {
 		x--
+	}
+	if x >= len(row) {
+		if x == t.cols-1 && !t.autowrap && x > 0 && rowCell(row, x-1).R > 0 {
+			x--
+		} else {
+			return
+		}
 	}
 	c := &row[x]
 	if c.R <= 0 {
@@ -1305,7 +1477,7 @@ func (t *Terminal) combine(r rune) {
 		}
 	}
 	s := t.cellString(*c)
-	if len(s)+utf8.RuneLen(r) > maxCluster {
+	if utf8.RuneCountInString(s) >= maxClusterRunes {
 		return
 	}
 	if r == 0xfe0e || r == 0xfe0f {
@@ -1316,7 +1488,7 @@ func (t *Terminal) combine(r rune) {
 			return
 		}
 	}
-	var modes uint32
+	var modes clusterModes
 	if c.R >= clusterBase {
 		modes = t.x.clusters[c.R-clusterBase].joinModes
 	}
@@ -1329,28 +1501,34 @@ func (t *Terminal) combine(r rune) {
 // cells directly; anything else goes through print.
 func (t *Terminal) printASCII(p []byte) {
 	for len(p) > 0 {
-		if t.cur.g[t.cur.gl] || t.ss != 0 || t.insert || t.cur.wrapPending || !t.autowrap {
+		if t.cur.g[t.cur.gl] != charsetASCII || t.cur.ss != 0 || t.insert || t.cur.wrapPending || !t.autowrap {
 			t.print(rune(p[0]), 1)
 			p = p[1:]
 			continue
 		}
-		row := t.row(t.cur.y)
 		x := t.cur.x
 		edge := t.cols - 1
 		if x <= t.right {
 			edge = t.right
 		}
 		n := min(len(p), edge+1-x)
-		if row[x].R == wideTail || (x+n < t.cols && row[x+n].R == wideTail) {
+		var row []cell
+		if t.altActive {
+			row = t.row(t.cur.y)
+		} else {
+			t.touch(t.cur.y)
+			row = ensureRowPrefix(&t.screen()[t.cur.y], x+n, t.cols)
+		}
+		if row[x].R == wideTail || (x+n < len(row) && row[x+n].R == wideTail) {
 			t.print(rune(p[0]), 1)
 			p = p[1:]
 			continue
 		}
-		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.L
+		fg, bg, attrs, link := t.cur.pen.Fg, t.cur.pen.Bg, t.cur.pen.A, t.cur.pen.E
 		row = row[x : x+n]
 		for i, b := range p[:n] {
 			c := &row[i]
-			c.R, c.Fg, c.Bg, c.A, c.L = rune(b), fg, bg, attrs, link
+			c.R, c.Fg, c.Bg, c.A, c.E = rune(b), fg, bg, attrs, link
 		}
 		t.lastChar = rune(p[n-1])
 		if x+n > edge {
@@ -1366,6 +1544,7 @@ func (t *Terminal) printASCII(p []byte) {
 // index moves the cursor down a line, scrolling at the bottom margin. It
 // reports whether the cursor moved or the region scrolled.
 func (t *Terminal) index() bool {
+	defer t.semanticIndex()
 	if t.cur.y == t.bot {
 		if !t.inMargins(t.cur.x) {
 			return false
@@ -1405,7 +1584,7 @@ func (t *Terminal) scrollUp(top, bot, n int) {
 	if top == 0 && !t.altActive {
 		w := t.mainWrap
 		for i, row := range scr[:n] {
-			t.pushScrollback(row, w != nil && w[i], rowAt(scr, i+1))
+			t.pushScrollback(row, rowFlagsAt(w, i), rowAt(scr, i+1))
 		}
 		open := t.sbOpen
 		t.rotate(top, bot, n)
@@ -1444,8 +1623,7 @@ func (t *Terminal) rotate(top, bot, n int) {
 	}
 	for i := range in {
 		if i < len(recycled) && recycled[i] != nil {
-			t.blank(recycled[i])
-			in[i] = recycled[i]
+			in[i] = t.blank(recycled[i])
 		} else {
 			in[i] = t.blankRow()
 		}
@@ -1455,14 +1633,17 @@ func (t *Terminal) rotate(top, bot, n int) {
 	if w := t.wraps(); w != nil {
 		if up {
 			copy(w[top:], w[top+n:bot+1])
-			clear(w[max(bot-n, top) : bot+1])
+			clear(w[max(bot-n+1, top) : bot+1])
+			if bot-n >= top {
+				w[bot-n] &^= rowWrap
+			}
 		} else {
 			copy(w[top+n:bot+1], w[top:bot+1-n])
 			clear(w[top : top+n])
-			w[bot] = false
+			w[bot] &^= rowWrap
 		}
 		if top > 0 {
-			w[top-1] = false
+			w[top-1] &^= rowWrap
 		}
 	}
 	if top == 0 && !t.altActive {
@@ -1494,10 +1675,9 @@ func (t *Terminal) scrollRect(top, bot, n int) {
 			return
 		}
 		d := t.row(dst)
-		if s := scr[src]; s != nil {
-			copy(d[l:r], s[l:r])
-		} else {
-			clear(d[l:r])
+		clear(d[l:r])
+		if s := scr[src]; l < len(s) {
+			copy(d[l:r], s[l:min(r, len(s))])
 		}
 	}
 	erase := func(y int) {
@@ -1654,6 +1834,9 @@ func (t *Terminal) eraseDisplay(mode int, selective bool) {
 		t.eraseFull(0, t.cur.y, keep)
 		t.erase(t.cur.y, 0, t.cur.x+1, keep)
 	case 2:
+		if !t.altActive && screenAtPrompt(t.main, t.mainWrap) {
+			t.scrollClear()
+		}
 		t.eraseFull(0, t.rows, keep)
 	case 3:
 		if !selective {
@@ -1688,7 +1871,7 @@ func (t *Terminal) scrollClear() {
 	}
 	if !t.altActive {
 		for y, row := range scr[:n] {
-			t.pushScrollback(row, t.mainWrap != nil && t.mainWrap[y], rowAt(scr, y+1))
+			t.pushScrollback(row, rowFlagsAt(t.mainWrap, y), rowAt(scr, y+1))
 		}
 	}
 	// rotate normally erases with the pen's background. Scroll-and-clear
@@ -1714,7 +1897,8 @@ func (t *Terminal) eraseLine(mode int, selective bool) {
 	case 1:
 		t.erase(t.cur.y, 0, t.cur.x+1, keep)
 	case 2:
-		t.eraseFull(t.cur.y, t.cur.y+1, keep)
+		// EL clears cells, not the shell's row prompt annotation.
+		t.erase(t.cur.y, 0, t.cols, keep)
 	}
 }
 
@@ -1738,12 +1922,12 @@ func (t *Terminal) erase(y, from, to int, keep bool) {
 		return
 	}
 	for x := max(from, 0); x < min(to, t.cols); {
-		if row[x].A&AttrProtected != 0 {
+		if rowCell(row, x).A&AttrProtected != 0 {
 			x++
 			continue
 		}
 		end := x + 1
-		for end < min(to, t.cols) && row[end].A&AttrProtected == 0 {
+		for end < min(to, t.cols) && rowCell(row, end).A&AttrProtected == 0 {
 			end++
 		}
 		t.fillCells(y, x, end)
@@ -1905,23 +2089,20 @@ func (t *Terminal) prevTab(x int) int {
 	return 0
 }
 
-// resizeTabs keeps custom tab stops across a width change; new columns
-// get the default stops.
+// Column changes restore the default tab stops, as libghostty does.
+// Height-only resizes leave the current tab table alone.
 func (t *Terminal) resizeTabs(oldCols int) {
-	old := t.tabs()
-	if old == nil {
-		return
+	if oldCols != t.cols && t.x != nil {
+		t.x.tabs = nil
 	}
-	tabs := defaultTabs(t.cols)
-	for x := 0; x < min(oldCols, t.cols); x++ {
-		tabs[x/64] = tabs[x/64]&^(1<<(x%64)) | old[x/64]&(1<<(x%64))
-	}
-	t.x.tabs = tabs
 }
 
 func (t *Terminal) sgr() {
 	if t.nparams == 0 {
-		t.cur.pen = cell{A: t.cur.pen.A & AttrProtected, L: t.cur.pen.L}
+		if t.cur.pen.E != 0 {
+			t.setUnderlineColor(0)
+		}
+		t.cur.pen = cell{A: t.cur.pen.A & AttrProtected, E: t.cur.pen.E}
 		return
 	}
 	p := &t.cur.pen
@@ -1933,9 +2114,17 @@ func (t *Terminal) sgr() {
 		for next < nparams && t.subParam(next) {
 			next++
 		}
+		colon := t.subParam(i + 1)
+		if colon && v != 4 && v != 38 && v != 48 && v != 58 {
+			i = next - 1 // unknown colon groups do not apply their leading SGR
+			continue
+		}
 		switch {
 		case v == 0:
-			*p = cell{A: p.A & AttrProtected, L: p.L}
+			if p.E != 0 {
+				t.setUnderlineColor(0)
+			}
+			*p = cell{A: p.A & AttrProtected, E: p.E}
 		case v == 1:
 			p.A |= AttrBold
 		case v == 2:
@@ -1943,6 +2132,9 @@ func (t *Terminal) sgr() {
 		case v == 3:
 			p.A |= AttrItalic
 		case v == 4:
+			if colon && next == i+1 {
+				break
+			}
 			style := 1
 			if next > i+1 {
 				style = int(t.params[i+1])
@@ -1975,12 +2167,16 @@ func (t *Terminal) sgr() {
 		case v >= 30 && v <= 37:
 			p.Fg = colorIndexed | Color(v-30)
 		case v == 38, v == 48, v == 58:
-			c, end := t.extColor(i, next)
-			switch v {
-			case 38:
-				p.Fg = c
-			case 48:
-				p.Bg = c
+			c, end, valid := t.extColor(i, next)
+			if valid {
+				switch v {
+				case 38:
+					p.Fg = c
+				case 48:
+					p.Bg = c
+				case 58:
+					t.setUnderlineColor(c)
+				}
 			}
 			next = end
 		case v == 39:
@@ -1993,6 +2189,8 @@ func (t *Terminal) sgr() {
 			p.A |= AttrOverline
 		case v == 55:
 			p.A &^= AttrOverline
+		case v == 59:
+			t.setUnderlineColor(0)
 		case v >= 90 && v <= 97:
 			p.Fg = colorIndexed | Color(v-90+8)
 		case v >= 100 && v <= 107:
@@ -2005,39 +2203,39 @@ func (t *Terminal) sgr() {
 // extColor parses the color after an extended-color parameter at i, in
 // either the colon form (38:5:n, 38:2::r:g:b, 38:2:r:g:b) or the legacy
 // semicolon form (38;5;n, 38;2;r;g;b). It returns the color and the index
-// of the next parameter to interpret.
-func (t *Terminal) extColor(i, next int) (Color, int) {
+// of the next parameter to interpret and whether a color was complete.
+// Invalid colors leave the old color in place; unconsumed parameters can
+// still be independent SGRs. Colon groups require exactly three RGB
+// channels, optionally preceded by a colorspace slot.
+func (t *Terminal) extColor(i, next int) (Color, int, bool) {
 	nparams := int(t.nparams)
-	if next > i+1 { // colon form: everything is in sub-parameters
-		args := t.params[i+1 : next]
-		switch {
-		case args[0] == 5 && len(args) >= 2:
-			return colorIndexed | Color(args[1]&0xff), next
-		case args[0] == 2 && len(args) >= 5:
-			return rgb(int(args[2]), int(args[3]), int(args[4])), next
-		case args[0] == 2 && len(args) == 4:
-			return rgb(int(args[1]), int(args[2]), int(args[3])), next
-		}
-		return 0, next
-	}
 	if i+1 >= nparams {
-		return 0, i + 1
+		return 0, i + 1, false
 	}
 	switch t.params[i+1] {
 	case 5:
 		if i+2 < nparams {
-			return colorIndexed | Color(t.params[i+2]&0xff), i + 3
+			return colorIndexed | Color(min(t.params[i+2], 0xffff)&0xff), i + 3, true
 		}
 	case 2:
 		if i+4 < nparams {
-			return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), i + 5
+			if !t.subParam(i + 1) { // legacy semicolon form
+				return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), i + 5, true
+			}
+			switch next - i {
+			case 5:
+				return rgb(int(t.params[i+2]), int(t.params[i+3]), int(t.params[i+4])), next, true
+			case 6:
+				return rgb(int(t.params[i+3]), int(t.params[i+4]), int(t.params[i+5])), next, true
+			}
+			return 0, max(next, i+2), false
 		}
 	}
-	return 0, nparams
+	return 0, i + 1, false
 }
 
 func rgb(r, g, b int) Color {
-	return colorRGB | Color(r&0xff)<<16 | Color(g&0xff)<<8 | Color(b&0xff)
+	return colorRGB | Color(min(r, 0xffff)&0xff)<<16 | Color(min(g, 0xffff)&0xff)<<8 | Color(min(b, 0xffff)&0xff)
 }
 
 func (t *Terminal) oscDispatch() {
@@ -2052,88 +2250,122 @@ func (t *Terminal) oscDispatch() {
 		// OSC 8 ; params ; uri: start a hyperlink, or end it (no uri).
 		params, uri, ok := strings.Cut(string(s[2:]), ";")
 		if !ok || uri == "" {
-			t.cur.pen.L = 0
+			t.setLink("")
 		} else {
-			t.cur.pen.L = t.internLink(params + ";" + uri)
+			t.setLink(params + ";" + uri)
 		}
+	case len(s) >= 5 && string(s[:4]) == "133;":
+		t.semanticCommand(s[4:])
 	default:
 		t.oscColor(s)
 	}
 }
 
-// internLink returns the cell link index for a hyperlink target. Recent
-// entries are reused; when the table is full, links no cell refers to are
-// dropped. Past 65535 live links, new ones are not recorded.
-func (t *Terminal) internLink(target string) uint16 {
+// internExtra shares uncommon attributes without enlarging ordinary cells.
+// Recent pairs are reused. Collection drops unreachable pairs; at the
+// 16-bit limit, a full search also reuses older pairs. Zero means the
+// default pair, or that all 65535 entries are live and the new pair cannot
+// be stored. Pen setters retain their current pair in the latter case.
+func (t *Terminal) internExtra(v cellExtra) uint16 {
+	if v == (cellExtra{}) {
+		return 0
+	}
 	x := t.ext()
-	for i := len(x.links) - 1; i >= max(len(x.links)-16, 0); i-- {
-		if x.links[i] == target {
+	for i := len(x.rare) - 1; i >= max(len(x.rare)-16, 0); i-- {
+		if x.rare[i] == v {
 			return uint16(i + 1)
 		}
 	}
-	if len(x.links) >= x.linkCap {
-		t.compactLinks()
+	if len(x.rare) >= x.rareCap {
+		t.compactExtras()
 	}
-	if len(x.links) >= 0xffff {
+	if len(x.rare) >= 0xffff {
+		for i, old := range x.rare {
+			if old == v {
+				return uint16(i + 1)
+			}
+		}
 		return 0
 	}
-	x.links = append(x.links, target)
-	return uint16(len(x.links))
+	x.rare = append(x.rare, v)
+	return uint16(len(x.rare))
 }
 
-// compactLinks drops the links no cell or cursor refers to, renumbering
+func (t *Terminal) setPenExtra(v cellExtra) {
+	if id := t.internExtra(v); id != 0 || v == (cellExtra{}) {
+		t.cur.pen.E = id
+	}
+}
+
+func (t *Terminal) setLink(target string) {
+	v := t.extraAt(t.cur.pen.E)
+	v.link = target
+	t.setPenExtra(v)
+}
+
+func (t *Terminal) setUnderlineColor(c Color) {
+	v := t.extraAt(t.cur.pen.E)
+	v.underline = c
+	t.setPenExtra(v)
+}
+
+// compactExtras drops the attribute pairs no cell or cursor refers to, renumbering
 // the rest, and sets the next compaction point.
-func (t *Terminal) compactLinks() {
+func (t *Terminal) compactExtras() {
 	x := t.x
-	if len(x.links) > 0 {
-		remap := make([]uint16, len(x.links))
-		var kept []string
+	if len(x.rare) > 0 {
+		remap := make([]uint16, len(x.rare))
+		var kept []cellExtra
 		ref := func(l *uint16) {
 			if *l == 0 {
 				return
 			}
 			i := *l - 1
 			if remap[i] == 0 {
-				kept = append(kept, x.links[i])
+				kept = append(kept, x.rare[i])
 				remap[i] = uint16(len(kept))
 			}
 			*l = remap[i]
 		}
-		t.visitLinkRefs(ref)
-		x.links = kept
+		t.visitExtraRefs(ref)
+		x.rare = kept
 	}
-	x.linkCap = max(16, 2*len(x.links))
+	x.rareCap = min(0xffff, max(16, 2*len(x.rare)))
 }
 
-// visitLinkRefs covers the cells and pens which can still supply a link.
+// visitExtraRefs covers the cells and pens which can still supply attributes.
 // An invalid saved cursor cannot restore its pen; clear its old index so
 // that it cannot become a dangling reference after its table is collected.
-func (t *Terminal) visitLinkRefs(ref func(*uint16)) {
+func (t *Terminal) visitExtraRefs(ref func(*uint16)) {
 	for _, scr := range [][][]cell{t.main, t.alt} {
 		for _, row := range scr {
 			for i := range row {
-				ref(&row[i].L)
+				ref(&row[i].E)
 			}
 		}
 	}
-	ref(&t.cur.pen.L)
+	ref(&t.cur.pen.E)
 	if t.saved != nil {
-		for _, saved := range [...]*savedCursor{&t.saved.screen[0], &t.saved.screen[1], &t.saved.alternate} {
+		for _, saved := range [...]*savedCursor{&t.saved.screen[0], &t.saved.screen[1]} {
 			if saved.valid {
-				ref(&saved.pen.L)
+				ref(&saved.pen.E)
 			} else {
-				saved.pen.L = 0
+				saved.pen.E = 0
 			}
 		}
 	}
 }
 
-// link returns a cell's hyperlink target ("params;uri"), or "".
-func (t *Terminal) link(l uint16) string {
-	if l == 0 {
-		return ""
+func (t *Terminal) extraAt(id uint16) cellExtra {
+	if id == 0 {
+		return cellExtra{}
 	}
-	return t.x.links[l-1]
+	return t.x.rare[id-1]
+}
+
+// link returns a cell's hyperlink target ("params;uri"), or "".
+func (t *Terminal) link(id uint16) string {
+	return t.extraAt(id).link
 }
 
 // --- characters with combining marks ---
@@ -2213,7 +2445,8 @@ func (t *Terminal) visitClusterRefs(ref func(*rune)) {
 // lines past the line and byte budgets. A row that continues on the next
 // one (wrapped, with next the row below) is kept whole, and the next row
 // is appended to its line.
-func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
+func (t *Terminal) pushScrollback(row []cell, flags rowFlags, next []cell) {
+	wrapped := flags&rowWrap != 0
 	if t.sbMaxLines <= 0 {
 		return
 	}
@@ -2221,25 +2454,32 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		// A spacer head at the end is left out: it is not text, and the
 		// wide character after it recreates it on replay at this width.
 		end := t.cols
-		if row != nil && row[end-1].R == spacerHead {
+		if rowCell(row, end-1).R == spacerHead {
 			end--
 		}
-		if row == nil {
-			t.scratch = t.appendWrapped(t.scratch[:0], nil, nil)
-		} else {
-			t.scratch = t.appendRow(t.scratch[:0], row[:end], false)
-		}
+		t.scratch = t.appendRowHistory(t.scratch[:0], row, end, false, true)
 	} else {
-		t.scratch = t.appendRow(t.scratch[:0], row, true)
+		t.scratch = t.appendRowHistory(t.scratch[:0], row, t.cols, true, true)
 	}
 	join := t.sbOpen && len(t.sb) > t.sbStart && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+	if semantic := flags & rowSemanticMask; semantic != 0 || join && bytes.Contains(t.sb[len(t.sb)-1], []byte{0, 0, 'P'}) {
+		if semantic != 0 && contentEnd(row) == 0 {
+			// An annotated empty row is meaningful to native reflow.
+			t.scratch = append(t.scratch, 0, 1, ' ')
+		}
+		n := len(t.scratch)
+		t.scratch = append(t.scratch, 0, 0, 0, 0)
+		copy(t.scratch[4:], t.scratch[:n])
+		t.scratch[0], t.scratch[1], t.scratch[2], t.scratch[3] = 0, 0, 'P', byte(semantic>>1)
+		join = join && len(t.sb[len(t.sb)-1])+len(t.scratch) <= maxLogicalLine
+	}
 	putBack := join && t.sbSpacer && !startsWide(row)
 	if join && !wrapped && contentEnd(row) < t.cols {
 		// Replayed, this row starts by wrapping, so something must be
 		// printed, and the wrap may scroll in a row painted in the current
 		// background: clear the rest of it.
 		if len(t.scratch) == 0 {
-			t.scratch = append(t.scratch, ' ')
+			t.scratch = append(t.scratch, 0, 1, ' ')
 		}
 		t.scratch = append(t.scratch, "\x1b[K"...)
 	}
@@ -2275,7 +2515,7 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 		t.sbBytes += len(line) + 24
 	}
 	t.sbOpen = wrapped
-	t.sbSpacer = wrapped && row != nil && row[t.cols-1].R == spacerHead
+	t.sbSpacer = wrapped && rowCell(row, t.cols-1).R == spacerHead
 	if len(t.scratch) > 4096 {
 		t.scratch = nil // do not keep a large buffer on an idle terminal
 	}
@@ -2294,7 +2534,7 @@ func (t *Terminal) pushScrollback(row []cell, wrapped bool, next []cell) {
 
 func rowBlank(row []cell) bool {
 	for _, c := range row {
-		if !isZero(c) && !(c.R == ' ' && c.Fg == 0 && c.Bg == 0 && c.A == 0) {
+		if !isZero(c) && !(c.R == ' ' && c.Fg == 0 && c.Bg == 0 && c.A == 0 && c.E == 0) {
 			return false
 		}
 	}
@@ -2315,7 +2555,7 @@ func rowAt(scr [][]cell, i int) []cell {
 func (t *Terminal) wrapEnd(row, next []cell) int {
 	// Replayed, the wide character wraps and leaves a spacer head in its
 	// own pen, so leave it out only if that recreates the original style.
-	if row != nil && row[t.cols-1].R == spacerHead && startsWide(next) && styleOf(row[t.cols-1]) == styleOf(next[0]) {
+	if last := rowCell(row, t.cols-1); last.R == spacerHead && startsWide(next) && styleOf(last) == styleOf(next[0]) {
 		return t.cols - 1
 	}
 	return t.cols
@@ -2338,7 +2578,7 @@ func isZero(c cell) bool { return isZeroAt(&c) }
 // isZeroAt is isZero for a cell in place (field tests are about twice
 // as fast as comparing whole cells in the trimming loops).
 func isZeroAt(c *cell) bool {
-	// A cell is two words: R and Fg, then Bg, A and L.
+	// A cell is two words: R and Fg, then Bg, A and E.
 	w := *(*uint64)(unsafe.Pointer(c))
 	return *(*uint64)(unsafe.Pointer(&c.Bg)) == 0 && (w == 0 || w == spacerWord)
 }

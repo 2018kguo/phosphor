@@ -21,9 +21,9 @@ and why it has a separate exact checkpoint format.
 
 ## Why
 
-- **Small.** About 2.5 KB for an idle 80x24 terminal at a shell prompt: a
-  cell is 16 bytes, rows are allocated once drawn on, the alternate
-  screen only while shown, and scrollback is kept serialized under a
+- **Small.** About 1.4 KB for an idle 80x24 terminal at a shell prompt: a
+  cell is 16 bytes, rows grow only as drawn on, the alternate
+  screen is allocated on first entry, and scrollback is kept serialized under a
   byte budget (an 80x24 terminal with 2,000 lines of log scrollback holds
   about 340 KB).
 - **Correct.** Five external conformance suites run as ordinary Go tests,
@@ -97,6 +97,12 @@ attach := t.Repaint(true)             // ANSI for an attached terminal of the sa
 _ = attach
 ```
 
+`Style.UnderlineColor` stores the SGR 58 color; its default follows the
+foreground. Hyperlinks and underline colors share a table of up to 65535
+live pairs. Unused pairs are collected. If every entry is still live,
+setting a new pair keeps the current hyperlink and underline color until
+space becomes available.
+
 The [examples](https://pkg.go.dev/github.com/2018kguo/phosphor#pkg-examples)
 show basic use, a headless runner answering queries, a renderer driven by
 damage, attaching through `Repaint`, and `Restart`.
@@ -114,10 +120,10 @@ Answered: DA1 (`CSI ? 62 ; 22 c`, a VT220 with ANSI color), DA2, DA3,
 DSR 5 and 6 (CPR), DECXCPR, DSR ?15, ?26 and ?996 (dark or light, from the
 background), DECRQM for ANSI and DEC modes, DECRQSS (SGR, DECSTBM,
 DECSLRM, DECSCUSR, DECSCA, DECSCL), XTVERSION (`phosphor`), XTGETTCAP
-(`Co`, `colors`), the kitty keyboard flags (`CSI ? u`), XTWINOPS 18 (text
-area size), and OSC 4, 10, 11 and 12 color queries from the palette
+(`Co`, `colors`, `Smulx`), the kitty keyboard flags (`CSI ? u`), XTWINOPS 18 (text
+area size), and OSC 4, 10, 11, 12 and 21 color queries from the palette
 (`WithPalette`, `Palette`). Programs can also set and reset those colors
-(OSC 4, 10, 11, 12, 104, 110-112).
+(OSC 4, 10, 11, 12, 21, 104, 110-112).
 
 ### Rendering
 
@@ -139,9 +145,12 @@ while a program draws a frame it wants shown at once (mode 2026).
 `Palette().Resolve(color, background)` turns a cell color into RGB.
 
 Applications hosting many sessions can call `Compact()` after output
-settles. It frees completely zeroed rows, unused Unicode and hyperlink
-storage, and temporary buffers. Clusters visible on either screen and links
-held by saved cursors remain live; unchanged live tables stay in place. It does so
+settles. It retains only the nonzero prefix of each row and frees unused
+Unicode and cell attributes, plus temporary buffers. Main-screen prints grow
+only the prefix they need. Alternate-screen prints keep full row capacity
+for dense redraws; Compact can trim either screen again at idle. Clusters
+visible on either screen and saved cursor attributes remain live; unchanged
+live tables stay in place. It does so
 without changing the screen, scrollback, input modes or unfinished parser
 state. Later output can allocate rows again. It is an explicit idle-time
 tradeoff; ordinary writes do not run it.
@@ -158,6 +167,12 @@ neither callback. Zero limits allow 64 MiB of decoded storage and four
 million cells per screen; callers can choose other positive limits.
 Malformed, unsupported-version and limit errors are distinguishable with
 `errors.Is`. A snapshot is not terminal output.
+
+Snapshots retain OSC 133 prompt rows, each screen's semantic cursor state,
+the prompt redraw policy, and the actual primary cursor while the alternate
+screen is active. Version 1 snapshots remain readable; they did not store
+these facts, so prompt metadata defaults to absent and the inactive primary
+position uses the old 1049 save when present, otherwise the active position.
 
 `Repaint(withScrollback)` returns bytes that, written to a terminal of the
 same size in its initial state (another `phosphor.Terminal`, or a real
@@ -177,20 +192,32 @@ them would change the receiving terminal's own colors.
 The preceding character used by REP (`CSI b`) is not serialized. Resuming
 a pending REP after a repaint can therefore differ from uninterrupted
 output; preserving unfinished parser input does not remove that limit.
-With origin mode enabled, repaint clamps the live cursor to the scrolling
-region. A restored cursor or scroll-and-clear (`CSI 22 J`) can leave it
-outside that region, so the next printed character can move after repaint.
+A cursor outside enabled origin margins can be reconstructed when the
+alternate screen is available as scratch space. Other combinations with
+occupied alternate content, pending wrap or a lower-right cursor can still
+move the cursor after ANSI replay.
 Also, scalar ANSI output cannot always replay an emoji narrowed by VS15
 at the right edge of a one- or two-column screen after reflow. These are
 portable ANSI export limits; exact snapshots preserve those states.
+
+OSC 133 shell markers are available through `Prompt(y)`, returning
+`PromptNone`, `PromptPrimary` or `PromptContinuation`. Prompt rows travel
+through scrolling and reflow. `A`/`N` support `redraw=0`, `redraw=1` and
+`redraw=last`; a fresh headless terminal starts with redraw disabled, while
+RIS enables it as in libghostty-vt. ANSI replay preserves the headless text
+effects of an unmarked prompt cursor using explicit input state when no
+exact VT sequence is available. A GUI's per-cell semantic classification
+can differ in that case; binary snapshots preserve the original enum.
 
 ### Unicode
 
 Mode 2027 (`CSI ? 2027 h`) enables streaming grapheme clustering, including
 emoji sequences, flags, skin tones, Hangul and variation selectors. It is
 off initially, matching libghostty-vt. Clusters survive split writes,
-history, resizing, compaction and exact snapshots. Each cell retains at
-most 32 UTF-8 bytes of text; longer clusters are truncated at that bound.
+history, resizing, compaction and exact snapshots. Each cell retains the
+primary codepoint plus 64 suffix codepoints, matching the pinned native
+engine (at most 260 UTF-8 bytes). Additional suffixes are dropped, while
+their width effects still take place.
 `CodepointWidth` reports a scalar's Unicode 17 terminal width (0, 1 or 2).
 It does not measure the width of a grapheme by summing its parts.
 
@@ -211,7 +238,8 @@ the `Terminal`.
   UTF-8 act as their ESC forms), wcwidth widths (East Asian ambiguous =
   1), wide characters and the blank they leave at a wrap, combining marks,
   ZWJ and variation selectors kept with the previous character, DEC
-  special graphics in G0-G3 with SI/SO, LS2/LS3, SS2/SS3, REP, insert
+  special graphics and the British character set in G0-G3 with SI/SO,
+  LS2/LS3, SS2/SS3, REP, insert
   mode, autowrap with xterm's pending-wrap rules, reverse wraparound (45,
   1045).
 - Cursor: CUU/CUD/CUF/CUB, CNL/CPL, CHA/HPA/HPR, VPA/VPR, CUP/HVP, origin
@@ -226,13 +254,20 @@ the `Terminal`.
   top of the main screen, stored as logical lines.
 - Modes: DECAWM, IRM, LNM, DECOM, DECTCEM, DECCKM, DECKPAM, DECSCNM,
   mouse tracking and encodings, focus events, bracketed paste,
-  synchronized update, grapheme clustering, kitty keyboard flags, XTSAVE/XTRESTORE.
+  synchronized update, grapheme clustering, gated 80/132-column switching
+  (DECCOLM gated by mode 40), smooth scrolling, kitty keyboard flags, XTSAVE/XTRESTORE.
 - SGR: bold, faint, italic, underline styles (single, double, curly,
   dotted, dashed), blink, inverse, hidden, strikethrough, overline,
-  16/256/RGB colors in the `;` and `:` forms.
-- OSC: title (0, 2), hyperlinks (8), colors (4, 10, 11, 12, 104, 110-112).
+  16/256/RGB colors in the `;` and `:` forms, underline color (58/59).
+- OSC: title (0, 2), hyperlinks (8), prompt markers (133), colors
+  (4, 10, 11, 12, 21, 104, 110-112).
+  X11 color names, `rgb:`, `rgbi:` and hex specifications share one parser.
+  OSC 21 covers indexed, foreground, background and cursor colors; empty
+  values reset them to the host palette. The host always has concrete
+  default colors; renderer-only colors such as selections are ignored.
 - Resize: the main screen reflows (narrowing and widening back is exact)
-  and lines come back from the scrollback when it grows.
+  and height-only growth pulls history when the original primary cursor
+  was on the bottom row, including while the alternate screen is active.
 - RIS, DECSTR.
 
 ## What it does not
@@ -240,34 +275,39 @@ the `Terminal`.
 - Input encoding (keys, mouse reports, paste): the caller writes those to
   the PTY, using `Modes`.
 - Double-width and double-height lines, rectangular area operations
-  (DECCRA, DECERA, DECFRA, DECIC...), 132-column mode (DECCOLM),
-  national character sets, SGR fonts and super/subscript, underline color
-  (SGR 58 is parsed and dropped).
-- Sixel and kitty graphics, OSC 52 (clipboard), OSC 7 and 133 (shell
-  integration), icon names, the title stack.
+  (DECCRA, DECERA, DECFRA, DECIC...), national character sets other than
+  British, SGR fonts and super/subscript.
+- Sixel and kitty graphics, OSC 52 (clipboard), OSC 7 (working directory),
+  icon names, the title stack.
 - 8-bit C1 controls outside UTF-8, and S8C1T replies.
 - The alternate screen is cut or padded on resize, not reflowed
   (full-screen programs redraw on SIGWINCH).
 
 ## Conformance
 
+X11 color names are generated from the checksum-pinned source by
+`go run ./internal/colorgen`; `-source /path/to/rgb.txt` works offline.
+The data's license is in [licenses/X11.txt](licenses/X11.txt).
+
 Five external suites run as ordinary Go tests (`VT_CONF_REPORT=1 go test
 -run 'Conformance|Libvterm|Alacritty' -v` prints the table).
 
 | Suite | How | Pass | Fail | Deliberate difference | Out of scope |
 |---|---|---|---|---|---|
-| libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 731 | 0 | 26 | 195 |
-| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 502 | 0 | 5 | 42 |
-| wezterm `term/src/test` | translated cases | 128 | 0 | 6 | 4 |
-| esctest2 (xterm) | independently written cases (the GPL source is not used) | 410 | 0 | 12 | 215 |
-| alacritty ref tests | recordings and reference grids, per line | 1507 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |
+| libvterm `t/*.test` | scripts run unchanged by an interpreter, replies included | 728 | 0 | 30 | 195 |
+| ghostty `Terminal.zig`, `stream_terminal.zig` | translated cases | 524 | 0 | 0 | 25 |
+| wezterm `term/src/test` | translated cases | 123 | 0 | 11 | 4 |
+| esctest2 (xterm) | independently written cases (the GPL source is not used) | 412 | 0 | 10 | 215 |
+| alacritty ref tests | recordings and reference grids, per line | 1510 / 1557 lines, 37 / 45 tests | 0 | 8 tests | |
 
 "Deliberate difference" cases are listed with a reason in
 `conformance_known_test.go`: places where that emulator departs from
 xterm (wezterm lets the cursor column equal the width, alacritty ignores
 SGR 21 and keeps a pending wrap across EL, libvterm brightens bold colors
 in the pen and answers DA1 as a VT100), places where the upstream harness
-fakes state, and the few gaps in the list above. "Out of scope" counts
+fakes state, and explicit policy conflicts such as tab resets on width
+changes and independent mouse-mode bits. Those references stay unchanged;
+following one terminal can disagree with another. "Out of scope" counts
 cases for features listed as not modeled, mostly input encoding,
 graphics-adjacent and window operations, palette rendering and rectangular
 operations. Query replies are checked by the
@@ -284,7 +324,9 @@ Besides the suites:
   never changes the state), `FuzzGraphemeTransitions` (clustering, mode
   changes and reflow), `FuzzRestoreSnapshot` (malformed binary data and
   atomic failure), `FuzzSnapshotContinuation` (exact restore followed by
-  continued output), and, in the `oracle` module, `FuzzOracle`, a
+  continued output), `FuzzSparseHistoryValidation` (private history grammar),
+  `FuzzPrefixRows` and `FuzzColdPrefixWrites` (sparse rows against dense
+  storage), and, in the `oracle` module, `FuzzOracle`, a
   differential fuzzer against `charmbracelet/x/vt` on the subset where it
   agrees with xterm. CI runs each for 30 seconds. Before
   the extraction the targets had about 2.3 hours of fuzzing; since, each
@@ -301,6 +343,13 @@ Besides the suites:
   `TestCellDoesNotAllocate` reading every cell.
 
 ## Performance
+
+The [current native comparison](oracle/ghostty/results/2026-10-27-round6/README.md)
+records the expanded compatibility corpus, lower idle memory and mixed
+throughput results against v0.3.0 and libghostty-vt. It retains raw policy
+and ANSI export differences. The [cold-prefix measurements](oracle/ghostty/results/2026-10-27-round4/cold-prefix-measurements.md)
+separately measure prompt allocation: it avoids allocating a full row before
+idle compaction, reducing both retained heap and fresh-process RSS.
 
 The [Unicode and exact-checkpoint comparison](oracle/ghostty/results/2026-10-27-round3/README.md)
 records the broader native compatibility corpus, Unicode audits, idle memory
@@ -367,4 +416,5 @@ licenses; `testdata/conformance/NOTICE.md` has the sources and revisions:
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). X11 color names retain the notices in
+[licenses/X11.txt](licenses/X11.txt).

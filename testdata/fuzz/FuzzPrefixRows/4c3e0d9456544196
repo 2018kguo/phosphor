@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("0\x0000\x1b#8")
+byte('\x15')
+byte('7')

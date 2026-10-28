@@ -40,7 +40,7 @@ func (t *Terminal) resizeDirty() {
 }
 
 // RowDirty reports whether the cells of row y of the visible screen may
-// have changed since the last ClearDirty: characters, styles or links, by
+// have changed since the last ClearDirty: characters, styles or rare, by
 // output, scrolling, erasing, switching screens, Resize or a change of
 // palette or reverse video. Before the first ClearDirty every row is dirty.
 //

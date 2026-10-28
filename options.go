@@ -53,7 +53,7 @@ func WithScrollbackBytes(n int) Option {
 // and DSR ?15, ?26 and ?996), mode reports (DECRQM, ANSI and DEC), DECRQSS
 // for SGR, DECSTBM, DECSLRM, DECSCUSR, DECSCA and DECSCL, XTVERSION,
 // XTGETTCAP for TN, Co and colors, the kitty keyboard flags (CSI ? u), the
-// text area size (XTWINOPS 18), and color queries (OSC 4, 10, 11, 12,
+// text area size (XTWINOPS 18), and color queries (OSC 4, 10, 11, 12, 21,
 // answered from the palette). Errors from w are ignored. w is called
 // during Write, with a slice it must not keep.
 func WithReply(w io.Writer) Option {

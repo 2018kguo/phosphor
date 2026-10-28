@@ -21,18 +21,24 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 		t.Fatalf("terminal observations changed: size %dx%d/%dx%d cursor %+v/%+v modes %+v/%+v", ac, ar, bc, br, a.Cursor(), b.Cursor(), a.Modes(), b.Modes())
 	}
 	if !snapshotCursorsEqual(a, b, a.cur, b.cur) || a.lastChar != b.lastChar || a.top != b.top || a.bot != b.bot || a.left != b.left || a.right != b.right ||
-		a.lrmm != b.lrmm || a.protISO != b.protISO || a.ss != b.ss || a.revWrap != b.revWrap || a.revWrapExt != b.revWrapExt ||
+		a.lrmm != b.lrmm || a.protISO != b.protISO || a.cur.ss != b.cur.ss || a.revWrap != b.revWrap || a.revWrapExt != b.revWrapExt ||
 		a.grapheme != b.grapheme || a.sbOpen != b.sbOpen || a.sbSpacer != b.sbSpacer || a.sbMaxLines != b.sbMaxLines || a.sbMaxBytes != b.sbMaxBytes ||
 		!slices.Equal(a.kitty, b.kitty) || !bytes.Equal(a.appendContinuation(nil), b.appendContinuation(nil)) {
 		t.Fatal("future-output state changed")
 	}
-	for i := range 3 {
+	if a.semantic != b.semantic || a.promptRedraw != b.promptRedraw {
+		t.Fatal("exact semantic cursor state changed")
+	}
+	if a.altActive && a.x.inactivePrimary != b.x.inactivePrimary {
+		t.Fatal("actual inactive primary cursor changed")
+	}
+	for i := range 2 {
 		var left, right savedCursor
 		if a.saved != nil {
-			left = [3]savedCursor{a.saved.screen[0], a.saved.screen[1], a.saved.alternate}[i]
+			left = a.saved.screen[i]
 		}
 		if b.saved != nil {
-			right = [3]savedCursor{b.saved.screen[0], b.saved.screen[1], b.saved.alternate}[i]
+			right = b.saved.screen[i]
 		}
 		if left.valid != right.valid || left.valid && !snapshotCursorsEqual(a, b, left.cursor, right.cursor) {
 			t.Fatalf("saved cursor %d changed", i)
@@ -41,7 +47,7 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 	for _, s := range []struct {
 		name   string
 		a, b   [][]cell
-		aw, bw []bool
+		aw, bw []rowFlags
 	}{{"main", a.main, b.main, a.mainWrap, b.mainWrap}, {"alternate", a.alt, b.alt, a.altWrap, b.altWrap}} {
 		if len(s.a) != len(s.b) {
 			t.Fatalf("%s presence changed", s.name)
@@ -59,7 +65,7 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 					t.Fatalf("%s cell %d,%d: %+v / %+v", s.name, x, y, left, right)
 				}
 			}
-			if (s.aw != nil && s.aw[y]) != (s.bw != nil && s.bw[y]) {
+			if rowFlagsAt(s.aw, y) != rowFlagsAt(s.bw, y) {
 				t.Fatalf("%s row %d wrap changed", s.name, y)
 			}
 		}
@@ -82,9 +88,9 @@ func assertSnapshotState(t *testing.T, a, b *Terminal) {
 func snapshotCursorsEqual(a, b *Terminal, left, right cursor) bool {
 	// Pool collection can renumber IDs at different times after restore.
 	// Compare the referenced targets while keeping every cursor flag exact.
-	leftLink, rightLink := a.link(left.pen.L), b.link(right.pen.L)
-	left.pen.L, right.pen.L = 0, 0
-	return left == right && leftLink == rightLink
+	leftExtra, rightExtra := a.extraAt(left.pen.E), b.extraAt(right.pen.E)
+	left.pen.E, right.pen.E = 0, 0
+	return left == right && leftExtra == rightExtra
 }
 
 func snapshotScene() string {
@@ -252,30 +258,42 @@ func TestSnapshotMalformedAtomic(t *testing.T) {
 	check("geometry", valid, SnapshotLimits{MaxCells: 7}, ErrSnapshotLimit)
 	check("negative", valid, SnapshotLimits{MaxCells: -1}, ErrSnapshotLimit)
 	for name, mutate := range map[string]func(*Terminal){
-		"cursor":            func(t *Terminal) { t.cur.x = t.cols },
-		"margin":            func(t *Terminal) { t.bot = t.rows },
-		"REP":               func(t *Terminal) { t.lastChar = clusterBase },
-		"alternate":         func(t *Terminal) { t.altActive = true },
-		"tail":              func(t *Terminal) { t.row(0)[0].R = wideTail },
-		"wide-head":         func(t *Terminal) { t.row(0)[0].R = '漢' },
-		"cell-scalar":       func(t *Terminal) { t.row(0)[0].R = 0xd800 },
-		"cluster-reference": func(t *Terminal) { t.row(0)[0].R = clusterBase },
-		"link-reference":    func(t *Terminal) { t.cur.pen.L = 1 },
-		"color":             func(t *Terminal) { t.cur.pen.Fg = Color(0x1000100) },
-		"attribute":         func(t *Terminal) { t.cur.pen.A = 1 << 10 },
-		"tabs":              func(t *Terminal) { t.ext().tabs = []uint64{0, 0} },
-		"saved-mode":        func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 999}} },
-		"duplicate-mode":    func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 7}, {mode: 7}} },
-		"cluster-text":      func(t *Terminal) { t.ext().clusters = []cluster{{text: "\xff", width: 1}} },
-		"cluster-control":   func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\x1b[cXY", width: 1}} },
-		"cluster-C1":        func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\u009b", width: 1}} },
-		"cluster-width":     func(t *Terminal) { t.ext().clusters = []cluster{{text: "á", width: 0}} },
-		"cluster-join":      func(t *Terminal) { t.ext().clusters = []cluster{{text: "á", width: 1, joinModes: 1 << 2}} },
-		"wrap":              func(t *Terminal) { t.mainWrap = []bool{false, true} },
+		"cursor":             func(t *Terminal) { t.cur.x = t.cols },
+		"margin":             func(t *Terminal) { t.bot = t.rows },
+		"REP":                func(t *Terminal) { t.lastChar = clusterBase },
+		"alternate":          func(t *Terminal) { t.altActive = true },
+		"tail":               func(t *Terminal) { t.row(0)[0].R = wideTail },
+		"wide-head":          func(t *Terminal) { t.row(0)[0].R = '漢' },
+		"cell-scalar":        func(t *Terminal) { t.row(0)[0].R = 0xd800 },
+		"cluster-reference":  func(t *Terminal) { t.row(0)[0].R = clusterBase },
+		"link-reference":     func(t *Terminal) { t.cur.pen.E = 1 },
+		"color":              func(t *Terminal) { t.cur.pen.Fg = Color(0x1000100) },
+		"attribute":          func(t *Terminal) { t.cur.pen.A = 1 << 10 },
+		"tabs":               func(t *Terminal) { t.ext().tabs = []uint64{0, 0} },
+		"saved-mode":         func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 999}} },
+		"duplicate-mode":     func(t *Terminal) { t.ext().savedModes = []savedMode{{mode: 7}, {mode: 7}} },
+		"saved-single-shift": func(t *Terminal) { t.cursorSaves().screen[0] = savedCursor{cursor: cursor{ss: 1}, valid: true} },
+		"saved-extra-index": func(t *Terminal) {
+			t.cursorSaves().screen[0] = savedCursor{cursor: cursor{pen: cell{E: 1}}, valid: true}
+		},
+		"saved-hyperlink": func(t *Terminal) {
+			t.setLink(";https://old")
+			t.cursorSaves().screen[0] = savedCursor{cursor: t.cur, valid: true}
+		},
+		"screen-mode-selection": func(t *Terminal) { t.ext().privateModes = privateMode47 | privateMode1047 | privateMode1049 },
+		"cluster-text":          func(t *Terminal) { t.ext().clusters = []cluster{{text: "\xff", width: 1}} },
+		"cluster-control":       func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\x1b[cXY", width: 1}} },
+		"cluster-C1":            func(t *Terminal) { t.ext().clusters = []cluster{{text: "a\u009b", width: 1}} },
+		"cluster-width":         func(t *Terminal) { t.ext().clusters = []cluster{{text: "á", width: 0}} },
+		"cluster-join": func(t *Terminal) {
+			t.ext().clusters = []cluster{{text: "á", width: 1, joinModes: clusterModes{1 << 2}}}
+		},
+		"wrap":              func(t *Terminal) { t.mainWrap = []rowFlags{0, rowWrap} },
 		"palette-slot":      func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 259}}} },
 		"palette-duplicate": func(t *Terminal) { t.cfg = &config{colors: []colorSet{{i: 1}, {i: 1}}} },
 		"title-command":     func(t *Terminal) { t.title = "title\x1b[c" },
-		"link-command":      func(t *Terminal) { t.ext().links = []string{";https://example.com\a"} },
+		"link-command":      func(t *Terminal) { t.ext().rare = []cellExtra{{link: ";https://example.com\a"}} },
+		"underline-color":   func(t *Terminal) { t.ext().rare = []cellExtra{{underline: Color(3 << 24)}} },
 		"history-query":     func(t *Terminal) { t.sb = [][]byte{[]byte("\x1b[cX")}; t.sbBytes = 28 },
 		"history-bell":      func(t *Terminal) { t.sb = [][]byte{[]byte("hello\a")}; t.sbBytes = 30 },
 		"history-OSC":       func(t *Terminal) { t.sb = [][]byte{[]byte("\x1b]52;;clipboard\x1b\\")}; t.sbBytes = 42 },
@@ -403,6 +421,8 @@ func FuzzSnapshotContinuation(f *testing.F) {
 		"hello", "\x1b[38:2::10:20:30m漢\xf0\x9f", "\x1b[?2027h😀︎❤️👩‍👩‍👧‍👦",
 		"\x1b[?2027h\x1b[?7lA❤️", "abc\x1b7\x1b[?7l\x1b[HX\x1b8",
 		"\x1b]8;id=a;https://example.com\x1b\\á\x1b7\x1b[?1049hALT\x1b7",
+		"\x1b]133;A;redraw=last\ahello\x1b]133;I\a\r\ninput",
+		"\x1b]133;P;k=s\a\x1b[?47h\x1b]133;B\aALT",
 		snapshotScene(),
 	} {
 		f.Add([]byte(in), uint8(12), uint8(5), uint16(len(in)/2))

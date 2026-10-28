@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("0000\x7f000\x83s08\"0)\xf4\xdf0000000000\x0200\xd7000\x1e009\x94\xf50\xf900\xfc0\xb4\xfd<00000000\x8d000U0008000\xef00:0k?U000\x8c\xeb0\x1e00$0\x11\x8a00G0V00000\xf4\x810\x05\x06\xeb0$$$$$$$")
+byte('i')
+byte('\u0083')

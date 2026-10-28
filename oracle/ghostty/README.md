@@ -48,6 +48,14 @@ are an error.
 Memory commands must run in fresh processes. Use three or more repeats
 and multiple terminal counts. `blank`, `prompt`, `colored-prompt` and
 `saved-cursor` measure the corresponding idle terminals;
+`prompt-compact` and `colored-prompt-compact` initialize the same prompts
+and then invoke idle compaction. Build both revisions with this driver when
+comparing them: v0.3.0's Compact frees dead rows but keeps a live row's full
+width; the new implementation also releases its unused zero tail.
+`prompt-erase` and `colored-prompt-erase` append a default-background EL,
+as shells commonly do. The corresponding `-compact` variants compact
+after that erase. These cases must start from the prompt, with no history;
+they do not use the default log workload.
 `equal-100-history` retains the same 100 short, styled history lines in
 both engines. `full` fills the configured history, while `compressed`
 additionally invokes Ghostty's idle compression. Phosphor already stores
@@ -101,7 +109,7 @@ compares the physical cursor and continued text without normalizing them.
 
 `trace` compares a deeper [text-model contract](coverage.md). It records
 full cell text and widths, typed colors and attributes, underline styles
-and colors, hyperlink targets, protected cells, row wraps, physical
+and colors, hyperlink targets, protected cells, row wraps, shell prompt rows, physical
 cursor and appearance, modes, title, history cells and raw PTY replies.
 Each action is checked. An untouched control for each engine checks
 continuation after snapshots, ANSI replay and compaction, including

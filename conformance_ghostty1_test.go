@@ -18,7 +18,6 @@ const (
 	g2027   = "\x1b[?2027h"
 	gLRM    = "DECLRMM left/right margins"
 	gGraph  = "grapheme clustering (mode 2027, VS15/VS16 width changes)"
-	gOSC    = "hyperlinks / semantic prompts / OSC state"
 )
 
 // g1Cell checks the rune at x, y (0 for blank, wideTail for a right half).
@@ -37,6 +36,37 @@ func g1Cells(t *Terminal, want ...[3]int) string {
 		}
 	}
 	return ""
+}
+
+func g1Prompts(want ...PromptKind) func(*Terminal) string {
+	return func(t *Terminal) string {
+		_, rows := t.Size()
+		for y := range rows {
+			kind := PromptNone
+			if y < len(want) {
+				kind = want[y]
+			}
+			if got := t.Prompt(y); got != kind {
+				return fmt.Sprintf("row %d prompt got %d want %d", y, got, kind)
+			}
+		}
+		return ""
+	}
+}
+
+func g1Hyperlinks(want ...string) func(*Terminal) string {
+	return func(t *Terminal) string {
+		for x := 0; x <= len(want); x++ {
+			uri := ""
+			if x < len(want) {
+				uri = want[x]
+			}
+			if got := t.Cell(x, 0).Link.URI; got != uri {
+				return fmt.Sprintf("cell %d,0 URI got %q want %q", x, got, uri)
+			}
+		}
+		return ""
+	}
 }
 
 const g1Tail = int(wideTail)
@@ -256,7 +286,11 @@ var ghostty1Cases = []confCase{
 
 	// wrapping
 	{name: "soft wrap", cols: 3, rows: 80, in: "hello", cur: at(2, 1), screen: scr("hel\nlo")},
-	{name: "soft wrap with semantic prompt", cols: 3, rows: 80, in: "\x1b]133;A\x07hello", gap: gOSC},
+	// Native Terminal.zig at 46e9dc9a retains primary/continuation row marks.
+	{name: "soft wrap with semantic prompt", cols: 3, rows: 80,
+		in: "\x1b]133;A\x07hello", cur: at(2, 1), pending: no(), screen: scr("hel\nlo"), scrollback: []string{},
+		check: g3all(g1Prompts(PromptPrimary, PromptContinuation),
+			g3is("prompt continuation lost its soft wrap", func(t *Terminal) bool { return t.Wrapped(1) && !t.Wrapped(2) }))},
 	{name: "disabled wraparound with wide char and one space", cols: 5, rows: 5,
 		in: "\x1b[?7lAAAA\U0001F6A8", cur: at(4, 0), screen: scr("AAAA"),
 		check: func(t *Terminal) string { return g1Cell(t, 4, 0, 0) }},
@@ -289,13 +323,17 @@ var ghostty1Cases = []confCase{
 		in: "\x1b[?69h\x1b[3;5s\x1b[1;5H\U0001F600", cur: at(4, 1), gap: gLRM},
 
 	// hyperlinks
-	{name: "print with hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456", gap: gOSC},
-	{name: "print over cell with same hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456\x1b[1;1H123456", gap: gOSC},
-	{name: "print and end hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123" + g1Osc8e + "456", gap: gOSC},
+	{name: "print with hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456", screen: scr("123456"),
+		check: g1Hyperlinks("http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com")},
+	{name: "print over cell with same hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123456\x1b[1;1H123456", screen: scr("123456"),
+		check: g1Hyperlinks("http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com", "http://example.com")},
+	{name: "print and end hyperlink", cols: 80, rows: 80, in: g1Osc8 + "123" + g1Osc8e + "456", screen: scr("123456"),
+		check: g1Hyperlinks("http://example.com", "http://example.com", "http://example.com", "", "", "")},
 	{name: "print and change hyperlink", cols: 80, rows: 80,
-		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b]8;;http://two.example.com\x1b\\456", gap: gOSC},
+		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b]8;;http://two.example.com\x1b\\456", screen: scr("123456"),
+		check: g1Hyperlinks("http://one.example.com", "http://one.example.com", "http://one.example.com", "http://two.example.com", "http://two.example.com", "http://two.example.com")},
 	{name: "overwrite hyperlink", cols: 80, rows: 80,
-		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b[1;1H" + g1Osc8e + "456", gap: gOSC},
+		in: "\x1b]8;;http://one.example.com\x1b\\123\x1b[1;1H" + g1Osc8e + "456", screen: scr("456"), check: g1Hyperlinks("", "", "")},
 	{name: "print wide char at right edge with hyperlink", cols: 10, rows: 5,
 		in: g1Osc8 + "\x1b[1;10H中", cur: at(2, 1),
 		check: func(t *Terminal) string {

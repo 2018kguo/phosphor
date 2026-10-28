@@ -11,8 +11,8 @@ import (
 
 func TestCompactKeepsNonzeroCells(t *testing.T) {
 	term := New(5, 6)
-	link := term.internLink(";https://example.com")
-	values := []cell{{}, {R: ' '}, {R: spacerHead}, {Bg: IndexedColor(1)}, {A: AttrProtected}, {L: link}}
+	link := term.internExtra(cellExtra{link: ";https://example.com"})
+	values := []cell{{}, {R: ' '}, {R: spacerHead}, {Bg: IndexedColor(1)}, {A: AttrProtected}, {E: link}}
 	term.alt = make([][]cell, term.rows)
 	for _, screen := range [][][]cell{term.main, term.alt} {
 		for y, c := range values {
@@ -20,9 +20,9 @@ func TestCompactKeepsNonzeroCells(t *testing.T) {
 			screen[y][0] = c
 		}
 	}
-	term.mainWrap = make([]bool, term.rows)
-	term.altWrap = make([]bool, term.rows)
-	term.altWrap[1] = true
+	term.mainWrap = make([]rowFlags, term.rows)
+	term.altWrap = make([]rowFlags, term.rows)
+	term.altWrap[1] = rowWrap
 	term.ClearDirty()
 	term.scratch = make([]byte, 0, 4096)
 	term.osc = []byte("2;completed title")
@@ -37,7 +37,7 @@ func TestCompactKeepsNonzeroCells(t *testing.T) {
 			}
 		}
 	}
-	if !term.altWrap[1] || term.Dirty() {
+	if term.altWrap[1]&rowWrap == 0 || term.Dirty() {
 		t.Fatal("wrap or damage state changed")
 	}
 }
@@ -55,6 +55,53 @@ func assertCompactEquivalent(t *testing.T, original, compacted *Terminal) {
 		if original.RowDirty(y) != compacted.RowDirty(y) {
 			t.Fatalf("row %d damage changed", y)
 		}
+	}
+}
+
+func TestCompactEmptyWrappedRowRepaint(t *testing.T) {
+	a, b := New(6, 10), New(6, 10)
+	for _, v := range []byte("0\n0") {
+		a.Write([]byte{v})
+		b.Write([]byte{v})
+		b.Compact()
+	}
+	a.Resize(1, 3)
+	b.Resize(1, 3)
+	b.Compact()
+	assertContinuationState(t, a, b, "before repaint")
+	aRepaint, bRepaint := a.Repaint(true), b.Repaint(true)
+	ar, br := New(1, 3), New(1, 3)
+	ar.Write(aRepaint)
+	br.Write(bRepaint)
+	assertContinuationState(t, ar, br, "after repaint")
+	assertContinuationState(t, a, ar, "original repaint")
+	assertContinuationState(t, b, br, "compacted repaint")
+	// ANSI repaint does not export the source's REP register. The two
+	// exports must still agree with each other before another print.
+	repeatA, repeatB := New(1, 3), New(1, 3)
+	repeatA.Write(aRepaint)
+	repeatB.Write(bRepaint)
+	repeatA.Write([]byte("\x1b[3b"))
+	repeatB.Write([]byte("\x1b[3b"))
+	assertContinuationState(t, repeatA, repeatB, "immediate REP")
+	for _, next := range []string{"X\x1b[3b", "\x1b8X", "\r\nnext", "\x1b[?47hALT\x1b[?47l"} {
+		a.Write([]byte(next))
+		b.Write([]byte(next))
+		ar.Write([]byte(next))
+		br.Write([]byte(next))
+		assertContinuationState(t, ar, br, fmt.Sprintf("after %q", next))
+		assertContinuationState(t, a, ar, fmt.Sprintf("original after %q", next))
+		assertContinuationState(t, b, br, fmt.Sprintf("compacted after %q", next))
+	}
+	a.Resize(4, 2)
+	b.Resize(4, 2)
+	ar.Resize(4, 2)
+	br.Resize(4, 2)
+	assertContinuationState(t, ar, br, "after future resize")
+	assertContinuationState(t, a, ar, "original after future resize")
+	assertContinuationState(t, b, br, "compacted after future resize")
+	if !bytes.Equal(aRepaint, bRepaint) {
+		t.Fatalf("equivalent replay futures have different repaint bytes:\n%q\n%q", aRepaint, bRepaint)
 	}
 }
 

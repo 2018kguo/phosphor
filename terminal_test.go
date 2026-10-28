@@ -133,7 +133,7 @@ func TestRestart(t *testing.T) {
 }
 
 // Idle and lightly used terminals cost little: rows exist only once drawn
-// on, and the alternate screen only while active.
+// on; a previously used alternate screen keeps its contents.
 func TestLazyAllocation(t *testing.T) {
 	term := New(200, 50)
 	term.Write([]byte("$ "))
@@ -147,8 +147,8 @@ func TestLazyAllocation(t *testing.T) {
 		t.Fatalf("%d rows allocated, alt %v", allocated, term.alt != nil)
 	}
 	term.Write([]byte("\x1b[?1049hx\x1b[?1049l"))
-	if term.alt != nil {
-		t.Fatal("alternate screen kept after exit")
+	if term.alt == nil {
+		t.Fatal("1049 exit discarded alternate contents")
 	}
 }
 
@@ -161,7 +161,7 @@ var tokens = []string{
 	"\x1b[H", "\x1b[2;3H", "\x1b[10;80H", "\x1b[A", "\x1b[3B", "\x1b[2C", "\x1b[D", "\x1b[5G", "\x1b[2d", "\x1b[E", "\x1b[F",
 	"\x1b[K", "\x1b[1K", "\x1b[2K", "\x1b[J", "\x1b[1J", "\x1b[2J", "\x1b[3J",
 	"\x1b[L", "\x1b[2M", "\x1b[@", "\x1b[3P", "\x1b[2X", "\x1b[S", "\x1b[2T", "\x1b[2b",
-	"\x1b[m", "\x1b[1;31m", "\x1b[4:3m", "\x1b[38;5;200m", "\x1b[48;2;1;2;3m", "\x1b[38:2::10:20:30m", "\x1b[7;9;53m", "\x1b[22;24;27m", "\x1b[94;103m", "\x1b[39;49m",
+	"\x1b[m", "\x1b[1;31m", "\x1b[4:3m", "\x1b[38;5;200m", "\x1b[48;2;1;2;3m", "\x1b[38:2::10:20:30m", "\x1b[7;9;53m", "\x1b[22;24;27m", "\x1b[94;103m", "\x1b[39;49m", "\x1b[58;5;3m", "\x1b[58:2::10:20:30m", "\x1b[59m",
 	"\x1b[2;4r", "\x1b[r", "\x1b[?6h", "\x1b[?6l", "\x1b[?7l", "\x1b[?7h", "\x1b[4h", "\x1b[4l",
 	"\x1b[?1049h", "\x1b[?1049l", "\x1b[?47h", "\x1b[?47l", "\x1b[?1047h", "\x1b[?1047l",
 	"\x1b7", "\x1b8", "\x1b[s", "\x1b[u", "\x1bM", "\x1bD", "\x1bE",
@@ -183,14 +183,15 @@ func state(t *Terminal) string { return stateOf(t, true) }
 
 func stateOf(t *Terminal, withScrollback bool) string {
 	var b strings.Builder
-	dump := func(name string, scr [][]cell, wrap []bool) {
-		for y, row := range scr {
+	dump := func(name string, scr [][]cell, wrap []rowFlags) {
+		for y := range t.rows {
+			var row []cell
+			if y < len(scr) {
+				row = scr[y]
+			}
 			fmt.Fprintf(&b, "%s%d", name, y)
 			for x := range t.cols {
-				var c cell
-				if row != nil {
-					c = row[x]
-				}
+				c := rowCell(row, x)
 				s := "' '"
 				switch {
 				case c.R == wideTail:
@@ -201,23 +202,21 @@ func stateOf(t *Terminal, withScrollback bool) string {
 					s = strconv.Quote(t.cellString(c))
 				}
 				fmt.Fprintf(&b, " %s/%x/%x/%x", s, c.Fg, c.Bg, c.A)
-				if c.L != 0 {
-					fmt.Fprintf(&b, "/%q", t.link(c.L))
+				if c.E != 0 {
+					fmt.Fprintf(&b, "/%+v", t.extraAt(c.E))
 				}
 			}
-			if wrap != nil && wrap[y] {
+			if rowFlagsAt(wrap, y)&rowWrap != 0 {
 				b.WriteString(" wrapped")
 			}
 			b.WriteByte('\n')
 		}
 	}
 	dump("main", t.main, t.mainWrap)
-	if t.alt != nil {
-		dump("alt", t.alt, t.altWrap)
-	}
-	if t.altActive && t.saved != nil && t.saved.alternate.valid {
-		fmt.Fprintf(&b, "saved1049 %d,%d\n", t.saved.alternate.x, t.saved.alternate.y)
-	}
+	// An unallocated alternate screen has the same logical zero cells as
+	// an allocated empty screen. Resize and Compact may release its storage.
+	dump("alt", t.alt, t.altWrap)
+	fmt.Fprintf(&b, "alternate active %v modes %d\n", t.altActive, t.Modes().AltScreenModes)
 	cur := t.cur
 	if cur.origin {
 		// Repaint positions the cursor with origin mode on, which cannot
@@ -226,9 +225,9 @@ func stateOf(t *Terminal, withScrollback bool) string {
 		cur.x = min(max(cur.x, t.left), t.right)
 		cur.y = min(max(cur.y, t.top), t.bot)
 	}
-	cur.pen.L = 0
-	fmt.Fprintf(&b, "pen link %q\n", t.link(t.cur.pen.L))
-	fmt.Fprintf(&b, "cur %+v region %d-%d margins %v %d-%d ss %d iso %v\n", cur, t.top, t.bot, t.lrmm, t.left, t.right, t.ss, t.protISO)
+	cur.pen.E = 0
+	fmt.Fprintf(&b, "pen extra %+v\n", t.extraAt(t.cur.pen.E))
+	fmt.Fprintf(&b, "cur %+v region %d-%d margins %v %d-%d ss %d iso %v\n", cur, t.top, t.bot, t.lrmm, t.left, t.right, t.cur.ss, t.protISO)
 	slot := 0
 	if t.altActive {
 		slot = 1
@@ -237,12 +236,9 @@ func stateOf(t *Terminal, withScrollback bool) string {
 	if t.saved != nil {
 		s = t.saved.screen[slot]
 	}
-	if s.valid {
-		s.wrapPending = false
-	}
-	link := t.link(s.pen.L)
-	s.pen.L = 0
-	fmt.Fprintf(&b, "saved %+v link %q\n", s, link)
+	extra := t.extraAt(s.pen.E)
+	s.pen.E = 0
+	fmt.Fprintf(&b, "saved %+v extra %+v\n", s, extra)
 	fmt.Fprintf(&b, "modes %v %v %v %v %v %v %v %v %d %d %v %v %q\n", t.autowrap, t.insert, t.newline, t.cursorHidden,
 		t.appCursor, t.appKeypad, t.bracketed, t.focus, t.mouse, t.mouseEnc, t.cursorStyle, t.kitty, t.title)
 	var tabs []int
@@ -349,7 +345,7 @@ func normLine(line []byte) []byte {
 	end := len(row)
 	for end > 0 {
 		c := row[end-1]
-		if (c.R == 0 || c.R == ' ' || c.R == spacerHead) && c.A&^AttrProtected == 0 && c.Fg == 0 && c.L == 0 {
+		if (c.R == 0 || c.R == ' ' || c.R == spacerHead) && c.A&^AttrProtected == 0 && c.Fg == 0 && c.E == 0 {
 			end--
 			continue
 		}
@@ -357,7 +353,7 @@ func normLine(line []byte) []byte {
 	}
 	var b []byte
 	for _, c := range row[:end] {
-		b = fmt.Appendf(b, "%q/%x/%x/%x/%q ", tmp.cellString(c), c.Fg, c.Bg, c.A, tmp.link(c.L))
+		b = fmt.Appendf(b, "%q/%x/%x/%x/%+v ", tmp.cellString(c), c.Fg, c.Bg, c.A, tmp.extraAt(c.E))
 	}
 	return b
 }
@@ -412,8 +408,8 @@ func TestResizeDropsErasedRowsFirst(t *testing.T) {
 // Repaint and scrolling, and do not leak into the scrollback text.
 func TestHyperlinks(t *testing.T) {
 	term := feed(20, 2, "see \x1b]8;id=x;https://example.com/a\x1b\\docs\x1b]8;;\x1b\\ here\r\n")
-	if c := term.cellAt(4, 0); term.link(c.L) != "id=x;https://example.com/a" || term.cellAt(8, 0).L != 0 {
-		t.Fatalf("link %q on docs, %d after", term.link(c.L), term.cellAt(8, 0).L)
+	if c := term.cellAt(4, 0); term.link(c.E) != "id=x;https://example.com/a" || term.cellAt(8, 0).E != 0 {
+		t.Fatalf("link %q on docs, %d after", term.link(c.E), term.cellAt(8, 0).E)
 	}
 	dst := New(20, 2)
 	dst.Write(term.Repaint(true))
@@ -430,10 +426,10 @@ func TestHyperlinks(t *testing.T) {
 }
 
 // isZeroAt and appendRow read a cell as two words: R and Fg, then Bg, A
-// and L.
+// and E.
 func TestCellLayout(t *testing.T) {
 	var c cell
-	if unsafe.Sizeof(c) != 16 || unsafe.Offsetof(c.Fg) != 4 || unsafe.Offsetof(c.Bg) != 8 || unsafe.Offsetof(c.L) != 14 {
+	if unsafe.Sizeof(c) != 16 || unsafe.Offsetof(c.Fg) != 4 || unsafe.Offsetof(c.Bg) != 8 || unsafe.Offsetof(c.E) != 14 {
 		t.Fatalf("cell layout changed: size %d", unsafe.Sizeof(c))
 	}
 	// A Terminal, with the 8-byte header the allocator adds to objects of

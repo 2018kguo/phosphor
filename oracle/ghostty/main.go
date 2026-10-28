@@ -434,7 +434,26 @@ func replayChecks() {
 	}
 }
 func memory(name, workload string, n int) {
+	if n < 1 {
+		panic("memory terminal count must be positive")
+	}
+	cols, rows := 80, 24
 	fill := benchdata.Logs(512 << 10)
+	closedRecording := strings.HasPrefix(workload, "closed-")
+	if closedRecording {
+		recording := strings.TrimSuffix(strings.TrimPrefix(workload, "closed-"), "-compact")
+		switch recording {
+		case "vim", "nvim", "nano", "less", "man":
+		default:
+			panic("unknown completed recording: " + recording)
+		}
+		var err error
+		fill, err = os.ReadFile(os.Getenv("PHOSPHOR_DIR") + "/testdata/rec-" + recording + ".raw")
+		if err != nil {
+			panic(err)
+		}
+		cols, rows = 100, 30
+	}
 	if workload == "equal-100-history" {
 		fill = []byte(strings.Repeat("\x1b[32mINFO\x1b[0m request id=12345 path=/api/v1/items status=200 took=3ms\r\n", 123))
 	}
@@ -460,7 +479,7 @@ func memory(name, workload string, n int) {
 	}
 	terms := make([]Engine, n)
 	// Warm shared initialization before taking the baseline. Each invocation is a fresh process.
-	warm := newEngine(name, 80, 24)
+	warm := newEngine(name, cols, rows)
 	warm.Write([]byte("user@host:~$ "))
 	warm.Close()
 	runtime.GC()
@@ -469,11 +488,11 @@ func memory(name, workload string, n int) {
 	runtime.ReadMemStats(&before)
 	rss0 := uint64(C.exp_rss())
 	for i := range terms {
-		t := newEngine(name, 80, 24)
+		t := newEngine(name, cols, rows)
 		if workload == "blank" {
-		} else if workload == "prompt" {
+		} else if workload == "prompt" || workload == "prompt-compact" || workload == "prompt-erase" || workload == "prompt-erase-compact" {
 			t.Write([]byte("user@host:~$ "))
-		} else if workload == "colored-prompt" {
+		} else if workload == "colored-prompt" || workload == "colored-prompt-compact" || workload == "colored-prompt-erase" || workload == "colored-prompt-erase-compact" {
 			t.Write([]byte("\x1b[32muser@host\x1b[0m:~$ "))
 		} else if workload == "saved-cursor" {
 			t.Write([]byte("user@host:~$ \x1b7"))
@@ -483,6 +502,9 @@ func memory(name, workload string, n int) {
 				var result C.GhosttyTerminalCompressionResult
 				must(C.int(C.ghostty_terminal_compress(t.(*ghost).t, C.GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL, &result)))
 			}
+		}
+		if workload == "prompt-erase" || workload == "prompt-erase-compact" || workload == "colored-prompt-erase" || workload == "colored-prompt-erase-compact" {
+			t.Write([]byte("\x1b[K"))
 		}
 		if strings.HasSuffix(workload, "-compact") {
 			if p, ok := t.(*phos); ok {
@@ -500,6 +522,9 @@ func memory(name, workload string, n int) {
 	runtime.GC()
 	runtime.ReadMemStats(&after)
 	rss1 := uint64(C.exp_rss())
+	if closedRecording && terms[n-1].View().Alt {
+		panic("completed recording left the alternate screen active")
+	}
 	compactionApplied := false
 	if strings.HasSuffix(workload, "-compact") {
 		if p, ok := terms[0].(*phos); ok {

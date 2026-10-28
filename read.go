@@ -36,12 +36,15 @@ func (c cursorAppearance) parameter() int {
 func (t *Terminal) Modes() Modes {
 	m := Modes{
 		AltScreen:             t.altActive,
+		AltScreenModes:        AltScreenModes(t.privateModes() / privateMode47),
 		ApplicationCursorKeys: t.appCursor,
 		ApplicationKeypad:     t.appKeypad,
 		BracketedPaste:        t.bracketed,
 		FocusEvents:           t.focus,
-		Mouse:                 MouseMode(t.mouse),
-		MouseEncoding:         MouseEncoding(t.mouseEnc),
+		Mouse:                 MouseMode(mouseModeNumber(t.mouse, mouseTrackingNumbers)),
+		MouseEncoding:         MouseEncoding(mouseModeNumber(t.mouseEnc, mouseEncodingNumbers)),
+		MouseTrackingModes:    MouseTrackingModes(t.mouse & mouseModeBits),
+		MouseEncodingModes:    MouseEncodingModes(t.mouseEnc & mouseModeBits),
 		Autowrap:              t.autowrap,
 		Insert:                t.insert,
 		Newline:               t.newline,
@@ -49,6 +52,9 @@ func (t *Terminal) Modes() Modes {
 		ReverseVideo:          t.reverseVideo,
 		SyncUpdate:            t.sync,
 		GraphemeClustering:    t.grapheme,
+		Columns132:            t.privateModes()&privateMode132 != 0,
+		AllowColumnSwitching:  t.privateModes()&privateModeAllowColumns != 0,
+		SmoothScrolling:       t.privateModes()&privateModeSlowScroll != 0,
 	}
 	if n := len(t.kitty); n > 0 {
 		m.KittyKeyboard = t.kitty[n-1]
@@ -72,8 +78,11 @@ func (t *Terminal) Cell(x, y int) Cell {
 
 // publicCell converts row[x] (of a row of t) into a Cell.
 func (t *Terminal) publicCell(row []cell, x int) Cell {
+	if uint(x) >= uint(len(row)) {
+		return Cell{Width: 1}
+	}
 	c := &row[x]
-	out := Cell{Rune: c.R, Width: 1, Style: publicStyle(c)}
+	out := Cell{Rune: c.R, Width: 1, Style: t.publicStyle(c)}
 	switch r := c.R; {
 	case r < utf8.RuneSelf && r >= 0:
 	case r == wideTail:
@@ -91,8 +100,8 @@ func (t *Terminal) publicCell(row []cell, x int) Cell {
 			out.Width = 2
 		}
 	}
-	if c.L != 0 {
-		out.Link = parseLink(t.link(c.L))
+	if c.E != 0 {
+		out.Link = parseLink(t.link(c.E))
 	}
 	return out
 }
@@ -152,7 +161,7 @@ func (t *Terminal) ScrollbackLines() []string {
 }
 
 // ScrollbackCells returns scrollback line i (see ScrollbackLine) with its
-// styles and links, laid out as the rows it takes at the current width:
+// styles and rare, laid out as the rows it takes at the current width:
 // one row, or more for a line that soft wraps. Unlike the other accessors
 // it allocates, about as much as replaying the line costs.
 func (t *Terminal) ScrollbackCells(i int) [][]Cell {
@@ -178,7 +187,7 @@ func (t *Terminal) ClearScrollback() {
 
 // Palette returns the colors in effect: the palette the terminal started
 // with (DefaultPalette, or WithPalette's), with the changes the program
-// made since (OSC 4, 10, 11 and 12).
+// made since (OSC 4, 10, 11, 12 and 21).
 func (t *Terminal) Palette() Palette {
 	p := defaultPalette
 	if t.cfg == nil {
@@ -191,6 +200,22 @@ func (t *Terminal) Palette() Palette {
 		*p.slot(s.i) = s.c
 	}
 	return p
+}
+
+// paletteColor reads one slot without copying the complete palette.
+func (t *Terminal) paletteColor(slot uint16) RGB {
+	p := &defaultPalette
+	if t.cfg != nil {
+		for _, s := range t.cfg.colors {
+			if s.i == slot {
+				return s.c
+			}
+		}
+		if t.cfg.palette != nil {
+			p = t.cfg.palette
+		}
+	}
+	return *p.slot(slot)
 }
 
 // slot returns the palette entry for a colorSet index.
