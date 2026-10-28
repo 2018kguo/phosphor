@@ -1,0 +1,270 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/phosphor         	   24852	     14377 ns/op	 477.98 MB/s	       2 B/op	       0 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/phosphor         	   26474	     13561 ns/op	 381.61 MB/s	       3 B/op	       0 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/phosphor         	     172	   2064227 ns/op	 508.44 MB/s	   19725 B/op	      94 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/phosphor         	     247	   1442226 ns/op	 727.08 MB/s	    2866 B/op	       8 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/phosphor         	     552	    643926 ns/op	1628.76 MB/s	    1309 B/op	       3 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/charmbracelet-x-vt         	    1417	    345830 ns/op	  19.87 MB/s	  252477 B/op	    1790 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/charmbracelet-x-vt         	     121	   2606171 ns/op	   1.99 MB/s	  260265 B/op	    3128 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/charmbracelet-x-vt         	      12	  30376743 ns/op	  34.55 MB/s	 2883509 B/op	  430321 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/charmbracelet-x-vt         	       2	 232925542 ns/op	   4.50 MB/s	110947528 B/op	  914853 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/charmbracelet-x-vt         	       9	  40609542 ns/op	  25.83 MB/s	 5797011 B/op	  919960 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/vt10x         	    1699	    220544 ns/op	  31.16 MB/s	  205814 B/op	   17814 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/vt10x         	    2002	    201793 ns/op	  25.65 MB/s	  128304 B/op	   11936 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/vt10x         	      15	  23397867 ns/op	  44.86 MB/s	20746864 B/op	 1884466 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/vt10x         	      13	  27640830 ns/op	  37.94 MB/s	22699465 B/op	 2220594 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/vt10x         	      14	  24798711 ns/op	  42.29 MB/s	22775314 B/op	 2226120 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/vt10x         	    1681	    224314 ns/op	  30.64 MB/s	  205814 B/op	   17814 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/vt10x         	    2006	    196089 ns/op	  26.39 MB/s	  128304 B/op	   11936 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/vt10x         	      15	  23557756 ns/op	  44.55 MB/s	20746861 B/op	 1884466 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/vt10x         	      13	  27361641 ns/op	  38.32 MB/s	22699462 B/op	 2220594 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/vt10x         	      14	  24405622 ns/op	  42.97 MB/s	22775321 B/op	 2226120 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/charmbracelet-x-vt         	    1442	    344839 ns/op	  19.93 MB/s	  252468 B/op	    1790 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/charmbracelet-x-vt         	     115	   2690089 ns/op	   1.92 MB/s	  260644 B/op	    3128 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/charmbracelet-x-vt         	      12	  29455160 ns/op	  35.63 MB/s	 2883510 B/op	  430321 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/charmbracelet-x-vt         	       2	 231181812 ns/op	   4.54 MB/s	110947528 B/op	  914853 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/charmbracelet-x-vt         	       9	  39258102 ns/op	  26.72 MB/s	 5797011 B/op	  919960 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/phosphor         	   24998	     14418 ns/op	 476.64 MB/s	       2 B/op	       0 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/phosphor         	   26756	     13386 ns/op	 386.59 MB/s	       3 B/op	       0 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/phosphor         	     166	   2149622 ns/op	 488.25 MB/s	   19851 B/op	      94 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/phosphor         	     250	   1426790 ns/op	 734.94 MB/s	    2831 B/op	       8 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/phosphor         	     546	    653898 ns/op	1603.92 MB/s	    1324 B/op	       3 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/phosphor         	   25605	     14030 ns/op	 489.81 MB/s	       2 B/op	       0 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/phosphor         	   26450	     13574 ns/op	 381.23 MB/s	       3 B/op	       0 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/phosphor         	     171	   2111106 ns/op	 497.15 MB/s	   19745 B/op	      94 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/phosphor         	     249	   1434790 ns/op	 730.85 MB/s	    2843 B/op	       8 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/phosphor         	     547	    649111 ns/op	1615.75 MB/s	    1321 B/op	       3 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/charmbracelet-x-vt         	    1462	    339222 ns/op	  20.26 MB/s	  252462 B/op	    1790 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/charmbracelet-x-vt         	     115	   2659829 ns/op	   1.95 MB/s	  260644 B/op	    3128 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/charmbracelet-x-vt         	      12	  28618080 ns/op	  36.67 MB/s	 2883513 B/op	  430321 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/charmbracelet-x-vt         	       2	 234899729 ns/op	   4.46 MB/s	110947536 B/op	  914853 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/charmbracelet-x-vt         	       9	  40435301 ns/op	  25.94 MB/s	 5797009 B/op	  919960 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/vim/vt10x         	    1665	    223136 ns/op	  30.80 MB/s	  205814 B/op	   17814 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/less/vt10x         	    1975	    201074 ns/op	  25.74 MB/s	  128304 B/op	   11936 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/claude/vt10x         	      15	  23281033 ns/op	  45.08 MB/s	20746859 B/op	 1884466 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/logs/vt10x         	      13	  28464920 ns/op	  36.84 MB/s	22699463 B/op	 2220594 allocs/op
+PASS
+goos: darwin
+goarch: arm64
+pkg: github.com/2018kguo/phosphor/oracle
+cpu: Apple M5 Pro
+BenchmarkCompareWrite/progress/vt10x         	      14	  24701717 ns/op	  42.46 MB/s	22775316 B/op	 2226120 allocs/op
+PASS

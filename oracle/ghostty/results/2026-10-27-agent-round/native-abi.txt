@@ -1,0 +1,4 @@
+# github.com/2018kguo/phosphor/oracle/ghostty.test
+ld: warning: duplicate -rpath '/var/folders/fk/51_91tbs40l6c_k4p7rn066c0000gn/T/terminal-round-ocfx9p91/ghostty/zig-out/lib' ignored
+ld: warning: ignoring duplicate libraries: '-lghostty-vt'
+ok  	github.com/2018kguo/phosphor/oracle/ghostty	2.275s

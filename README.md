@@ -82,6 +82,25 @@ is watching them. A shell can wait at a prompt for hours. An editor can
 close while its alternate screen still needs to survive. The storage kept
 between bursts of output matters as much as parsing speed.
 
+Matched headless runs put numbers on that tradeoff:
+
+| Workload or retained state | Phosphor compared with libghostty-vt |
+|---|---|
+| Shell prompts | About **9–24× less incremental RSS**, depending on emulator count and allocator amortization |
+| Completed editors and pagers | **17–49% less RSS**, with inactive editor buffers retained |
+| Exactly 100 styled history rows | About **3.1× less RSS**, with equal retained contents verified |
+| Editor/pager recordings and progress | **1.11–2.63× more bytes per CPU second** under the recorded budgets |
+| Scrolling logs | Native is **31% faster** with budgeted history; Phosphor is **1.87× faster** with history disabled |
+| Grapheme-heavy Unicode | Native is about **7.3× faster**, with grapheme mode enabled on both |
+
+Inputs match, but equal byte budgets keep different amounts of history:
+Phosphor stores serialized logical lines; native prunes physical pages.
+The memory runs use 128 and 1,024 emulators in fresh processes and compact
+both engines. They exclude the child program and PTY. The
+[report](oracle/ghostty/results/2026-10-27-agent-round/README.md) records
+policies, all samples and a history-disabled parsing control. These are
+workload measurements, not per-session guarantees.
+
 Phosphor keeps that model in Go: no cgo, native library or separate build
 toolchain. Its API exposes cells directly, and the application decides when
 to compact storage and save a checkpoint. This makes it a useful fit for
@@ -97,8 +116,8 @@ Speed and fidelity still need to be checked against your programs.
 
 ## What the measurements show
 
-**Idle memory stays small.** An 80×24 shell prompt used about **1.45 KB of Go
-heap after Compact** in the measured workload. Rows grow as they are used,
+**Idle memory stays small.** An 80×24 shell prompt used about **1.51 KB of Go
+heap after Compact**, with a reply sink installed in the measured workload. Rows grow as they are used,
 history has configurable line and byte budgets, and `Compact()` releases
 unused storage after output settles.
 
@@ -121,9 +140,9 @@ ANSI replay limits are [published](docs/benchmarks.md#compatibility), including
 the cases where terminals disagree. This is not a claim of universal VT
 compatibility.
 
-**Output parsing is fast, with tradeoffs.** The current comparison leads
-libghostty-vt on several editor/pager recordings and progress output; native
-leads on logs, a synthetic TUI and nano.
+**Output parsing depends on the workload.** The current comparison leads
+libghostty-vt on several editor/pager recordings and progress output. History
+policy changes the log result, and native leads on grapheme-heavy Unicode.
 Choose using [your workload](docs/benchmarks.md#throughput), rather than a claim
 that one engine wins every stream.
 

@@ -1,0 +1,12 @@
+{
+  "commit": "dbbfe6886dd2a62d264aa5f70b14259876998626",
+  "files": {
+    "oracle/ghostty/main.go": "36c80403052648bd988521a748f0aef4372dc525696b078ff459f39b4029efe9",
+    "oracle/ghostty/trace.go": "4dafdb42b5b1cd2192c90e104587f0feec37d344669b19708fee01534023c3d7",
+    "oracle/ghostty/bridge.c": "86ff8b85be9016b9ab8b5067f987f63f61a7b176fd14fa8fec61459ef7b336ca",
+    "oracle/ghostty/bridge.h": "7afc909b7eafe0c4f8a048b6b2e515047bfbe7375ecaa41da20fc7bdc766a823",
+    "oracle/ghostty/ab.sh": "96d76c3bfc2b9f880fa70b8c7a2abbef02417baaf6474e22bb01645ebb339848",
+    "oracle/go.mod": "125b83027f42ccef1def67e377a2ad7d9c2b761ee782e1677ab246d7a052dcb4",
+    "oracle/go.sum": "52ff8caa763e8db02cd4488c56c3aa7ef72392bdc7b404e53a6118fa3e81dac7"
+  }
+}

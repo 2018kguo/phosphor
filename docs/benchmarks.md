@@ -1,87 +1,78 @@
 # Performance and compatibility
 
-Choose Phosphor for small idle sessions, a Go cell model and exact checkpoints.
-Parsing throughput varies with the program; it does not beat every other
-engine on every stream. These results describe fixed workloads on an Apple
-M5 Pro, macOS arm64. Native comparisons use libghostty-vt at
-`46e9dc9a927b2e7e7cba79e6902c176127dbdf2c`, ReleaseFast.
+Measure the input, retained state and host operations you plan to use.
+Phosphor favors small idle storage and Go integration. The current comparison
+shows faster editor/pager streams and a large native lead on grapheme-heavy
+Unicode. History policy changes the log result.
 
-The [measurement report](../oracle/ghostty/results/2026-10-27-round6/README.md)
-has the methods, source commits and every raw sample. Toolchain details are
-recorded in [environment metadata](../oracle/ghostty/results/environments.json).
+The [measurement report](../oracle/ghostty/results/2026-10-27-agent-round/README.md)
+contains all tables, raw samples and reproduction commands. Its
+[metadata](../oracle/ghostty/results/2026-10-27-agent-round/metadata.json)
+records source pins, toolchains, binary hashes and policies. These are headless
+macOS arm64 measurements on an Apple M5 Pro, not GUI or whole-daemon results.
 
-## Idle memory
+## Idle storage
 
-At a shell prompt, an 80×24 terminal retained about **1.45 KB of Go heap after
-Compact**. Prefix rows avoid paying for a full
-screen while only a prompt is visible.
+An 80×24 prompt retains about **1.51 KB of Go heap after Compact**, with a
+reply sink installed. Rows grow as needed. Baseline and candidate retained
+heaps are unchanged by this performance round.
 
-Median bytes per terminal, three fresh processes with 1,024 live terminals:
+Prompt RSS is about **9–24× lower than native** across the tested 128- and
+1,024-emulator processes. The range matters: allocator pages and amortization
+change RSS even when retained Go objects stay the same. Both engines compact;
+native continuation retention is disabled. The earlier larger ratios included
+optional native checkpoint bookkeeping and should not be carried forward.
 
-| Workload after idle compaction | Baseline heap | Phosphor heap | Phosphor RSS delta | Native RSS delta |
-|---|---:|---:|---:|---:|
-| Shell prompt, including EL | 2,521 | 1,449 | 1,264 | 31,280 |
-| Colored prompt, including EL | 2,515 | 1,443 | 1,760 | 47,840 |
-| Filled screen erased to prompt | 2,537 | 1,460 | 5,152 | 64,208 |
-| Rich attributes erased to prompt | 2,546 | 1,472 | 5,072 | 80,720 |
+Completed editors and pagers retain their inactive alternate buffers. At
+1,024 emulators, Phosphor retains 22–47 KB of Go heap and 39–63 KB of incremental
+RSS, versus about 75 KB native RSS: **17–49% less**. A separate fixture retaining
+exactly the same 100 styled history rows uses about **3.1× less RSS**. Tests
+compare the complete retained model before and after compaction.
 
-Phosphor uses `Compact()` and native uses FULL compression. Go heap measures
-retained Go objects. RSS measures resident process pages, including native
-memory; the native Go-wrapper heap is not a meaningful substitute for it.
-Allocator pages can remain resident after rows are freed, especially after a
-large screen is erased. The comparison uses the same GC procedure for both.
-
-A closed editor is a larger idle state. Correct 1049 exit retains its
-alternate screen for later re-entry. Across completed vim/nvim/nano/less/man
-recordings, Phosphor kept **22–47 KB heap and 34–57 KB RSS after Compact**,
-versus about **82 KB native RSS after FULL compression** at 1,024 terminals.
-The [120 completed-program samples](../oracle/ghostty/results/2026-10-27-round6/closed-memory.md)
-also measure 256 terminals and show the smaller RSS savings for vim/nvim.
-
-History and rich attributes add storage beyond a prompt. The serialized
-history byte budget covers history, not the whole emulator; a newest line
-can exceed it. Measure the screen contents and history retention you need.
+These are incremental emulator costs. They exclude child programs, PTYs,
+output rings and shared-library startup. Native Go-wrapper heap excludes
+native allocations; use RSS for comparisons between engines. The history
+byte budget covers serialized history rather than the entire emulator.
 
 ## Throughput
 
-Median MiB/s, five alternating rounds, 500 ms samples, 120×40, 1 KiB writes:
+The eight original streams improve **4.2–21.1%** over the Phosphor baseline
+under the recorded budgeted policy. All builds use identical inputs, reply
+formatting with discard sinks, and alternating order. Process CPU includes
+GC and native work. Five samples per build/case are retained.
 
-| Stream | Baseline | Phosphor | libghostty-vt |
-|---|---:|---:|---:|
-| Synthetic coding-agent TUI | 441.8 | 427.4 | 467.7 |
-| Logs | 521.8 | 537.9 | 884.7 |
-| Progress bars | 1,286.4 | 1,237.2 | 1,098.6 |
-| vim recording | 385.4 | 362.9 | 317.3 |
-| less recording | 260.0 | 308.9 | 131.7 |
-| nvim recording | 587.8 | 707.5 | 601.0 |
-| nano recording | 499.2 | 508.9 | 563.5 |
-| man recording | 409.7 | 519.9 | 407.8 |
+Equal byte budgets retain different amounts of history. With nominal
+2,000-line /256 KiB limits, Phosphor keeps 2,000 log lines while native keeps
+357–678 physical rows in the primary samples. Native is about **31% faster**
+there. With history disabled and zero retained rows verified on both sides,
+Phosphor is about **1.87× faster** on the same logs. Neither result is a
+universal parsing-speed ratio.
 
-Phosphor leads native on five of these streams; native leads logs, the
-synthetic TUI and nano. Against the baseline, several recordings improve while the
-TUI, progress and vim medians are about 3–6% lower. Short samples and shared
-host scheduling do not establish small regressions or universal speedups.
-Raw wall and process CPU samples retain the variation and every outlier.
+The added Unicode fixture enables grapheme mode on both engines. Native is
+about **7.3× faster**; Phosphor is within 1% of its baseline. The OSC 8 link
+fixture favors Phosphor. These cases stay in the report alongside the editor,
+pager, agent TUI and progress streams. Additional 8 KiB and 64 KiB phases show
+how chunk size changes ratios.
 
-These numbers measure emulator work, not process startup, PTY latency,
-networking, rendering or an entire daemon. Chunk size and terminal geometry
-matter. Use your own streams before budgeting a service around a headline
-throughput number. See [development](development.md#measure-your-workload)
-for commands.
+Every write is parsed synchronously. A large-burst test checks replies,
+ordered history, cells, styles, links, graphemes, modes and future input.
+Its negative control discards the leading input and must fail. This protects
+against measuring reads while silently skipping terminal emulation.
 
-The README's Go-only chart is historical: it measures the original comparison
-with charmbracelet/x/vt and hinshun/vt10x using different versions, defaults
-and 8 KiB writes. It is not the source for the current native table.
+The separate [Go-core measurements](../oracle/ghostty/results/2026-10-27-agent-round/README.md#other-go-cores)
+use library defaults and decimal MB/s. Feature coverage, reply handling and
+history settings differ; those results do not isolate equivalent work.
+The historical [Go-only chart](bench-light.svg) describes an earlier experiment.
 
 ## Compatibility
 
-The native comparison captures complete physical text cells, colors,
-underline styles, hyperlinks, cursor, row prompt/wrap metadata, modes,
-history and raw replies. Untouched controls distinguish direct-input parity
-from state lost by either engine's checkpoint or ANSI exporter.
+The native comparison captures text cells, colors, underline styles,
+hyperlinks, cursor, prompt/wrap metadata, modes, history and raw replies.
+Untouched controls distinguish direct-input differences from state lost by
+either engine's checkpoint or ANSI exporter.
 
-The expanded corpus has **208 named cases and 773 parity actions**. Whole,
-one-byte and seven-byte writes produce the same results:
+The corpus has **208 named cases and 773 parity actions**. Whole, one-byte
+and seven-byte writes produce the same results:
 
 | Comparison | Passing actions |
 |---|---:|
@@ -90,26 +81,20 @@ one-byte and seven-byte writes produce the same results:
 | Native checkpoint/repaint continuation | 666 / 773 |
 
 The direct difference is DEC special-graphics underscore: Phosphor keeps
-xterm's blank mapping, while the pinned native engine keeps an underscore.
-Two Phosphor ANSI variants lose mixed old/new alternate-screen backgrounds
-on forced 1047 exit after resize. Exact snapshots preserve those cells.
-The [raw differences](../oracle/ghostty/results/2026-10-27-round6/README.md)
-remain failures in the denominator. Passing the rest is not a percentage
-of universal terminal compatibility.
+xterm's blank mapping, while native keeps an underscore. Two Phosphor ANSI
+variants lose mixed alternate-screen backgrounds on forced 1047 exit after
+resize. Exact snapshots preserve those cells. These failures remain in the
+[raw corpus results](../oracle/ghostty/results/2026-10-27-agent-round/README.md#compatibility-and-reproduction);
+passing the rest is not a percentage of universal terminal compatibility.
 
-Ordinary Go tests also run five external suites: libvterm scripts, translated
-Ghostty and WezTerm tests, Alacritty references, and independently written
-xterm/esctest-style cases. Upstream references stay unchanged when terminal
-policies conflict. [The coverage contract](../oracle/ghostty/coverage.md)
-defines observations and exclusions; [the notices](../testdata/conformance/NOTICE.md)
-record sources and licenses. Graphics and GUI behavior are outside this
-headless text-model comparison.
+Ordinary Go tests also run libvterm scripts, translated Ghostty and WezTerm
+tests, Alacritty references and independently written xterm/esctest-style cases.
+Upstream references remain unchanged when terminal policies conflict.
+[Coverage](../oracle/ghostty/coverage.md) defines observations, bounds and
+excluded graphics/GUI behavior; [notices](../testdata/conformance/NOTICE.md)
+record sources and licenses.
 
-Snapshot tests cover future output and resize, including checkpoints written
-by an earlier library build. Recordings and fuzz tests exercise chunk
-boundaries, Unicode, dirty rows and exact versus ANSI continuation. Read
-[the API limits](reference.md#attach-a-client) when attach fidelity matters.
-
-The [earlier Go-only chart](bench-light.svg) ([dark version](bench-dark.svg))
-compares older library versions. Use the tables above for the current native
-comparison.
+Snapshot tests cover future output and resize, including earlier saved
+formats. Recordings and fuzzing exercise chunk boundaries, Unicode, dirty
+rows and exact versus ANSI continuation. Read the
+[export limits](reference.md#attach-a-client) when attach fidelity matters.

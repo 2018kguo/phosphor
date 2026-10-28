@@ -2,15 +2,15 @@
 
 This tool asks whether the same PTY bytes produce the same terminal state, and what each engine costs in time and memory. It measures headless emulation; fonts, rendering and whole-daemon latency are outside the experiment. Production Phosphor needs neither cgo nor Ghostty.
 
-Start with the [idle-state and compatibility results](results/2026-10-27-round6/README.md) and [comparison contract](coverage.md). Earlier phases cover [idle rows](results/2026-10-27/README.md), [metadata pools](results/2026-10-27-round2/README.md), [Unicode/checkpoints](results/2026-10-27-round3/README.md), [gap audit](results/2026-10-27-round4/README.md) and [shell prompts](results/2026-10-27-round5/README.md). They describe their measured revisions, not the current release.
+Start with the [audited throughput, retention and idle-state results](results/2026-10-27-agent-round/README.md) and [comparison contract](coverage.md). Earlier phases cover [idle rows](results/2026-10-27/README.md), [metadata pools](results/2026-10-27-round2/README.md), [Unicode/checkpoints](results/2026-10-27-round3/README.md), [gap audit](results/2026-10-27-round4/README.md) and [shell prompts](results/2026-10-27-round5/README.md). They describe their measured revisions, not the current release.
 
 ## Build
 
-The comparison pins Ghostty `46e9dc9a927b2e7e7cba79e6902c176127dbdf2c` and ReleaseFast. Use the Zig toolchain required by its [build manifest](https://github.com/ghostty-org/ghostty/blob/46e9dc9a927b2e7e7cba79e6902c176127dbdf2c/build.zig.zon). From a clean native checkout:
+The comparison pins Ghostty `6ba144158577d033ccb6ed4b574e4013957c9161` and ReleaseFast. Use the Zig toolchain required by its [build manifest](https://github.com/ghostty-org/ghostty/blob/6ba144158577d033ccb6ed4b574e4013957c9161/build.zig.zon). From a clean native checkout:
 
 ```sh
 git clone https://github.com/ghostty-org/ghostty.git /tmp/ghostty-comparison
-git -C /tmp/ghostty-comparison checkout 46e9dc9a927b2e7e7cba79e6902c176127dbdf2c
+git -C /tmp/ghostty-comparison checkout 6ba144158577d033ccb6ed4b574e4013957c9161
 cd /tmp/ghostty-comparison
 zig build -Demit-lib-vt -Doptimize=ReleaseFast -j4
 ```
@@ -38,14 +38,14 @@ Commands emit JSON lines. Keep failures as well as successes.
 | `check -probes ghostty/probes.json` | Selected text/cursor/mode probes. Legacy mode does **not** fail the process; inspect `pass`, `restored_view_equal`, `continued_view_equal`. |
 | `trace -traces ghostty/traces.json` | Cells, replies and future state after every action, against untouched controls. Exits 1 on a parity failure. `-trace-chunk 1` or `7` splits writes without moving observation points. |
 | `cursor-replies` | Raw cursor-query answers. |
-| `throughput -duration 200ms` | Five rounds alternating engine order, at 120×40. `COMPARE_STREAM=logs` /`COMPARE_CHUNK=1024` select a case. |
+| `throughput -duration 200ms` | Five rounds alternating engine order, at 120×40. `COMPARE_STREAM=logs` /`COMPARE_CHUNK=1024` select a case; `COMPARE_HISTORY=none` disables history on both sides. |
 | `state -duration 300ms` | View, repaint, snapshot and restore costs. Native binary snapshots and ANSI export have different contracts. |
 | `memory -engine phosphor -workload prompt -n 1024` | Live retained heap and process RSS. Run each sample in a fresh process; repeat at least three times and use multiple counts. |
 | `layout` | Struct size and offsets; these alone do not measure memory footprint. |
 | `width-table` /`widths` | All native width 0/2 scalar ranges /differences from the baseline runewidth dependency; excludes surrogates, not a grapheme test. |
 | `grapheme-properties` | Audit `[U+0600, scalar]`; consumed 2/width 1 identifies neutral continuation under Prepend. Native control behavior is unspecified; this is pinned-build evidence. |
 
-Throughput uses generated agent TUI/log/progress streams and real editor/pager recordings; missing recordings are errors. Correctness uses original 100×30 recording geometry. `ab.sh OLD NEW OUTPUT.jsonl` alternates old Phosphor, new Phosphor and native for five rounds. Build both revisions with the same driver selectors/data; baseline overlays must leave production code untouched. Wall and process CPU time include GC/cgo/native work. Short shared-host samples cannot resolve small differences reliably.
+Throughput uses generated agent TUI/log/progress streams and real editor/pager recordings; missing recordings are errors. Correctness uses original 100×30 recording geometry. `ab.sh OLD NEW OUTPUT.jsonl` alternates old Phosphor, new Phosphor and native for five rounds. Build both revisions with the same driver selectors/data; baseline overlays must leave production code untouched. Wall and process CPU time include GC/cgo/native work. Timed engines enable discard reply sinks and leave native continuation retention disabled; checkpoint tests explicitly enable it. Samples report input hashes, byte totals and actual retention. Run the native-linked burst test, including its discarded-prefix negative control, before interpreting throughput. Short shared-host samples cannot resolve small differences reliably.
 
 ## Read memory results
 
