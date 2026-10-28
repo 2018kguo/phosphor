@@ -143,7 +143,6 @@ const (
 	g3gapLR    = "DECLRMM left/right margins"
 	g3gapProt  = "protected cells (DECSCA/SPA, DECSED/DECSEL)"
 	g3gapCS    = "national/other charsets"
-	g3gapOSC   = "hyperlinks / semantic prompts / OSC state"
 	g3gapPal   = "palette and dynamic colors"
 	g3gapRep   = "device reports / replies"
 	g3gapImg   = "images (sixel/kitty)"
@@ -554,7 +553,9 @@ var ghostty3Cases = append([]confCase{
 	{name: "eraseDisplay complete ignores stale prompt on recycled row", cols: 10, rows: 3,
 		in: "hello\x1b[2;3r\x1b[3;1H\n\x1b[r\x1b[2J", scrollback: []string{}},
 	{name: "eraseDisplay complete at prompt not on last row scrolls", cols: 10, rows: 15,
-		in: strings.Repeat("x\r\n", 10) + "\x1b]133;A\x07$ \x1b]133;B\x07\x1b[1;1H\x1b[2J", gap: g3gapOSC},
+		in:  strings.Repeat("x\r\n", 10) + "\x1b]133;A\x07$ \x1b]133;B\x07\x1b[1;1H\x1b[2J",
+		cur: at(0, 0), pending: no(), screen: scr(""),
+		scrollback: []string{"x", "x", "x", "x", "x", "x", "x", "x", "x", "x", "$"}, check: g1Prompts()},
 
 	// ---- stream_terminal.zig byte-stream tests ----
 	{name: "stream: basic print", cols: 10, rows: 10,
@@ -645,17 +646,23 @@ var ghostty3Cases = append([]confCase{
 	{name: "stream: palette dirty flag set on color change", cols: 10, rows: 10,
 		in: "\x1b]4;0;rgb:ff/00/00\x1b\\\x1b]104;0\x1b\\\x1b]21;1=rgb:00/ff/00\x1b\\", gap: g3gapPal},
 
-	// Semantic prompts (OSC 133): fresh-line behavior moves the cursor.
+	// Current native stream_terminal.zig at 46e9dc9a verifies these same
+	// cursor positions; public row annotations distinguish L from A/P/N.
 	{name: "stream: semantic prompt fresh line", cols: 10, rows: 10,
-		in: "Hello\x1b]133;L\x07", cur: at(0, 1), gap: g3gapOSC},
+		in: "Hello\x1b]133;L\x07", cur: at(0, 1), pending: no(), screen: scr("Hello"),
+		scrollback: []string{}, check: g1Prompts()},
 	{name: "stream: semantic prompt fresh line new prompt", cols: 10, rows: 10,
-		in: "Hello\x1b]133;A\x07", cur: at(0, 1), gap: g3gapOSC},
+		in: "Hello\x1b]133;A\x07", cur: at(0, 1), pending: no(), screen: scr("Hello"),
+		scrollback: []string{}, check: g1Prompts(PromptNone, PromptPrimary)},
 	{name: "stream: semantic prompt prompt_start", cols: 10, rows: 10,
-		in: "Hello\x1b]133;P\x07", cur: at(5, 0), gap: g3gapOSC},
+		in: "Hello\x1b]133;P\x07", cur: at(5, 0), pending: no(), screen: scr("Hello"),
+		scrollback: []string{}, check: g1Prompts(PromptPrimary)},
 	{name: "stream: semantic prompt new_command", cols: 10, rows: 10,
-		in: "Hello\x1b]133;N\x07", cur: at(0, 1), gap: g3gapOSC},
+		in: "Hello\x1b]133;N\x07", cur: at(0, 1), pending: no(), screen: scr("Hello"),
+		scrollback: []string{}, check: g1Prompts(PromptNone, PromptPrimary)},
 	{name: "stream: semantic prompt new_command at column zero", cols: 10, rows: 10,
-		in: "\x1b]133;N\x07", cur: at(0, 0), gap: g3gapOSC},
+		in: "\x1b]133;N\x07", cur: at(0, 0), pending: no(), screen: scr(""),
+		scrollback: []string{}, check: g1Prompts(PromptPrimary)},
 
 	// Effects with no callback leave the terminal usable.
 	{name: "stream: bell effect callback", cols: 80, rows: 24,
