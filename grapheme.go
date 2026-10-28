@@ -12,6 +12,7 @@ type cluster struct {
 	text      string
 	joinModes clusterModes
 	width     uint8
+	tail      graphemeTail
 }
 
 // The second word holds the final codepoint of a full native-sized cluster.
@@ -78,6 +79,7 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 		return false
 	}
 	s := t.cellString(row[x])
+	tail := t.clusterTail(row[x])
 	// Outside GB9b's Prepend rule, Ghostty follows UTS #51: a modifier
 	// must immediately follow its base. Extend, Control and ZWJ cannot
 	// bridge that boundary, including text attached while mode was off.
@@ -87,10 +89,10 @@ func (t *Terminal) extendGrapheme(r rune) bool {
 			return false
 		}
 	}
-	if !graphemeContinues(s, r) {
+	if !tail.continues(r) {
 		return false
 	}
-	count := utf8.RuneCountInString(s)
+	count := int(tail.count)
 	width := 1
 	if x+1 < len(row) && row[x+1].R == wideTail {
 		width = 2

@@ -1529,7 +1529,7 @@ func (t *Terminal) combine(r rune) {
 		}
 	}
 	s := t.cellString(*c)
-	if utf8.RuneCountInString(s) >= maxClusterRunes {
+	if t.clusterTail(*c).count >= maxClusterRunes {
 		return
 	}
 	if r == 0xfe0e || r == 0xfe0f {
@@ -2471,7 +2471,8 @@ func (t *Terminal) runeWidth(r rune) int {
 func (t *Terminal) intern(s cluster) rune {
 	x := t.ext()
 	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
-		if x.clusters[i] == s {
+		old := &x.clusters[i]
+		if old.text == s.text && old.width == s.width && old.joinModes == s.joinModes {
 			return clusterBase + rune(i)
 		}
 	}
@@ -2494,6 +2495,7 @@ func (t *Terminal) internAppend(prefix string, r rune, width uint8, modes cluste
 }
 
 func (t *Terminal) storeCluster(s cluster) rune {
+	s.tail = graphemeTailOf(s.text)
 	x := t.ext()
 	if len(x.clusters) >= x.clusterCap {
 		t.compactClusters()
