@@ -92,7 +92,7 @@ The direct difference is DEC special-graphics underscore: Phosphor keeps
 xterm's blank mapping, while the pinned native engine keeps an underscore.
 Two Phosphor ANSI variants lose mixed old/new alternate-screen backgrounds
 on forced 1047 exit after resize. Exact snapshots preserve those cells.
-The [raw differences](../oracle/ghostty/results/2026-10-27-round6/README.md#compatibility)
+The [raw differences](../oracle/ghostty/results/2026-10-27-round6/README.md)
 remain failures in the denominator. Passing the rest is not a percentage
 of universal terminal compatibility.
 
