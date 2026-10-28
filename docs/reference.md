@@ -192,5 +192,5 @@ changes become RGB colors, so drawing a view does not change the host's palette.
 Use `WriteScrollback` once to draw retained history. `WithScrollbackOutput`
 then reports each new row that program output scrolls away, including repeated
 rows and when retention is disabled. These callbacks run during `Write` and
-must not keep the supplied bytes or call back into the terminal. Resize and
+must not keep the supplied bytes or mutate the terminal. Resize and
 restart rearrange existing content without replaying it to this observer.

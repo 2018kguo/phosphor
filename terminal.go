@@ -76,7 +76,7 @@ type savedCursors struct {
 // A Terminal is not safe for concurrent use: callers that write from one
 // goroutine and read from another must hold a lock around both. Writers
 // and callbacks given as options run synchronously inside Write and must
-// not call back into the Terminal.
+// not call back into the Terminal except where the option explicitly permits it.
 type Terminal struct {
 	cols, rows int
 	main, alt  [][]cell // alt is allocated on first entry and retained for later switches

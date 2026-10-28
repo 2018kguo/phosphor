@@ -76,7 +76,7 @@ func WithPalette(p Palette) Option {
 // WithScrollbackOutput observes each main-screen row that scrolls into history,
 // even when retention is disabled. Each Write receives one ANSI-encoded row in
 // AppendRowANSI's format. It runs synchronously during Write;
-// the writer must not retain bytes or call this Terminal. Errors are ignored.
+// the writer must not retain bytes or mutate this Terminal. Size is safe to read. Errors are ignored.
 // Resize and Restart only rearrange existing content and do not emit rows.
 // This does not replay existing history; use WriteScrollback for initial state.
 func WithScrollbackOutput(w io.Writer) Option { return func(c *config) { c.scrollbackOutput = w } }
