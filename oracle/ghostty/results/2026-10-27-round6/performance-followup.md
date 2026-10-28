@@ -1,8 +1,8 @@
-# Restore bulk erasure performance
+# Recover the cost of bulk erasure
 
-The retained change uses `clear` for default-background erasure after the existing half-wide repairs, and skips underline-pool resets when the pen has no rare attributes. Damage checks, wrap flags, shell annotations, prefix storage and colored erasure keep their existing behavior. No fixed-layout or snapshot changes.
+A semantic-preserving EL 2 change had replaced bulk zeroing with scalar stores. Restoring `clear` after half-wide repairs, plus skipping SGR 0 pool work for E=0, recovered the measured cost without changing damage, wrap/prompt flags, prefix storage, colored erase, layouts or snapshots. The dense-row probe was rejected.
 
-Measured on Apple M5 Pro, macOS arm64, Go 1.26.3. Before is production `8d1511c`; after adds only these two changes. Same native driver and streams, 1024-byte reads, `GOMAXPROCS=1`, seven alternating before/after pairs of 750 ms. All raw samples are retained. The host slowed between earlier probes and the final run, with interrupted early wall samples; compare each probe only with its adjacent control.
+Apple M5 Pro, macOS/arm64, Go 1.26.3; before `8d1511c`, after only those two changes. Same driver/data,1024-byte reads, GOMAXPROCS=1, seven alternating 750 ms pairs. Host speed changed between probes and early wall samples were interrupted: compare adjacent controls, not separate runs. All [accepted-change samples](performance-bulk-clear.jsonl) remain.
 
 | Stream | Before wall MiB/s, seven samples | After wall MiB/s, seven samples | Wall median change | CPU median change |
 |---|---|---|---:|---:|
@@ -12,7 +12,7 @@ Measured on Apple M5 Pro, macOS arm64, Go 1.26.3. Before is production `8d1511c`
 | less-recording | 199.0, 208.9, 209.6, 198.6, 209.0, 203.5, 204.1 | 251.2, 247.8, 246.6, 246.4, 249.8, 247.3, 244.0 | +21.13% | +20.85% |
 | logs | 432.2, 432.5, 463.4, 480.9, 463.8, 389.6, 417.1 | 455.9, 445.3, 453.6, 475.3, 489.2, 367.4, 426.7 | +4.86% | +3.52% |
 
-CPU change within each adjacent pair, in pair order:
+CPU changes within adjacent pairs, in order:
 
 | Stream | Seven paired CPU changes |
 |---|---|
@@ -22,27 +22,17 @@ CPU change within each adjacent pair, in pair order:
 | less-recording | +22.30%, +19.25%, +19.37%, +23.96%, +21.15%, +21.16%, +20.52% |
 | logs | +5.24%, +2.42%, -1.23%, -0.51%, +5.52%, +3.09%, +1.42% |
 
-These are local measurements with host scatter. They show a useful recovery on these workloads and do not establish a stable speedup for every terminal workload.
+Matched two-second `BenchmarkWriteStream/claude` profiles used the same 8192-byte harness:8d spent 170/2050 ms in fillCells (140 ms at scalar stores), versus v0.3's 40 ms cumulative EL 2 bulk-clear path. [Profile text](performance-claude-profiles.txt) supports the hotspot, not exact attribution of every percentage point; binary profiles stayed in the experiment directory.
 
-The matched two-second `BenchmarkWriteStream/claude` profiles use the unchanged 8192-byte test harness on v0.3.0 and the 8d production source. In the 8d profile, `fillCells` consumes 170 ms of 2.05 seconds of samples, including 140 ms at the scalar cell assignment. The v0.3 profile routes EL2 through bulk row clearing and spends 40 ms cumulatively in that path. The semantic-preserving EL2 route had retained a scalar zero-fill loop; restoring bulk zeroing recovers this cost without clearing shell annotations. Profiles are sampling evidence, not an exact attribution of every percentage point. Their text is in `performance-claude-profiles.txt`; binary profiles remain in the experiment directory.
+[Row-only probe](performance-row-probe.jsonl): vim+2.7%, Claude-1.4%, less/progress within 0.7%, logs within 0.3%; seven 750 ms pairs except logs five 300 ms pairs. Excluded. [SGR 0-only probe](performance-sgr-probe.jsonl): progress+3.7%, vim+2.5%, Claude flat, less within 0.6%. Retained: E=0 guarantees default underline/no link. SGR 59 stayed unchanged.
 
-Two isolated probes preceded the retained change:
+Focused damage/prefix/semantic/wide/underline/link/saturation/continuation tests passed; warm forty-row writes stayed zero-allocation. Row-only recording allocations matched production (nvim 1/16 B, nano/man 0). These local measurements do not imply universal speedups.
 
-- Sharing the existing inline prefix helper for dense writes removed row-function calls but improved only vim by 2.7%; Claude was -1.4%, less/progress were within 0.7%, and logs within 0.3%. This runtime change was excluded. Its raw file has seven 750 ms pairs except logs, which has five 300 ms pairs.
-- Guarding only the two SGR0 branches improved progress by 3.7% and vim by 2.5%; Claude was flat and less within 0.6%. These guards are retained because E=0 guarantees default underline color and no hyperlink. SGR59 is unchanged.
-
-Focused Go damage, cold/prefix storage, semantic, wide, underline/link, pool-saturation and continuation tests pass. Warm forty-row writes retain zero allocations. The excluded row probe also matched production recording allocations (nvim: 1 allocation/16 B; nano/man: zero); this count includes the newer alternate-screen lifetime behavior.
-
-Reproduce using the existing `oracle/ghostty` build instructions, then run the same command once per binary in alternating order, seven times for each stream:
+Rerun each stream seven times, alternating binaries; build via the [driver](../../README.md):
 
 ```sh
 GOMAXPROCS=1 PHOSPHOR_DIR=/path/to/checkout COMPARE_ENGINE=phosphor COMPARE_ROUNDS=1 COMPARE_STREAM=claude-synthetic COMPARE_CHUNK=1024 BINARY -mode throughput -duration 750ms
 GOMAXPROCS=1 go test -run '^$' -bench '^BenchmarkWriteStream/claude$' -benchtime=2s -count=1 -cpuprofile=claude.cpu -o claude.test .
 ```
 
-Binary SHA-256:
-
-- `final-candidate`: `bb7cd704d558ed4d0c7b374284af079a582623f5a1a6e8f0de75fbd1d94745bb`.
-- `inline-row-probe`: `5cbb788ee2b7ba5c3d66688388bed8ebe5df464cff2a423b6c270da047911728`.
-- `sgr-reset-probe`: `d33f5f890999d87c7fd7c35f543dfaa4725b579bd6801d2b9027282dc8bdf7d0`.
-- `bulk-clear-probe`: `12c214173be5e714cb3798085dacdc13beaef3fd1af3b932d45ff56f89d3f473`.
+Binary SHA256: final-candidate `bb7cd704d558ed4d0c7b374284af079a582623f5a1a6e8f0de75fbd1d94745bb`; inline-row-probe `5cbb788ee2b7ba5c3d66688388bed8ebe5df464cff2a423b6c270da047911728`; sgr-reset-probe `d33f5f890999d87c7fd7c35f543dfaa4725b579bd6801d2b9027282dc8bdf7d0`; bulk-clear-probe `12c214173be5e714cb3798085dacdc13beaef3fd1af3b932d45ff56f89d3f473`.

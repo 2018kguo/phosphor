@@ -1,49 +1,14 @@
-# More idle storage savings and scroll-and-clear support
+# Second comparison: release unused metadata
 
-This round keeps phosphor's focus on many inexpensive sessions. Explicit
-idle compaction now frees stale hyperlink and combining-character tables,
-including invalid saved-cursor storage. Meaningful cells, retained history,
-live saved pens, pending input and REP's last character remain live. It adds
-no Terminal fields or work to ordinary output.
+Could idle compaction also reclaim dead links and combining characters? Yes: the erased rich-screen case saved about 98% of Go heap, without changing ordinary prompt/full-screen storage. Scroll-and-clear (`CSI22J`) also gained native-compatible behavior. This phase predates exact binary checkpoints.
 
-The baseline is the previous round, `49f49b8`; runtime changes end at
-`47ad94e`. Timings and memory were measured at `f6046d4`; the final
-change collects unused lookup entries after resize and does not run on
-those measured paths. Ghostty remains pinned to
-`919dca5c848d43a489a4cb2e1feade016f0fa2db`, built with Zig 0.17.0 and
-`-Demit-lib-vt -Doptimize=ReleaseFast`. The
-[first round](../2026-10-27/README.md) records the comparison with v0.1.0.
+Baseline `49f49b8`; measured `f6046d4`; final runtime `47ad94e` adds post-resize pool collection outside the measured paths. Ghostty `919dca5c848d43a489a4cb2e1feade016f0fa2db`, Zig 0.17.0, `-Demit-lib-vt -Doptimize=ReleaseFast`. Compare the [first phase](../2026-10-27/README.md) for v0.1.0 results.
 
-## What changed
+## Retained memory
 
-- `Compact()` marks live pool references before rebuilding a table. Small
-  unchanged live tables stay in place without allocation. It frees the
-  optional extra state only when every field is unused.
-- Scroll-and-clear (`CSI 22 J`) moves written rows into bounded history,
-  preserving the cursor's pen and input modes. It follows native Ghostty's
-  behavior for margins, protection, trailing empty rows and the alternate
-  screen.
-- SGR serialization reuses its existing attribute-code table rather than
-  copying 192 bytes for every style change. On the measured Go compiler,
-  the function's stack frame shrinks from 336 to 144 bytes.
-- History imported during resize keeps stable pool IDs until all working
-  rows are attached. Review found that freeing the old pools exposed this
-  detached-row bug; both combining-character and hyperlink reproductions
-  panicked before the fix and preserve their cells afterward.
-- Resize collects unused entries after installing all rows. Repeated idle
-  grow/shrink cycles otherwise kept adding entries without new output;
-  the new 100-cycle regression keeps storage bounded and content intact.
+Medians of three alternating fresh-process runs holding 1,024 terminals; shared inputs/holder arrays excluded, two GCs before each heap reading. Rich input writes 48 distinct 2 KiB URLs and combining characters, erases to a prompt and keeps no history. It isolates metadata churn, not a typical prompt. Without Compact both versions retained about 119 KB.
 
-Ptyd uses `Compact()` when its existing idle checkpoint is due, under the
-screen lock after a fresh stopped/quiet check. It adds no timer. The stored
-checkpoint test reloads the file and continues an unfinished CSI sequence.
-
-## Measurements
-
-Median retained memory per emulator, with Go heap and process RSS shown
-separately:
-
-| State | Prior phosphor heap | Current phosphor heap | Current phosphor RSS | Ghostty RSS |
+| State | Prior phosphor heap | Candidate phosphor heap | Candidate phosphor RSS | Ghostty RSS |
 | --- | ---: | ---: | ---: | ---: |
 | macOS prompt | 2,510 B | 2,515 B | 2.1 KiB | 30.6 KiB |
 | macOS erased ASCII screen, compacted | 2,518 B | 2,516 B | 4.9 KiB | 62.7 KiB |
@@ -54,31 +19,24 @@ separately:
 | Linux erased rich screen, compacted | 115,699 B | 2,531 B | 4.5 KiB | 51.3 KiB |
 | Linux meaningful full screen, compacted | 31,950 B | 31,950 B | 33.2 KiB | 33.4 KiB |
 
-The rich case saves about 98% of retained Go heap relative to the prior
-compaction implementation. Without calling Compact it retains about
-119 KB in both versions. Ordinary prompt and meaningful full-screen heap
-are unchanged within measurement noise. Terminal storage remains 560 bytes.
+Small unchanged live pools stay in place without allocation; large pools need a transient mark set. The same live walkers cover both screens, pens, saved cursors and REP. History already contains VT bytes. Terminal stays 560 bytes; no Write hook was added.
 
-Each memory sample retains 1,024 emulators in a fresh process; three
-alternating repetitions are used. Inputs, holder arrays and shared
-initialization are outside the baseline, with two GCs before both heap
-readings. Cross-engine comparisons use process RSS, including native
-allocations. Ghostty's Go heap is not its footprint.
+Earlier pool prototypes held 128 terminals per fresh process; medians of three Go-heap deltas, two GCs, one warmup terminal, base `49f49b8`:
 
-The metadata-heavy scenario writes 48 different 2 KiB hyperlink targets and
-combining characters on one row, then erases back to the prompt. It has no
-history. This isolates stale metadata; it is not a typical shell prompt.
+| Trace | Base | Always rebuild | Mark before rebuild |
+| --- | ---: | ---: | ---: |
+| links | 151,216.125 | 2,497.000 | 2,497.125 |
+| unicode | 5,432.250 | 2,496.125 | 2,496.125 |
+| mixed-live | 5,617.125 | 2,785.000 | 2,785.000 |
+| closed-1049 | 154,185.250 | 5,072.250 | 2,496.250 |
 
-Throughput uses five alternating rounds, 1 KiB writes and 120x40 geometry.
-CPU time includes GC, cgo and native work. The agent stream is synthetic;
-editor and pager streams are recordings. State costs use a 120x40 screen
-with 627 retained history rows. Ghostty's binary snapshot is stronger than
-its ANSI export, so persistence size and restore costs compare different
-representations.
+`links`/`unicode` churn 64 unique URLs (2 KiB each)/clusters then erase; `mixed-live` keeps one saved pair; `closed-1049` churns both, enters/exits 1049 with the last URL active, then closes/erases. Always-rebuild allocated twice on every unchanged Compact; mark-before-rebuild kept zero allocations through 256 live entries. The mixed-live URL already triggers active collection, so its reduction is mostly cluster storage. See [prototype samples](idle-memory/pool-memory-prototypes.jsonl), [counterexample](idle-memory/rebuild-noop-counterexample.txt) and [fuzz log](idle-memory/pool-compact-fuzz.txt).
 
-Median MiB per process CPU second:
+## Parsing and state costs
 
-| Stream | macOS prior | macOS current | macOS Ghostty | Linux prior | Linux current | Linux Ghostty |
+Five alternating rounds, 1 KiB writes, 120×40; median MiB per process CPU second includes GC/cgo/native work. Apple M5 Pro, Go 1.26.3 macOS/arm64; Colima Linux/arm64, four vCPUs, 5 GiB container memory, Go 1.26.10.
+
+| Stream | macOS prior | macOS candidate | macOS Ghostty | Linux prior | Linux candidate | Linux Ghostty |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Synthetic agent TUI | 438 | 449 | 498 | 338 | 347 | 346 |
 | Logs | 529 | 545 | 912 | 470 | 451 | 699 |
@@ -89,15 +47,9 @@ Median MiB per process CPU second:
 | nano | 431 | 429 | 574 | 259 | 248 | 430 |
 | man | 245 | 275 | 374 | 218 | 236 | 324 |
 
-These shared hosts show time trends and noisy small differences. For
-example, Linux log medians look 4% slower while the median paired-round
-ratio favors the candidate by about 1%; a changing host affected the
-separate medians. The raw samples remain visible. This round does not
-establish a universal parsing speedup; Ghostty still leads several streams.
+Host drift matters: Linux logs' separate medians suggest -4%, while paired rounds favor +1%. These samples do not establish a universal speedup. State costs below use 627 history rows; median wall microseconds:
 
-Median wall time for state operations, in microseconds:
-
-| Operation | macOS prior | macOS current | macOS Ghostty | Linux prior | Linux current | Linux Ghostty |
+| Operation | macOS prior | macOS candidate | macOS Ghostty | Linux prior | Linux candidate | Linux Ghostty |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Read visible text and metadata | 6.42 | 6.31 | 7.44 | 6.53 | 6.13 | 7.68 |
 | ANSI screen export | 9.87 | 9.46 | 15.33 | 10.23 | 9.28 | 15.18 |
@@ -105,70 +57,33 @@ Median wall time for state operations, in microseconds:
 | Persistence encode | 19.54 | 18.73 | 79.29 | 17.78 | 17.53 | 163.76 |
 | Persistence restore | 457.98 | 461.13 | 229.21 | 467.80 | 432.44 | 301.26 |
 
-Persistence stays at 98,427 bytes for phosphor and 317,035 bytes for the
-stronger native snapshot. Ghostty still restores that representation faster.
-The machines are an Apple M5 Pro, macOS/arm64 with Go 1.26.3, and Colima
-Linux/arm64 with four vCPUs, 5 GiB container memory and Go 1.26.10. These
-measure engine work, without a font/GPU renderer or whole-daemon forecast.
+Persistence remained 98,427 bytes of Phosphor ANSI versus 317,035 bytes of native binary snapshot. Native restored its stronger representation faster.
 
-## Compatibility and limits
+The retained SGR-table change `0d6b7e872bca679be95bbac95e420d000c4450f4` (base `49f49b8`) removed a 192-byte copy; appendSGR's frame shrank 336→144 bytes. The baseline profile attributed 37% of log CPU to appendRow, 16% printASCII, 10% rotation, 8% appendSGR. Six rotating 200 ms control/table/guard rounds gave these baseline/table speed ratios (>1 favors the table):
 
-The same 39 selected feature probes pass 22/39 on the previous phosphor
-head, 32/39 now, and 39/39 in Ghostty. All 13 new scroll-and-clear probes
-match native behavior; ten failed on the old head. These are feature
-checks, not a compliance score. The seven remaining differences exercise
-unsupported grapheme clustering.
+| Work | Ratio |
+| --- | ---: |
+| vim | 1.104 |
+| less | 0.990 |
+| synthetic Claude output | 0.996 |
+| scrolling logs | 1.041 |
+| progress bars | 1.068 |
+| visible repaint | 1.065 |
+| repaint with history | 0.980 |
+| Lines, unchanged control | 0.964 |
+| ScrollbackLines, unchanged control | 1.108 |
+| Replay | 1.017 |
 
-The portable ANSI repaint still omits REP's prior character and clamps a
-live cursor outside an enabled origin region. The new exact cursor probe
-exposes the latter in both engines' ANSI exporters; Ghostty's binary
-snapshot preserves it. Tests record those limits rather than treating a
-normalized current view as proof of future-output equivalence. Broad
-grapheme changes remain outside the released implementation.
+Unchanged controls moved too. Initial CPU pairs suggested 2.4% less log CPU /2.2% less visible-repaint CPU but 8.5% worse history repaint; a balanced four-pair repeat later gave 3% lower CPU /5% lower wall median, all CPU pairs +0.2–5.1%. The extra guard was rejected after ~8% worse log timing. Retain the removal of known work, not a universal timing claim: [three rotating logs](perf-final-baseline.txt), [table](perf-final-sgr-table.txt), [rejected guard](perf-final-sgr-guard.txt), [CPU counter-evidence](perf-cpu.jsonl), [repeat](perf-cpu-repeat.jsonl).
 
-## Review and verification
+## Correctness and the resize fix
 
-Independent read-only reviewers checked the runtime changes, live pool
-references and ptyd's lock order. One reviewer found the detached history
-import blocker; it was fixed before release. The regression covers three
-history batches across 12 cluster/link/mixed, height/width and main/alternate
-screen cases, every public cell, saved pens, future collection and further
-resizes. ASCII history import still creates no optional lookup state.
+Selected probes improved 22/39→32/39 versus native 39/39; all 13 new scroll-clear cases match (ten formerly failed). Seven remaining differences were graphemes. ANSI still omitted REP and clamped an outside-origin cursor; both exporters exposed the latter, native Snapshot preserved it.
 
-Full vet and race suites passed on macOS/arm64 (159.061 s) and Linux/arm64
-(169.283 s) at `f6046d4`, including the oracle module on both platforms.
-The final end-of-resize cleanup at `47ad94e` passes the full ordinary
-suite on both platforms and affected race tests (4.841 s macOS, 5.333 s
-Linux). Two independent reviewers found no blocker in that final change;
-the repeat-resize trace retains zero cluster entries after 1, 10 and 100
-cycles, while retaining its history. Release checks run the full workflow
-on the final head before tagging.
+Review of Phosphor `49f49b8..c8ea2cd` (`40a5881` only changed a driver executable bit) and ptyd `af36c18` to the working tree based on `231304c` found a crash: detached resize imports were invisible to collection after Compact. Public 100×4→100×5 witnesses with 400 entries panicked at cluster index 36/length 36 or link 4/length 4; the focused red case also reached index 138/length 138. [Before/after pool](history-pools-before.txt) /[after](history-pools-after.txt) and [link](history-links-before.txt) /[after](history-links-after.txt) outputs retain the evidence.
 
-Component checks include 37,493 compaction fuzz executions, 82,906 token
-executions, 7,133 stream executions with scroll-and-clear, and 28,266
-continuation executions with the race detector. A frozen baseline encoder
-matched all 524,288 tested attribute/color combinations. These component
-runs supplement the final integrated checks.
+Fix `f936a21` after `e4d756c` counts imported references (including repeats), temporarily raises existing collection thresholds, then restores them after attaching rows. It keeps the uint16 link bound; plain ASCII imports allocate no extra state. Twelve cluster/link/mixed ×height/width ×main/ALT cases cross three history batches, saved pens, future collection and resizes: [red](idle-memory/resize-import-red.txt), [green](idle-memory/resize-import-green.txt). Final resize cleanup keeps zero unused entries after 1/10/100 idle cycles. Lock review found no reverse overlapping `t.mu`/`t.scrMu` edge in ptyd.
 
-The zero-attribute serialization guard was rejected after slower log
-samples. An always-rebuild pool collector was rejected because unchanged
-live tables allocated on every compaction. The shared-table timing
-experiments included contradictory history samples; the retained change
-removes known repeated work, without claiming a universal speedup. See
-[performance findings](performance-findings.md) and
-[idle-memory findings](idle-memory/findings.md).
+Full vet/race passed at `f6046d4`: macOS 159.061 s /Linux 169.283 s, including oracle. Final `47ad94e` passed both ordinary suites and affected races (4.841/5.333 s); two reviewers found no blocker. Component totals: 37,493 Compact (30 s, two workers), 82,906 tokens (20 s, two workers; [log](perf-fuzz.txt)), 7,133 stream, 28,266 race continuation; 524,288 attribute/color encodings matched the frozen encoder. The focused import tests took 0.524 s; earlier review tests 0.338 s and ptyd idle checkpoint 0.206 s. These supplement integrated checks, not release CI proof.
 
-## Task context
-
-The user requested another head-to-head improvement round, with emphasis
-on idle memory and replay, followed by phosphor and ptyd releases. Codex
-`/root` integrated the work, added the idle-resize bound and owns final
-checks and publication.
-`ascii_performance` supplied the SGR change and found the resize blocker;
-`correctness_probes` supplied pool compaction and its resize fix;
-`grapheme_support` supplied scroll-and-clear and rejected the unproven
-combining-margin change. Independent reviewers also crossed those scopes.
-After a harness restart, `resize_fix_review` and `release_review` reviewed
-the final fix again. This is a task summary, not a full conversation
-transcript; private harness logs and unrelated workspace context are not
-published.
+Ptyd reused its idle checkpoint timer, reloaded the stored checkpoint and continued unfinished CSI. No timer or ordinary-output work was added. Raw integrated evidence: [macOS memory](macos-memory.jsonl), [throughput](macos-throughput.jsonl), [state](macos-state.jsonl), [checks](final-checks.jsonl), [tests](final-tests.txt), [Linux](linux.jsonl) /[final tests](linux-final-tests.txt). Use the [driver](../../README.md) to rerun; measurements are historical.
