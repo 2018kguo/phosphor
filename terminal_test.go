@@ -184,7 +184,11 @@ func state(t *Terminal) string { return stateOf(t, true) }
 func stateOf(t *Terminal, withScrollback bool) string {
 	var b strings.Builder
 	dump := func(name string, scr [][]cell, wrap []rowFlags) {
-		for y, row := range scr {
+		for y := range t.rows {
+			var row []cell
+			if y < len(scr) {
+				row = scr[y]
+			}
 			fmt.Fprintf(&b, "%s%d", name, y)
 			for x := range t.cols {
 				c := rowCell(row, x)
@@ -202,16 +206,17 @@ func stateOf(t *Terminal, withScrollback bool) string {
 					fmt.Fprintf(&b, "/%+v", t.extraAt(c.E))
 				}
 			}
-			if wrap != nil && wrap[y]&rowWrap != 0 {
+			if rowFlagsAt(wrap, y)&rowWrap != 0 {
 				b.WriteString(" wrapped")
 			}
 			b.WriteByte('\n')
 		}
 	}
 	dump("main", t.main, t.mainWrap)
-	if t.alt != nil {
-		dump("alt", t.alt, t.altWrap)
-	}
+	// An unallocated alternate screen has the same logical zero cells as
+	// an allocated empty screen. Resize and Compact may release its storage.
+	dump("alt", t.alt, t.altWrap)
+	fmt.Fprintf(&b, "alternate active %v modes %d\n", t.altActive, t.Modes().AltScreenModes)
 	cur := t.cur
 	if cur.origin {
 		// Repaint positions the cursor with origin mode on, which cannot
