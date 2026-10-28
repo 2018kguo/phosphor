@@ -1171,7 +1171,7 @@ func (t *Terminal) blank(row []cell) []cell {
 		clear(row)
 		return row
 	}
-	row = growRow(row, t.cols)
+	row = growRow(row, t.cols, t.cols)
 	blank := cell{Bg: t.cur.pen.Bg}
 	for x := range row {
 		row[x] = blank
@@ -1198,22 +1198,43 @@ func (t *Terminal) row(y int) []cell {
 	t.touch(y)
 	scr := t.screen()
 	if len(scr[y]) < t.cols {
-		scr[y] = growRow(scr[y], t.cols)
+		scr[y] = growRow(scr[y], t.cols, t.cols)
 	}
 	return scr[y]
 }
 
-func growRow(row []cell, cols int) []cell {
-	if len(row) >= cols {
-		return row
+// ensureRowPrefix prepares only the columns a print will write. Capacity
+// grows geometrically for byte-sized writes, bounded by the physical row.
+// Alternate-screen writers use full rows to avoid reallocating dense redraws.
+func ensureRowPrefix(row *[]cell, end, cols int) []cell {
+	if len(*row) < end {
+		*row = growRowPrefix(*row, end, cols)
 	}
-	if cap(row) < cols {
-		next := make([]cell, cols)
+	return *row
+}
+
+// Keep capacity policy and allocation outside the printing loop's hot wrapper.
+//
+//go:noinline
+func growRowPrefix(row []cell, end, limit int) []cell {
+	capacity := cap(row)
+	if capacity < end {
+		capacity = limit
+		if cap(row) <= limit/2 {
+			capacity = max(end, 2*cap(row))
+		}
+	}
+	return growRow(row, end, capacity)
+}
+
+func growRow(row []cell, end, capacity int) []cell {
+	if cap(row) < end {
+		next := make([]cell, end, capacity)
 		copy(next, row)
 		return next
 	}
 	old := len(row)
-	row = row[:cols]
+	row = row[:end]
 	clear(row[old:])
 	return row
 }
@@ -1234,21 +1255,44 @@ func (t *Terminal) fillCells(y, from, to int) {
 		return
 	}
 	if to == t.cols {
-		if w := t.wraps(); w != nil {
+		if w := t.wraps(); w != nil && w[y]&rowWrap != 0 {
 			w[y] &^= rowWrap
+			t.touch(y)
 		}
 	}
 	scr := t.screen()
-	if scr[y] == nil && t.cur.pen.Bg == 0 {
-		return
+	var row []cell
+	if t.cur.pen.Bg == 0 {
+		row = scr[y]
+		if from >= len(row) {
+			return // the requested range already consists of implicit zeros
+		}
+		to = min(to, len(row))
+		if !t.RowDirty(y) {
+			// Clean rows need an actual-change check so damage does not
+			// depend on whether an all-zero tail owns storage. A row that
+			// is already dirty can take the normal fast clear path.
+			changed := false
+			for _, c := range row[from:to] {
+				if c != (cell{}) {
+					changed = true
+					break
+				}
+			}
+			if !changed {
+				return
+			}
+		}
+		t.touch(y)
+	} else {
+		row = t.row(y)
 	}
-	row := t.row(y)
 	blank := cell{Bg: t.cur.pen.Bg}
 	// Erasing half of a wide character erases all of it.
 	if from > 0 && row[from].R == wideTail {
 		row[from-1] = blank
 	}
-	if to < t.cols && row[to].R == wideTail {
+	if to < len(row) && row[to].R == wideTail {
 		row[to] = blank
 	}
 	for x := from; x < to; x++ {
@@ -1297,7 +1341,8 @@ func (t *Terminal) print(r rune, w int) {
 		// an empty cell with the pen and a pending wrap for the next print.
 		blank := t.cur.pen
 		blank.R = 0
-		t.row(t.cur.y)[t.cur.x] = blank
+		t.touch(t.cur.y)
+		ensureRowPrefix(&t.screen()[t.cur.y], t.cur.x+1, t.cols)[t.cur.x] = blank
 		t.cur.wrapPending = true
 		return
 	}
@@ -1318,7 +1363,12 @@ func (t *Terminal) print(r rune, w int) {
 				if t.fullWidth() {
 					spacer.R = spacerHead
 				}
-				t.row(t.cur.y)[t.cur.x] = spacer
+				if t.altActive {
+					t.row(t.cur.y)[t.cur.x] = spacer
+				} else {
+					t.touch(t.cur.y)
+					ensureRowPrefix(&t.screen()[t.cur.y], t.cur.x+1, t.cols)[t.cur.x] = spacer
+				}
 			}
 			t.wrapLine()
 			t.cur.x = t.left
@@ -1328,8 +1378,14 @@ func (t *Terminal) print(r rune, w int) {
 			edge = t.right
 		}
 	}
-	row := t.row(t.cur.y)
 	x := t.cur.x
+	var row []cell
+	if t.insert || t.altActive {
+		row = t.row(t.cur.y)
+	} else {
+		t.touch(t.cur.y)
+		row = ensureRowPrefix(&t.screen()[t.cur.y], x+w, t.cols)
+	}
 	if t.insert && x+w <= edge {
 		copy(row[x+w:edge+1], row[x:edge+1-w])
 	}
@@ -1338,7 +1394,7 @@ func (t *Terminal) print(r rune, w int) {
 	if row[x].R == wideTail && x > 0 {
 		row[x-1] = cell{}
 	}
-	if end := x + w; end < t.cols && row[end].R == wideTail {
+	if end := x + w; end < len(row) && row[end].R == wideTail {
 		row[end] = cell{}
 	}
 	pen.R = r
@@ -1441,14 +1497,20 @@ func (t *Terminal) printASCII(p []byte) {
 			p = p[1:]
 			continue
 		}
-		row := t.row(t.cur.y)
 		x := t.cur.x
 		edge := t.cols - 1
 		if x <= t.right {
 			edge = t.right
 		}
 		n := min(len(p), edge+1-x)
-		if row[x].R == wideTail || (x+n < t.cols && row[x+n].R == wideTail) {
+		var row []cell
+		if t.altActive {
+			row = t.row(t.cur.y)
+		} else {
+			t.touch(t.cur.y)
+			row = ensureRowPrefix(&t.screen()[t.cur.y], x+n, t.cols)
+		}
+		if row[x].R == wideTail || (x+n < len(row) && row[x+n].R == wideTail) {
 			t.print(rune(p[0]), 1)
 			p = p[1:]
 			continue

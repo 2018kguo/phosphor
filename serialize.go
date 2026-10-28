@@ -104,6 +104,13 @@ func (t *Terminal) appendRowHistory(b []byte, row []cell, width int, trim, histo
 	var fg Color
 	var rest uint64
 	cells := row[:min(end, len(row))]
+	if history {
+		// Stored default zeros and the implicit tail are one hole run.
+		// Its encoding must not depend on the row's allocated prefix.
+		for len(cells) > 0 && cells[len(cells)-1] == (cell{}) {
+			cells = cells[:len(cells)-1]
+		}
+	}
 	for i := 0; i < len(cells); {
 		c := &cells[i]
 		if c.Fg != fg || *(*uint64)(unsafe.Pointer(&c.Bg)) != rest {

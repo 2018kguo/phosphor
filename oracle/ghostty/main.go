@@ -471,9 +471,9 @@ func memory(name, workload string, n int) {
 	for i := range terms {
 		t := newEngine(name, 80, 24)
 		if workload == "blank" {
-		} else if workload == "prompt" || workload == "prompt-compact" {
+		} else if workload == "prompt" || workload == "prompt-compact" || workload == "prompt-erase" || workload == "prompt-erase-compact" {
 			t.Write([]byte("user@host:~$ "))
-		} else if workload == "colored-prompt" || workload == "colored-prompt-compact" {
+		} else if workload == "colored-prompt" || workload == "colored-prompt-compact" || workload == "colored-prompt-erase" || workload == "colored-prompt-erase-compact" {
 			t.Write([]byte("\x1b[32muser@host\x1b[0m:~$ "))
 		} else if workload == "saved-cursor" {
 			t.Write([]byte("user@host:~$ \x1b7"))
@@ -483,6 +483,9 @@ func memory(name, workload string, n int) {
 				var result C.GhosttyTerminalCompressionResult
 				must(C.int(C.ghostty_terminal_compress(t.(*ghost).t, C.GHOSTTY_TERMINAL_COMPRESSION_MODE_FULL, &result)))
 			}
+		}
+		if workload == "prompt-erase" || workload == "prompt-erase-compact" || workload == "colored-prompt-erase" || workload == "colored-prompt-erase-compact" {
+			t.Write([]byte("\x1b[K"))
 		}
 		if strings.HasSuffix(workload, "-compact") {
 			if p, ok := t.(*phos); ok {

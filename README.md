@@ -21,7 +21,7 @@ and why it has a separate exact checkpoint format.
 
 ## Why
 
-- **Small.** About 2.5 KB for an idle 80x24 terminal at a shell prompt: a
+- **Small.** About 1.4 KB for an idle 80x24 terminal at a shell prompt: a
   cell is 16 bytes, rows are allocated once drawn on, the alternate
   screen only while shown, and scrollback is kept serialized under a
   byte budget (an 80x24 terminal with 2,000 lines of log scrollback holds
@@ -146,8 +146,9 @@ while a program draws a frame it wants shown at once (mode 2026).
 
 Applications hosting many sessions can call `Compact()` after output
 settles. It retains only the nonzero prefix of each row and frees unused
-Unicode and cell attributes, plus temporary buffers. A later write grows
-that row back to the screen width; subsequent writes reuse it. Clusters
+Unicode and cell attributes, plus temporary buffers. Main-screen prints grow
+only the prefix they need. Alternate-screen prints keep full row capacity
+for dense redraws; Compact can trim either screen again at idle. Clusters
 visible on either screen and links
 held by saved cursors remain live; unchanged live tables stay in place. It does so
 without changing the screen, scrollback, input modes or unfinished parser

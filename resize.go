@@ -452,8 +452,10 @@ func (t *Terminal) popLine() ([][]cell, []rowFlags) {
 	} else {
 		wraps[len(wraps)-1] &^= rowWrap
 	}
-	if r := rows[len(rows)-1]; open && spacer && r != nil && r[t.cols-1] == (cell{}) {
+	if r := rows[len(rows)-1]; open && spacer && r != nil && rowCell(r, t.cols-1) == (cell{}) {
+		r = growRow(r, t.cols, t.cols)
 		r[t.cols-1].R = spacerHead // left out of the line, see pushScrollback
+		rows[len(rows)-1] = r
 	}
 	return rows, wraps
 }
