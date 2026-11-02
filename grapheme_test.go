@@ -552,3 +552,20 @@ func TestClusterFormattingRandomModeWords(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterKeyPacksLengthAndMatchesSplitText(t *testing.T) {
+	for _, s := range []string{"é", "👩‍💻", "日́̂", strings.Repeat("á", 40)} {
+		key := clusterKey(s, nil)
+		if key&0xff != uint32(uint8(len(s))) || key&0xff == 0 {
+			t.Fatalf("%q: low byte %d, want length %d", s, key&0xff, len(s))
+		}
+		for i := 0; i <= len(s); i++ {
+			if got := clusterKey(s[:i], []byte(s[i:])); got != key {
+				t.Fatalf("%q split at %d: key %#x, want %#x", s, i, got, key)
+			}
+		}
+	}
+	if clusterKey("é", nil) == clusterKey("á", nil) {
+		t.Fatal("distinct texts of one length share a key")
+	}
+}

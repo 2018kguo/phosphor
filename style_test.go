@@ -363,3 +363,29 @@ func TestNamedAndIntensityColors(t *testing.T) {
 		t.Fatalf("named color lookup allocated %g times", n)
 	}
 }
+
+func TestRepeatedLinksReuseOneTargetWithoutChangingIt(t *testing.T) {
+	term := New(20, 2)
+	for range 50 {
+		term.Write([]byte("\x1b]8;id=a;https://x.test/?a=1;b=2\x1b\\L\x1b]8;;\x1b\\-"))
+		term.Write([]byte("\r"))
+	}
+	term.Write([]byte("\n\x1b[58;5;3m\x1b]8;id=a;https://x.test/?a=1;b=2\x1b\\U\x1b]8;\x1b\\N\x1b]8\x1b\\M"))
+	want := Hyperlink{ID: "a", URI: "https://x.test/?a=1;b=2"}
+	if c := term.Cell(0, 0); c.Link != want || c.Style.UnderlineColor != 0 {
+		t.Fatalf("plain link cell: %+v", c)
+	}
+	if c := term.Cell(1, 0); c.Link != (Hyperlink{}) {
+		t.Fatalf("closed link leaked: %+v", c)
+	}
+	if c := term.Cell(0, 1); c.Link != want || c.Style.UnderlineColor == 0 {
+		t.Fatalf("underlined link cell: %+v", c)
+	}
+	// "8;" with no separator and a bare "8" both end the link.
+	if c := term.Cell(1, 1); c.Link != (Hyperlink{}) {
+		t.Fatalf("OSC 8 without uri kept the link: %+v", c)
+	}
+	if n := len(term.x.rare); n != 3 {
+		t.Fatalf("pairs %d, want link, underline and underlined link", n)
+	}
+}

@@ -3,7 +3,6 @@ package phosphor
 import (
 	"bytes"
 	"encoding/binary"
-	"strings"
 	"unicode/utf8"
 	"unsafe"
 )
@@ -2328,11 +2327,12 @@ func (t *Terminal) oscDispatch() {
 		t.title = string(s[2:])
 	case len(s) >= 2 && s[0] == '8' && s[1] == ';':
 		// OSC 8 ; params ; uri: start a hyperlink, or end it (no uri).
-		params, uri, ok := strings.Cut(string(s[2:]), ";")
-		if !ok || uri == "" {
-			t.setLink("")
+		// The stored target "params;uri" is the body itself.
+		target := s[2:]
+		if i := bytes.IndexByte(target, ';'); i >= 0 && i < len(target)-1 {
+			t.setLinkBytes(target)
 		} else {
-			t.setLink(params + ";" + uri)
+			t.setLink("")
 		}
 	case len(s) >= 5 && string(s[:4]) == "133;":
 		t.semanticCommand(s[4:])
@@ -2357,7 +2357,7 @@ func (t *Terminal) internExtra(v cellExtra) uint16 {
 		}
 	}
 	if len(x.rare) >= x.rareCap {
-		t.compactExtras()
+		t.compactExtras(true)
 	}
 	if len(x.rare) >= 0xffff {
 		for i, old := range x.rare {
@@ -2383,6 +2383,23 @@ func (t *Terminal) setLink(target string) {
 	t.setPenExtra(v)
 }
 
+// setLinkBytes is setLink(string(target)) without copying a target that one
+// of the pairs internExtra searches already holds.
+func (t *Terminal) setLinkBytes(target []byte) {
+	v := t.extraAt(t.cur.pen.E)
+	if t.x != nil {
+		rare := t.x.rare
+		for i := len(rare) - 1; i >= max(len(rare)-16, 0); i-- {
+			if rare[i].underline == v.underline && rare[i].link == string(target) {
+				t.cur.pen.E = uint16(i + 1)
+				return
+			}
+		}
+	}
+	v.link = string(target)
+	t.setPenExtra(v)
+}
+
 func (t *Terminal) setUnderlineColor(c Color) {
 	v := t.extraAt(t.cur.pen.E)
 	v.underline = c
@@ -2390,24 +2407,38 @@ func (t *Terminal) setUnderlineColor(c Color) {
 }
 
 // compactExtras drops the attribute pairs no cell or cursor refers to, renumbering
-// the rest, and sets the next compaction point.
-func (t *Terminal) compactExtras() {
+// the rest, and sets the next compaction point. Numbering follows the order
+// refs are visited; the kept pairs move into one table of the exact size, or,
+// with room, of the size the table may reach before the next compaction.
+func (t *Terminal) compactExtras(room bool) {
 	x := t.x
 	if len(x.rare) > 0 {
 		remap := make([]uint16, len(x.rare))
-		var kept []cellExtra
-		ref := func(l *uint16) {
+		live := 0
+		t.visitExtraRefs(func(l *uint16) {
 			if *l == 0 {
 				return
 			}
 			i := *l - 1
 			if remap[i] == 0 {
-				kept = append(kept, x.rare[i])
-				remap[i] = uint16(len(kept))
+				live++
+				remap[i] = uint16(live)
 			}
 			*l = remap[i]
+		})
+		var kept []cellExtra
+		if live > 0 {
+			size := live
+			if room {
+				size = min(0xffff, max(16, 2*live))
+			}
+			kept = make([]cellExtra, live, size)
+			for i, id := range remap {
+				if id != 0 {
+					kept[id-1] = x.rare[i]
+				}
+			}
 		}
-		t.visitExtraRefs(ref)
 		x.rare = kept
 	}
 	x.rareCap = min(0xffff, max(16, 2*len(x.rare)))
@@ -2471,9 +2502,10 @@ func (t *Terminal) runeWidth(r rune) int {
 // refers to any more are dropped.
 func (t *Terminal) intern(s cluster) rune {
 	x := t.ext()
+	key := clusterKey(s.text, nil)
 	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
 		old := &x.clusters[i]
-		if old.text == s.text && old.width == s.width && old.joinModes == s.joinModes {
+		if (old.key == key || old.key == 0) && old.text == s.text && old.width == s.width && old.joinModes == s.joinModes {
 			return clusterBase + rune(i)
 		}
 	}
@@ -2481,13 +2513,15 @@ func (t *Terminal) intern(s cluster) rune {
 }
 
 // internAppend checks recent clusters before allocating the appended text.
+// Their keys sit beside their other fields, so a miss reads no text.
 func (t *Terminal) internAppend(prefix string, r rune, width uint8, modes clusterModes) rune {
 	x := t.ext()
 	var storage [utf8.UTFMax]byte
 	suffix := utf8.AppendRune(storage[:0], r)
+	key := clusterKey(prefix, suffix)
 	for i := len(x.clusters) - 1; i >= max(len(x.clusters)-16, 0); i-- {
 		old := &x.clusters[i]
-		if old.width == width && old.joinModes == modes && len(old.text) == len(prefix)+len(suffix) &&
+		if (old.key == key || old.key == 0) && old.width == width && old.joinModes == modes && len(old.text) == len(prefix)+len(suffix) &&
 			old.text[:len(prefix)] == prefix && old.text[len(prefix):] == string(suffix) {
 			return clusterBase + rune(i)
 		}
@@ -2495,35 +2529,69 @@ func (t *Terminal) internAppend(prefix string, r rune, width uint8, modes cluste
 	return t.storeCluster(cluster{text: prefix + string(r), width: width, joinModes: modes})
 }
 
+// clusterKey packs the first three bytes of the text prefix+suffix above
+// its byte length, which is never 0 for a stored cluster. Equal texts have
+// equal keys, and computing one decodes nothing.
+func clusterKey(prefix string, suffix []byte) uint32 {
+	n := uint32(uint8(len(prefix) + len(suffix)))
+	if len(prefix) >= 3 {
+		return uint32(prefix[2])<<24 | uint32(prefix[1])<<16 | uint32(prefix[0])<<8 | n
+	}
+	for i := range 3 {
+		var c byte
+		if i < len(prefix) {
+			c = prefix[i]
+		} else if j := i - len(prefix); j < len(suffix) {
+			c = suffix[j]
+		}
+		n |= uint32(c) << (8 * (i + 1))
+	}
+	return n
+}
+
 func (t *Terminal) storeCluster(s cluster) rune {
 	s.tail = graphemeTailOf(s.text)
+	s.key = clusterKey(s.text, nil)
 	x := t.ext()
 	if len(x.clusters) >= x.clusterCap {
-		t.compactClusters()
+		t.compactClusters(true)
 	}
 	x.clusters = append(x.clusters, s)
 	return clusterBase + rune(len(x.clusters)-1)
 }
 
 // compactClusters drops the clusters no cell refers to, renumbering the
-// rest, and sets the next compaction point.
-func (t *Terminal) compactClusters() {
+// rest, and sets the next compaction point. Like compactExtras, it numbers
+// clusters in visit order and sizes the kept table exactly or with room.
+func (t *Terminal) compactClusters(room bool) {
 	x := t.x
 	if len(x.clusters) > 0 {
 		remap := make([]rune, len(x.clusters))
-		var kept []cluster
-		ref := func(r *rune) {
+		live := 0
+		t.visitClusterRefs(func(r *rune) {
 			if *r < clusterBase {
 				return
 			}
 			i := *r - clusterBase
 			if remap[i] == 0 {
-				kept = append(kept, x.clusters[i])
-				remap[i] = clusterBase + rune(len(kept)-1)
+				remap[i] = clusterBase + rune(live)
+				live++
 			}
 			*r = remap[i]
+		})
+		var kept []cluster
+		if live > 0 {
+			size := live
+			if room {
+				size = max(64, 2*live)
+			}
+			kept = make([]cluster, live, size)
+			for i, r := range remap {
+				if r != 0 {
+					kept[r-clusterBase] = x.clusters[i]
+				}
+			}
 		}
-		t.visitClusterRefs(ref)
 		x.clusters = kept
 	}
 	x.clusterCap = max(64, 2*len(x.clusters))

@@ -15,6 +15,10 @@ type cluster struct {
 	joinModes clusterModes
 	width     uint8
 	tail      graphemeTail
+	// key is clusterKey(text), so the recent-entry search compares one
+	// word before any text; 0 is treated as unknown. It fills padding,
+	// so a cluster stays five words on 64-bit hosts.
+	key uint32
 }
 
 // The second word holds the final codepoint of a full native-sized cluster.
