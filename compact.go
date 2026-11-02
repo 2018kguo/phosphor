@@ -81,10 +81,10 @@ func (t *Terminal) compactPools() {
 			}
 		})
 		if liveClusters < nClusters {
-			t.compactClusters()
+			t.compactClusters(false)
 		}
 		if liveExtras < nExtras {
-			t.compactExtras()
+			t.compactExtras(false)
 		}
 	}
 	if !t.altActive && x.tabs == nil && len(x.savedModes) == 0 && x.privateModes == 0 && len(x.clusters) == 0 && len(x.rare) == 0 {

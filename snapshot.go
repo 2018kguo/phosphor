@@ -413,6 +413,7 @@ func (t *Terminal) RestoreSnapshot(data []byte, limits SnapshotLimits) error {
 			if !snapshotCluster(c) {
 				d.fail(ErrSnapshotMalformed, "cluster")
 			}
+			c.key = clusterKey(c.text, nil)
 			x.clusters[i] = c
 		}
 		x.clusterCap = max(64, len(x.clusters)*2)
